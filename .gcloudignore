@@ -1,0 +1,41 @@
+# Android / Gradle
+.gradle/
+.idea/
+.vscode/
+build/
+app/build/
+app/src/
+*.iml
+*.iws
+*.ipr
+local.properties
+
+# Node / Firebase
+node_modules/
+firebase-debug.log
+
+# Git / GitHub
+.git/
+.github/
+
+# Kotlin
+.kotlin/
+
+# Logs & Temp
+*.log
+*.txt
+tmp/
+temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Storage (if not needed in deployment)
+storage/
+
+# Keep all PHP files and api/ folder (we explicitly allow them)
+!api/
+!*.php
+!admin/
+!includes/

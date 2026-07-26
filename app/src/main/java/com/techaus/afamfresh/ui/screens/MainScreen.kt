@@ -1,0 +1,299 @@
+package com.techaus.afamfresh.ui.screens
+
+import android.util.Log
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.techaus.afamfresh.models.DeliveryResult
+import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.ui.screens.vendor.*
+import com.techaus.afamfresh.ui.screens.SettingsScreen
+import com.techaus.afamfresh.viewmodel.*
+
+@Composable
+fun MainScreen(
+    authViewModel: AuthViewModel,
+    productViewModel: ProductViewModel,
+    orderViewModel: OrderViewModel,
+    surplusViewModel: SurplusViewModel,
+    cartViewModel: CartViewModel,
+    checkoutViewModel: CheckoutViewModel,
+    paymentViewModel: PaymentViewModel,
+    deliveryResultViewModel: DeliveryResultViewModel,
+    vendorViewModel: VendorViewModel,
+    onLogout: () -> Unit,
+    onProductClick: (Product) -> Unit,
+    onBack: () -> Unit
+) {
+    val navController = rememberNavController()
+    val currentRoute by navController.currentBackStackEntryAsState()
+    val currentDestination = currentRoute?.destination?.route ?: "home"
+
+    val user by authViewModel.user.collectAsState()
+    val vendorListings by vendorViewModel.listings.collectAsState()
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                val items = listOf(
+                    "home" to Icons.Default.Home,
+                    "orders" to Icons.Default.List,
+                    "cart" to Icons.Default.ShoppingCart,
+                    "surplus" to Icons.Default.ShoppingCart,
+                    "profile" to Icons.Default.Person
+                )
+                items.forEach { (route, icon) ->
+                    NavigationBarItem(
+                        icon = { Icon(icon, contentDescription = route) },
+                        label = { Text(route.replaceFirstChar { it.uppercase() }) },
+                        selected = currentDestination == route,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = "home",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            // ===== HOME =====
+            composable("home") {
+                HomeScreen(
+                    userName = user?.name ?: "User",
+                    currentRole = user?.currentRole ?: "user",
+                    availableRoles = user?.roles ?: listOf("user"),
+                    onRoleSwitch = { /* handled in profile */ },
+                    onLogout = onLogout,
+                    onProductClick = onProductClick,
+                    onOrdersClick = { navController.navigate("orders") },
+                    onProfileClick = { navController.navigate("profile") },
+                    onSurplusClick = { navController.navigate("surplus") },
+                    onCartClick = { navController.navigate("cart") },
+                    productViewModel = productViewModel,
+                    cartViewModel = cartViewModel
+                )
+            }
+
+            // ===== ORDERS =====
+            composable("orders") {
+                OrdersScreen(
+                    orderViewModel = orderViewModel,
+                    onBack = { navController.navigate("home") },
+                    onEditOrder = { orderId ->
+                        navController.navigate("edit_order/$orderId")
+                    }
+                )
+            }
+
+            // ===== EDIT ORDER =====
+            composable("edit_order/{orderId}") { backStackEntry ->
+                val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
+                EditOrderScreen(
+                    orderId = orderId,
+                    orderViewModel = orderViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // ===== CART =====
+            composable("cart") {
+                val cartItems by cartViewModel.cartItems.collectAsState()
+                Log.d("MainScreen", "Cart screen items: ${cartItems.size}")
+                CartScreen(
+                    cartItems = cartItems,
+                    onBack = { navController.navigate("home") },
+                    onRemoveItem = { cartViewModel.removeFromCart(it) },
+                    onUpdateQuantity = { item, qty -> cartViewModel.updateQuantity(item, qty) },
+                    onCheckout = {
+                        navController.navigate("checkout")
+                    }
+                )
+            }
+
+            // ===== SURPLUS =====
+            composable("surplus") {
+                SurplusScreen(
+                    surplusViewModel = surplusViewModel,
+                    onBack = { navController.navigate("home") },
+                    onListingClick = { listing ->
+                        // Navigate to product detail
+                    }
+                )
+            }
+
+            // ===== PROFILE =====
+            composable("profile") {
+                ProfileScreen(
+                    authViewModel = authViewModel,
+                    onLogout = onLogout,
+                    onBack = { navController.navigate("home") },
+                    onOrdersClick = { navController.navigate("orders") },
+                    onAddressesClick = { /* navigate to addresses */ },
+                    onSettingsClick = { /* navigate to settings */ }
+                )
+            }
+            // ===== SETTINGS =====
+            composable("settings") {
+                SettingsScreen(
+                    authViewModel = authViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            // ========== Vendor Screens ==========
+            composable("vendor_dashboard") {
+                VendorDashboardScreen(
+                    vendorViewModel = vendorViewModel,
+                    onAddListing = { navController.navigate("add_surplus") },
+                    onEditListing = { listing ->
+                        navController.navigate("edit_surplus/${listing.id}")
+                    },
+                    onViewOrders = { navController.navigate("vendor_orders") },
+                    onViewProducts = { navController.navigate("vendor_products") },
+                    onBack = { navController.navigate("home") }
+                )
+            }
+            composable("add_surplus") {
+                AddSurplusScreen(
+                    vendorViewModel = vendorViewModel,
+                    onSave = { navController.navigate("vendor_dashboard") },
+                    onCancel = { navController.navigate("vendor_dashboard") }
+                )
+            }
+            composable("edit_surplus/{listingId}") { backStackEntry ->
+                val listingId = backStackEntry.arguments?.getString("listingId")
+                val existingListing = vendorListings.find { it.id == listingId }
+                AddSurplusScreen(
+                    vendorViewModel = vendorViewModel,
+                    existingListing = existingListing,
+                    onSave = { navController.navigate("vendor_dashboard") },
+                    onCancel = { navController.navigate("vendor_dashboard") }
+                )
+            }
+            composable("vendor_orders") {
+                VendorOrdersScreen(
+                    vendorViewModel = vendorViewModel,
+                    onBack = { navController.navigate("vendor_dashboard") }
+                )
+            }
+            composable("vendor_products") {
+                VendorProductsScreen(
+                    vendorViewModel = vendorViewModel,
+                    onBack = { navController.navigate("vendor_dashboard") }
+                )
+            }
+
+            // ========== Checkout & Maps ==========
+            composable("checkout") {
+                val cartItems by cartViewModel.cartItems.collectAsState()
+                Log.d("MainScreen", "Checkout screen items: ${cartItems.size}")
+                CheckoutScreen(
+                    cartItems = cartItems,
+                    onBack = { navController.navigate("cart") },
+                    checkoutViewModel = checkoutViewModel,
+                    paymentViewModel = paymentViewModel,
+                    onPaymentRedirect = { paymentUrl, transactionId ->
+                        navController.navigate("payment_webview/${paymentUrl}/${transactionId}")
+                    },
+                    onOrderComplete = {
+                        cartViewModel.clearCart()
+                        navController.navigate("home") {
+                            popUpTo("checkout") { inclusive = true }
+                        }
+                    },
+                    onSelectLocation = { navController.navigate("delivery_map") },
+                    deliveryResultViewModel = deliveryResultViewModel,
+                    userEmail = user?.email,
+                    userPhone = user?.mobile
+                )
+            }
+
+            composable("delivery_map") {
+                DeliveryMapScreen(
+                    onBack = { navController.navigate("checkout") },
+                    onLocationSelected = { pickupAddress, dropoffAddress, pickupLat, pickupLng,
+                                          dropoffLat, dropoffLng, distanceKm, totalCost ->
+                        deliveryResultViewModel.setDeliveryResult(
+                            DeliveryResult(
+                                pickupAddress = pickupAddress,
+                                dropoffAddress = dropoffAddress,
+                                pickupLat = pickupLat,
+                                pickupLng = pickupLng,
+                                dropoffLat = dropoffLat,
+                                dropoffLng = dropoffLng,
+                                distanceKm = distanceKm,
+                                cost = totalCost
+                            )
+                        )
+                        navController.navigate("checkout") {
+                            popUpTo("delivery_map") { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // ========== Payment WebView ==========
+            composable("payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
+                val paymentUrl = backStackEntry.arguments?.getString("paymentUrl") ?: ""
+                val transactionId = backStackEntry.arguments?.getString("transactionId") ?: ""
+                PaymentWebViewScreen(
+                    paymentUrl = paymentUrl,
+                    transactionId = transactionId,
+                    onBack = {
+                        navController.navigate("checkout") {
+                            popUpTo("checkout") { inclusive = true }
+                        }
+                    },
+                    onPaymentComplete = { success, txnId ->
+                        if (success) {
+                            cartViewModel.clearCart()
+                            navController.navigate("home") {
+                                popUpTo("checkout") { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate("checkout") {
+                                popUpTo("checkout") { inclusive = true }
+                            }
+                        }
+                    }
+                )
+            }
+
+            // ========== Product Details ==========
+            composable("product_detail/{productId}") { backStackEntry ->
+                val productId = backStackEntry.arguments?.getString("productId")?.toDoubleOrNull() ?: 0.0
+                val products by productViewModel.products.collectAsState()
+                val product = products.find { it.id == productId }
+                ProductDetailScreen(
+                    product = product,
+                    onBack = { navController.navigate("home") },
+                    onAddToCart = { productToAdd, quantity ->
+                        cartViewModel.addToCart(productToAdd, quantity)
+                        Log.d("MainScreen", "Added to cart: ${productToAdd.name}, quantity: $quantity")
+                    }
+                )
+            }
+        }
+    }
+}
