@@ -74,11 +74,22 @@ class AuthRepository(
 
     fun getLastActivity(): Long = SessionTracker.lastActivity()
 
-    fun isSessionValid(): Boolean {
-        val lastActivity = getLastActivity()
-        val now = System.currentTimeMillis()
-        return (now - lastActivity) < SESSION_TIMEOUT_MS
-    }
+    /**
+     * Delegates to the pure [isSessionValid] so the rule itself is unit-tested.
+     *
+     * This also fixes two edge cases the inline arithmetic got wrong: a
+     * lastActivity of 0 (never recorded) used to compare as a huge elapsed
+     * time and happened to work, and a clock moving backwards produced a
+     * negative elapsed time that read as a valid session.
+     */
+    // Fully qualified: this member has the same name as the free function, and
+    // a member always wins resolution over an imported top-level, so an
+    // unqualified call here would recurse into itself.
+    fun isSessionValid(): Boolean = com.techaus.afamfresh.utils.isSessionValid(
+        lastActivity = getLastActivity(),
+        now = System.currentTimeMillis(),
+        timeoutMs = SESSION_TIMEOUT_MS
+    )
 
     // ===== LOGIN STATUS =====
     fun isLoggedIn(): Boolean {

@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import com.google.gson.Gson
 import com.techaus.afamfresh.models.CartItem
 import com.techaus.afamfresh.models.DeliveryResult
-import com.techaus.afamfresh.models.OrderItem
 import com.techaus.afamfresh.repository.OrderRepository
+import com.techaus.afamfresh.utils.OrderCalc
 import com.techaus.afamfresh.repository.PaymentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,14 +60,12 @@ class CheckoutViewModel(
         _isLoading.value = true
         _error.value = null
 
-        val subtotal = cartItems.sumOf { it.lineTotal }
-        val deliveryCost = deliveryResult?.cost ?: 0.0
-        val total = subtotal + deliveryCost
-
-        val orderItems = cartItems.map {
-            OrderItem(productId = it.product.id, name = it.product.name, price = it.product.price, quantity = it.quantity)
-        }
-        val itemsJson = gson.toJson(orderItems)
+        // Delegated to OrderCalc so the money arithmetic and the JSON the
+        // backend receives are covered by unit tests rather than only being
+        // exercised by placing a real order.
+        val deliveryCost = OrderCalc.deliveryCost(deliveryResult)
+        val total = OrderCalc.total(cartItems, deliveryResult)
+        val itemsJson = OrderCalc.serialiseItems(OrderCalc.toOrderItems(cartItems), gson)
 
         orderRepository.createOrder(
             fname = fname,

@@ -24,6 +24,27 @@ import kotlinx.coroutines.flow.asSharedFlow
  * Reads and writes the same SharedPreferences file and key AuthRepository used
  * before, so existing sessions are unaffected by this change.
  */
+/**
+ * Whether a session that was last active at [lastActivity] is still valid at
+ * [now], given [timeoutMs].
+ *
+ * A free function rather than a method so it can be unit-tested without an
+ * Android Context or SharedPreferences. Session expiry decides whether a user
+ * gets silently signed out, so it is worth testing at the boundaries.
+ *
+ * A [lastActivity] of 0 means "never recorded" and is always invalid — which
+ * is what makes a fresh install, or a cleared session, start at the login
+ * screen rather than trusting a stale token.
+ */
+fun isSessionValid(lastActivity: Long, now: Long, timeoutMs: Long): Boolean {
+    if (lastActivity <= 0L) return false
+    // A clock that has moved backwards (timezone change, NTP correction) would
+    // otherwise produce a negative elapsed time and look like a fresh session.
+    val elapsed = now - lastActivity
+    if (elapsed < 0L) return false
+    return elapsed < timeoutMs
+}
+
 object SessionTracker {
 
     private const val PREFS = "auth_prefs"

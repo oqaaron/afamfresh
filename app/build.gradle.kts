@@ -161,6 +161,25 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // Android framework classes are stubs in JVM unit tests, and by
+            // default every call to one throws. That makes an otherwise pure
+            // function untestable the moment it logs — DeliveryConfig's
+            // validation calls android.util.Log.w on the rejection paths,
+            // which are exactly the paths worth testing.
+            //
+            // Returning defaults means those calls become no-ops instead.
+            isReturnDefaultValues = true
+
+            all {
+                it.testLogging {
+                    events("passed", "skipped", "failed")
+                }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -241,6 +260,9 @@ dependencies {
 
     // Testing
     testImplementation("junit:junit:4.13.2")
+    // Needed for runTest / TestDispatcher. The plan assumed this was already
+    // present; it was not.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.11.00"))
