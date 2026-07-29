@@ -13,26 +13,28 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    // ===== PRODUCTION (Live Server) =====
-    // private const val BASE_URL = "https://afam.techaus.online/api/"
-    // private const val OSRM_BASE_URL = "https://router.project-osrm.org/:5000/"
-    // private const val NOMINATIM_BASE_URL = "https://afam.techaus.online:8080/"
-    
-    // ===== PHYSICAL PHONE (Same Wi-Fi as PC) =====
-     private const val BASE_URL = "http://192.168.3.41/api/"
-     private const val OSRM_BASE_URL = "https://router.project-osrm.org/:5000/"
-     private const val NOMINATIM_BASE_URL = "http://192.168.3.41:8080/"
-    
-    // ===== EMULATOR (Android Virtual Device) =====
-    // private const val BASE_URL = "http://10.0.2.2/api/"
-    // private const val OSRM_BASE_URL = "http://10.0.2.2:5000/"
-    // private const val NOMINATIM_BASE_URL = "http://10.0.2.2:8080/"
-    
+    // URLs come from the build type rather than commented-out blocks that had
+    // to be edited by hand — debug points at the local dev server, release at
+    // production. Both are defined in app/build.gradle.kts and overridable
+    // from local.properties.
+    private val BASE_URL = BuildConfig.BASE_URL
+    private val NOMINATIM_BASE_URL = BuildConfig.NOMINATIM_BASE_URL
+
+    // ✅ FIX: was "https://router.project-osrm.org/:5000/". The ":5000" is a
+    // stray path segment, not a port — a port has to sit directly after the
+    // host — so every routing request was hitting a non-existent path and
+    // silently falling back to straight-line distance. That undercharges for
+    // deliveries, because road distance always exceeds the direct line.
+    private val OSRM_BASE_URL = BuildConfig.OSRM_BASE_URL
+
     // Google Geocoding
     private const val GOOGLE_GEOCODING_BASE_URL = "https://maps.googleapis.com/"
-    
-    // 🔑 Replace with your actual API key
-    const val GOOGLE_MAPS_API_KEY = "AIzaSyBmz6dGnddW1BLyebi3bOQcyeksfxZgiUI"
+
+    /**
+     * Read from BuildConfig, which is populated from local.properties at build
+     * time. The literal key is no longer present in source or in the manifest.
+     */
+    val GOOGLE_MAPS_API_KEY: String = BuildConfig.GOOGLE_MAPS_API_KEY
     
     private val gson = GsonBuilder()
         .setLenient()

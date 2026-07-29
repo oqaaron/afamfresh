@@ -1,6 +1,7 @@
 package com.techaus.afamfresh.api
 
 import android.content.Context
+import com.techaus.afamfresh.utils.SecurePrefs
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -19,7 +20,10 @@ import okhttp3.HttpUrl
 // Cookies are stored in SharedPreferences, serialized one-per-key.
 class CookieJarImpl(context: Context) : CookieJar {
 
-    private val prefs = context.getSharedPreferences("cookie_prefs", Context.MODE_PRIVATE)
+    // Encrypted: PHPSESSID is a session credential. Anyone who can read it can
+    // act as the signed-in user, so it warrants the same protection as the
+    // auth token itself.
+    private val prefs = SecurePrefs.create(context, "cookie_prefs")
 
     // In-memory mirror for fast reads within a session.
     private val cache = mutableMapOf<String, MutableList<Cookie>>()

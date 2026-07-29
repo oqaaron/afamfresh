@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RELEASE configuration.
+
+  cleartextTrafficPermitted="false" means any accidental http:// URL fails
+  loudly at runtime instead of quietly sending customer addresses, phone
+  numbers and payment details over the network in the clear.
+
+  This replaces android:usesCleartextTraffic="true" on <application>, which
+  was a blanket permit covering every host in every build type.
+
+  The debug variant overrides this file with a version that permits cleartext
+  to the local development server only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

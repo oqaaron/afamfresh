@@ -1,9 +1,32 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
     id("org.jetbrains.kotlin.plugin.parcelize")
 }
+
+/**
+ * Secrets and machine-specific values live in local.properties, which is
+ * gitignored.
+ *
+ * Gradle does NOT load local.properties into project properties automatically —
+ * only gradle.properties is loaded that way. It has to be read explicitly, as
+ * below. (This is why the previous `project.findProperty("google.maps.api.key")`
+ * silently produced an empty key even though local.properties defined one.)
+ */
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) FileInputStream(file).use { load(it) }
+}
+
+/** Reads from local.properties, falling back to a -P flag or gradle.properties. */
+fun secret(key: String, default: String = ""): String =
+    localProps.getProperty(key)
+        ?: project.findProperty(key) as String?
+        ?: default
 
 // ✅ FIX: was `buildDir = file("${rootDir}/build-temp")` INSIDE the android{} block.
 // Two problems with that:
@@ -30,23 +53,85 @@ android {
             useSupportLibrary = true
         }
 
-        // ✅ FIX: added a fallback. Previously, if `google.maps.api.key` wasn't
-        // defined in gradle.properties / local.properties, this silently compiled
-        // BuildConfig.GOOGLE_MAPS_API_KEY as the literal string "null" — which fails
-        // at runtime with a confusing maps error rather than at build time.
-        // Define the real key in local.properties (NOT committed to git):
+        // Defined in local.properties (gitignored) as:
         //     google.maps.api.key=AIza...
-        val mapsApiKey = (project.findProperty("google.maps.api.key") as String?) ?: ""
+        val mapsApiKey = secret("google.maps.api.key")
+        if (mapsApiKey.isEmpty()) {
+            logger.warn(
+                "WARNING: google.maps.api.key is not set in local.properties. " +
+                    "Maps and geocoding will fail at runtime."
+            )
+        }
         buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$mapsApiKey\"")
+
+        // Substituted into AndroidManifest.xml, so the literal key appears in
+        // neither the manifest nor any source file.
+        manifestPlaceholders["mapsApiKey"] = mapsApiKey
+    }
+
+    /**
+     * Release signing is configured only when the keystore details are present
+     * in local.properties, so a plain `assembleDebug` still works on a machine
+     * that has never generated a key.
+     *
+     * To produce one:
+     *   keytool -genkey -v -keystore afamfresh-release.jks \
+     *           -keyalg RSA -keysize 2048 -validity 10000 -alias afamfresh
+     *
+     * Then add to local.properties (NEVER commit the .jks or these values):
+     *   release.store.file=C:/path/to/afamfresh-release.jks
+     *   release.store.password=...
+     *   release.key.alias=afamfresh
+     *   release.key.password=...
+     *
+     * Keep a backup of the keystore. Losing it means you can never publish an
+     * update to the same Play listing again.
+     */
+    val releaseStoreFile = secret("release.store.file")
+    val hasSigningConfig = releaseStoreFile.isNotEmpty() && file(releaseStoreFile).exists()
+
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = secret("release.store.password")
+                keyAlias = secret("release.key.alias")
+                keyPassword = secret("release.key.password")
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            // Points at the dev machine on the local network.
+            buildConfigField("String", "BASE_URL", "\"${secret("base.url.debug", "http://192.168.3.41/api/")}\"")
+            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.debug", "http://192.168.3.41:8080/")}\"")
+            buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
+        }
+
         release {
-            isMinifyEnabled = false
+            // HTTPS only. The network security config forbids cleartext in
+            // release, so an http:// URL here would fail at runtime rather
+            // than silently sending customer data in the clear.
+            buildConfigField("String", "BASE_URL", "\"${secret("base.url.release", "https://afam.techaus.online/api/")}\"")
+            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.release", "https://afam.techaus.online:8080/")}\"")
+            buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
+
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "WARNING: no release signing config found in local.properties. " +
+                        "The release APK will be unsigned and cannot be installed or published."
+                )
+            }
         }
     }
 
@@ -150,6 +235,9 @@ dependencies {
 
     // Biometric
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // Encrypted storage for the auth token and session cookie
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

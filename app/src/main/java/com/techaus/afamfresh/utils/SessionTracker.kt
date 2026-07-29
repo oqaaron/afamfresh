@@ -39,8 +39,16 @@ object SessionTracker {
     private val _expired = MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)
     val expired: SharedFlow<Unit> = _expired.asSharedFlow()
 
+    /**
+     * Uses the same encrypted store as AuthRepository, deliberately.
+     *
+     * If this kept reading the plaintext `auth_prefs` while AuthRepository
+     * migrated that file to encrypted storage and deleted it, `last_activity`
+     * would read as 0 on the next launch, isSessionValid() would return false,
+     * and every already-signed-in user would be logged out by the upgrade.
+     */
     fun initialize(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = SecurePrefs.create(context.applicationContext, PREFS)
     }
 
     /** Records that the user is active right now. */

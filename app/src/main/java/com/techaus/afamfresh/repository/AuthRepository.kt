@@ -18,6 +18,7 @@ import com.techaus.afamfresh.models.RegisterResponse
 import com.techaus.afamfresh.models.User
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.SessionTracker
+import com.techaus.afamfresh.utils.SecurePrefs
 import com.techaus.afamfresh.utils.enqueueApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -32,8 +33,10 @@ class AuthRepository(
     private val apiService: ApiService,
     private val context: Context
 ) {
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+    // Encrypted: this file holds the auth token and the cached user profile.
+    // Existing plaintext values are migrated on first open, so users who are
+    // already signed in stay signed in across this change.
+    private val prefs: SharedPreferences = SecurePrefs.create(context, "auth_prefs")
 
     companion object {
         private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 minutes
