@@ -108,8 +108,8 @@ fun EditOrderScreen(
                             area = area,
                             mobile = mobile,
                             deliveryNotes = notes
-                        ) { success ->
-                            if (success) onBack() else saveError = "Unable to save changes"
+                        ) { success, reason ->
+                            if (success) onBack() else saveError = reason ?: "Unable to save changes"
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -128,8 +128,8 @@ fun EditOrderScreen(
 
                 OutlinedButton(
                     onClick = {
-                        orderViewModel.cancelOrder(order.id) { success ->
-                            if (success) onBack() else saveError = "Unable to cancel order"
+                        orderViewModel.cancelOrder(order.id) { success, reason ->
+                            if (success) onBack() else saveError = reason ?: "Unable to cancel order"
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),

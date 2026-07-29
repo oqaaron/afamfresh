@@ -1,50 +1,42 @@
 package com.techaus.afamfresh.repository
 
-import android.util.Log
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.Order
 import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.models.SurplusListing
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.techaus.afamfresh.models.SurplusListingResponse
+import com.techaus.afamfresh.models.SurplusListingsResponse
+import com.techaus.afamfresh.models.VendorOrdersResponse
+import com.techaus.afamfresh.models.VendorProductsResponse
+import com.techaus.afamfresh.utils.ApiError
+import com.techaus.afamfresh.utils.enqueueApi
 
 // Constructor confirmed by MainActivity.kt: VendorRepository(ApiClient.apiService)
 // Method params mirror ApiService.kt's vendor/*.php declarations exactly.
 class VendorRepository(
     private val apiService: ApiService
 ) {
-    fun getListings(callback: (List<SurplusListing>?) -> Unit) {
-        apiService.getVendorSurplusListings().enqueue(object : Callback<com.techaus.afamfresh.models.SurplusListingsResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.SurplusListingsResponse>,
-                response: Response<com.techaus.afamfresh.models.SurplusListingsResponse>
-            ) {
-                callback(if (response.isSuccessful) response.body()?.listings else null)
+    fun getListings(callback: (List<SurplusListing>?, ApiError?) -> Unit) {
+        apiService.getVendorSurplusListings()
+            .enqueueApi<SurplusListingsResponse>("VendorRepo", "getListings") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.listings ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.SurplusListingsResponse>, t: Throwable) {
-                Log.e("VendorRepo", "getListings network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
     }
 
-    fun createListing(listing: SurplusListing, callback: (SurplusListing?) -> Unit) {
-        apiService.createVendorSurplusListing(listing = listing).enqueue(object : Callback<com.techaus.afamfresh.models.SurplusListingResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.SurplusListingResponse>,
-                response: Response<com.techaus.afamfresh.models.SurplusListingResponse>
-            ) {
-                callback(if (response.isSuccessful) response.body()?.listing else null)
+    fun createListing(listing: SurplusListing, callback: (SurplusListing?, ApiError?) -> Unit) {
+        apiService.createVendorSurplusListing(listing = listing)
+            .enqueueApi<SurplusListingResponse>("VendorRepo", "createListing") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true && body.listing != null -> callback(body.listing, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.SurplusListingResponse>, t: Throwable) {
-                Log.e("VendorRepo", "createListing network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
     }
 
     fun updateListing(
@@ -56,7 +48,7 @@ class VendorRepository(
         quantity: Double,
         unit: String,
         expiresAt: String,
-        callback: (Boolean) -> Unit
+        callback: (Boolean, ApiError?) -> Unit
     ) {
         apiService.updateVendorSurplusListing(
             id = id,
@@ -67,60 +59,45 @@ class VendorRepository(
             quantity = quantity,
             unit = unit,
             expiresAt = expiresAt
-        ).enqueue(object : Callback<BaseResponse> {
-            override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
-                callback(response.isSuccessful && response.body()?.success == true)
+        ).enqueueApi<BaseResponse>("VendorRepo", "updateListing") { body, error ->
+            when {
+                error != null -> callback(false, error)
+                body?.success == true -> callback(true, null)
+                else -> callback(false, ApiError.reported(body?.error))
             }
-
-            override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
-                Log.e("VendorRepo", "updateListing network failure: ${t.message}", t)
-                callback(false)
-            }
-        })
+        }
     }
 
-    fun deleteListing(id: String, callback: (Boolean) -> Unit) {
-        apiService.deleteVendorSurplusListing(id = id).enqueue(object : Callback<BaseResponse> {
-            override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
-                callback(response.isSuccessful && response.body()?.success == true)
+    fun deleteListing(id: String, callback: (Boolean, ApiError?) -> Unit) {
+        apiService.deleteVendorSurplusListing(id = id)
+            .enqueueApi<BaseResponse>("VendorRepo", "deleteListing") { body, error ->
+                when {
+                    error != null -> callback(false, error)
+                    body?.success == true -> callback(true, null)
+                    else -> callback(false, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
-                Log.e("VendorRepo", "deleteListing network failure: ${t.message}", t)
-                callback(false)
-            }
-        })
     }
 
-    fun getVendorOrders(callback: (List<Order>?) -> Unit) {
-        apiService.getVendorOrders().enqueue(object : Callback<com.techaus.afamfresh.models.VendorOrdersResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.VendorOrdersResponse>,
-                response: Response<com.techaus.afamfresh.models.VendorOrdersResponse>
-            ) {
-                callback(if (response.isSuccessful) response.body()?.orders else null)
+    fun getVendorOrders(callback: (List<Order>?, ApiError?) -> Unit) {
+        apiService.getVendorOrders()
+            .enqueueApi<VendorOrdersResponse>("VendorRepo", "getVendorOrders") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.orders ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.VendorOrdersResponse>, t: Throwable) {
-                Log.e("VendorRepo", "getVendorOrders network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
     }
 
-    fun getVendorProducts(callback: (List<Product>?) -> Unit) {
-        apiService.getVendorProducts().enqueue(object : Callback<com.techaus.afamfresh.models.VendorProductsResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.VendorProductsResponse>,
-                response: Response<com.techaus.afamfresh.models.VendorProductsResponse>
-            ) {
-                callback(if (response.isSuccessful) response.body()?.products else null)
+    fun getVendorProducts(callback: (List<Product>?, ApiError?) -> Unit) {
+        apiService.getVendorProducts()
+            .enqueueApi<VendorProductsResponse>("VendorRepo", "getVendorProducts") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.products ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.VendorProductsResponse>, t: Throwable) {
-                Log.e("VendorRepo", "getVendorProducts network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
     }
 }

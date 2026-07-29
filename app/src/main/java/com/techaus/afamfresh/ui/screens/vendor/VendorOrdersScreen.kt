@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.Order
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
@@ -29,6 +33,8 @@ fun VendorOrdersScreen(
 ) {
     val orders by vendorViewModel.vendorOrders.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
+    val error by vendorViewModel.error.collectAsState()
+    val canRetry by vendorViewModel.canRetry.collectAsState()
 
     LaunchedEffect(Unit) { vendorViewModel.loadVendorOrders() }
 
@@ -45,8 +51,16 @@ fun VendorOrdersScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                isLoading && orders.isEmpty() -> CircularProgressIndicator(color = Forest, modifier = Modifier.align(Alignment.Center))
-                orders.isEmpty() -> Text("No orders yet", color = InkMuted, modifier = Modifier.align(Alignment.Center))
+                isLoading && orders.isEmpty() -> ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                error != null && orders.isEmpty() -> ErrorState(
+                    message = error ?: "",
+                    onRetry = if (canRetry) ({ vendorViewModel.loadVendorOrders() }) else null
+                )
+                orders.isEmpty() -> EmptyState(
+                    icon = Icons.Default.ReceiptLong,
+                    title = "No orders yet",
+                    detail = "Orders customers place for your products will appear here."
+                )
                 else -> LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)

@@ -28,6 +28,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ProductGridSkeleton
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.ui.theme.*
@@ -56,6 +59,9 @@ fun HomeScreen(
     onNotificationsClick: () -> Unit
 ) {
     val products by productViewModel.products.collectAsState()
+    val isLoadingProducts by productViewModel.isLoading.collectAsState()
+    val productsError by productViewModel.error.collectAsState()
+    val canRetryProducts by productViewModel.canRetry.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("All") }
 
@@ -189,9 +195,36 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // ===== Product grid =====
-            if (visibleProducts.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No dishes found", color = InkMuted)
+            if (isLoadingProducts && products.isEmpty()) {
+                ProductGridSkeleton(modifier = Modifier.weight(1f))
+            } else if (productsError != null && products.isEmpty()) {
+                ErrorState(
+                    message = productsError ?: "",
+                    modifier = Modifier.weight(1f),
+                    onRetry = if (canRetryProducts) ({ productViewModel.loadProducts() }) else null
+                )
+            } else if (visibleProducts.isEmpty()) {
+                // Two genuinely different empty cases: nothing matched the
+                // search, versus the catalogue itself being empty. Telling the
+                // user to clear a search they did not make would be confusing.
+                if (searchQuery.isNotBlank()) {
+                    EmptyState(
+                        icon = Icons.Default.Search,
+                        title = "No matches for \"$searchQuery\"",
+                        detail = "Try a different spelling or a broader word.",
+                        modifier = Modifier.weight(1f),
+                        actionLabel = "CLEAR SEARCH",
+                        onAction = { searchQuery = "" }
+                    )
+                } else {
+                    EmptyState(
+                        icon = Icons.Default.ShoppingCart,
+                        title = "Nothing available yet",
+                        detail = "There are no products to show right now. Pull again in a moment.",
+                        modifier = Modifier.weight(1f),
+                        actionLabel = "REFRESH",
+                        onAction = { productViewModel.loadProducts() }
+                    )
                 }
             } else {
                 LazyVerticalGrid(

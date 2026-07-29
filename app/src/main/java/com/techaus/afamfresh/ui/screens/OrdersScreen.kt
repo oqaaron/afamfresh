@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.Order
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.OrderViewModel
@@ -33,6 +37,7 @@ fun OrdersScreen(
     val orders by orderViewModel.orders.collectAsState()
     val isLoading by orderViewModel.isLoading.collectAsState()
     val error by orderViewModel.error.collectAsState()
+    val canRetry by orderViewModel.canRetry.collectAsState()
 
     LaunchedEffect(Unit) {
         orderViewModel.loadOrders()
@@ -55,16 +60,20 @@ fun OrdersScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && orders.isEmpty() -> {
-                    CircularProgressIndicator(
-                        color = Forest,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp))
                 }
                 error != null && orders.isEmpty() -> {
-                    Text(error ?: "", color = Tomato, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                    ErrorState(
+                        message = error ?: "",
+                        onRetry = if (canRetry) ({ orderViewModel.loadOrders() }) else null
+                    )
                 }
                 orders.isEmpty() -> {
-                    Text("You haven't placed any orders yet", color = InkMuted, modifier = Modifier.align(Alignment.Center))
+                    EmptyState(
+                        icon = Icons.Default.ReceiptLong,
+                        title = "No orders yet",
+                        detail = "Once you place an order it'll show up here so you can track it."
+                    )
                 }
                 else -> {
                     LazyColumn(

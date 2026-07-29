@@ -21,6 +21,9 @@ class SurplusViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _canRetry = MutableStateFlow(true)
+    val canRetry: StateFlow<Boolean> = _canRetry.asStateFlow()
+
     init {
         loadListings()
     }
@@ -28,12 +31,13 @@ class SurplusViewModel(
     fun loadListings() {
         _isLoading.value = true
         _error.value = null
-        surplusRepository.getPublicListings { listings ->
+        surplusRepository.getPublicListings { listings, error ->
             _isLoading.value = false
             if (listings != null) {
                 _listings.value = listings
             } else {
-                _error.value = "Unable to load surplus deals"
+                _error.value = error?.userMessage ?: "Unable to load surplus deals"
+                _canRetry.value = error?.isRetryable ?: true
             }
         }
     }

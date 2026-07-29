@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.CartItem
 import com.techaus.afamfresh.ui.theme.*
@@ -77,13 +78,15 @@ fun CartScreen(
             }
 
             if (cartItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = InkMuted, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Your cart is empty", color = InkMuted)
-                    }
-                }
+                EmptyState(
+                    icon = Icons.Default.ShoppingCart,
+                    title = "Your cart is empty",
+                    detail = "Add a few things and they'll show up here ready to check out.",
+                    // onBack returns to the product list, so this is a genuine
+                    // route onward rather than a dead end.
+                    actionLabel = "BROWSE PRODUCTS",
+                    onAction = onBack
+                )
                 return@Scaffold
             }
 

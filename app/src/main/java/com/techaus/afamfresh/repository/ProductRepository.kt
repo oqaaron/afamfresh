@@ -1,34 +1,27 @@
 package com.techaus.afamfresh.repository
 
-import android.util.Log
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.Product
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.techaus.afamfresh.models.ProductsResponse
+import com.techaus.afamfresh.utils.ApiError
+import com.techaus.afamfresh.utils.enqueueApi
 
 // Constructor confirmed by MainActivity.kt: ProductRepository(ApiClient.apiService)
 class ProductRepository(
     private val apiService: ApiService
 ) {
-    fun getProducts(callback: (List<Product>?) -> Unit) {
-        apiService.getProducts().enqueue(object : Callback<com.techaus.afamfresh.models.ProductsResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.ProductsResponse>,
-                response: Response<com.techaus.afamfresh.models.ProductsResponse>
-            ) {
-                if (response.isSuccessful && response.body()?.success == true) {
-                    callback(response.body()?.products ?: emptyList())
-                } else {
-                    Log.e("ProductRepo", "getProducts failed: ${response.code()}")
-                    callback(null)
-                }
+    /**
+     * Reports the reason on failure instead of a bare null, so the UI can tell
+     * the user whether they are offline, the server is down, or the request
+     * was rejected.
+     */
+    fun getProducts(callback: (List<Product>?, ApiError?) -> Unit) {
+        apiService.getProducts().enqueueApi<ProductsResponse>("ProductRepo", "getProducts") { body, error ->
+            when {
+                error != null -> callback(null, error)
+                body?.success == true -> callback(body.products ?: emptyList(), null)
+                else -> callback(null, ApiError.reported(body?.error))
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.ProductsResponse>, t: Throwable) {
-                Log.e("ProductRepo", "getProducts network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
+        }
     }
 }

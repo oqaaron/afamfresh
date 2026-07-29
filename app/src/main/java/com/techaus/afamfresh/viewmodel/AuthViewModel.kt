@@ -50,7 +50,7 @@ class AuthViewModel(
         _loginState.value = LoginUiState.Loading
 
         try {
-            authRepository.login(email, password) { response ->
+            authRepository.login(email, password) { response, error ->
                 _isLoading.value = false
                 if (response?.success == true && response.user != null) {
                     _user.value = response.user
@@ -58,7 +58,9 @@ class AuthViewModel(
                     _loginState.value = LoginUiState.Success(response.user)
                     onSuccess(response.user.name)
                 } else {
-                    val msg = response?.error ?: "Login failed"
+                    // "You're offline" and "incorrect password" are now
+                    // distinguishable, where both previously read "Login failed".
+                    val msg = error?.userMessage ?: response?.error ?: "Login failed"
                     _error.value = msg
                     _loginState.value = LoginUiState.Error(msg)
                     onSuccess("") // prevents hanging if onSuccess expects a result
@@ -80,7 +82,7 @@ class AuthViewModel(
 
         val fullName = "$fname $lname"
         val request = RegisterRequest(fullName, email, password, phone.ifEmpty { null }, role)
-        authRepository.register(request) { response ->
+        authRepository.register(request) { response, error ->
             _isLoading.value = false
             if (response?.success == true) {
                 _registerSuccess.value = true
@@ -90,7 +92,7 @@ class AuthViewModel(
                     // The login function will update the user state and navigate via MainActivity
                 }
             } else {
-                _error.value = response?.error ?: "Registration failed"
+                _error.value = error?.userMessage ?: response?.error ?: "Registration failed"
             }
         }
     }

@@ -73,17 +73,47 @@ object ApiClient {
      *    since login.
      */
     private val sessionInterceptor = Interceptor { chain ->
-        val response = chain.proceed(chain.request())
-        when {
-            response.code == 401 -> SessionTracker.notifyExpired()
-            response.isSuccessful -> SessionTracker.touch()
+        val request = chain.request()
+        val response = chain.proceed(request)
+
+        // Scoped to our own backend ONLY. This one OkHttpClient is shared by
+        // four Retrofit instances — the app API, OSRM, Nominatim and Google
+        // Geocoding — and only the first of those knows anything about the
+        // user's session.
+        //
+        // Without this guard a 401 from Google Geocoding (an expired or
+        // over-quota Maps key) would sign the customer out of AfamFresh
+        // mid-checkout, and a successful OSRM lookup would keep a stale
+        // session alive on third-party traffic.
+        //
+        // Matching on the full BASE_URL prefix rather than the host, because
+        // Nominatim is served from the same host on a different port.
+        if (request.url.toString().startsWith(BASE_URL)) {
+            when {
+                response.code == 401 -> SessionTracker.notifyExpired()
+                response.isSuccessful -> SessionTracker.touch()
+            }
         }
         response
     }
 
+    /**
+     * Held rather than constructed inline so the session cookie can actually
+     * be cleared. Dropping the auth token without dropping PHPSESSID leaves
+     * the app still presenting the old server session — on logout that means
+     * the next user of a shared device inherits it until the server expires
+     * it on its own.
+     */
+    private val cookieJar by lazy { CookieJarImpl(context) }
+
+    /** Drops all stored cookies. Called when a session ends. */
+    fun clearCookies() {
+        cookieJar.clear()
+    }
+
     private val okHttpClient by lazy {
         OkHttpClient.Builder()
-            .cookieJar(CookieJarImpl(context))
+            .cookieJar(cookieJar)
             .addInterceptor(sessionInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)

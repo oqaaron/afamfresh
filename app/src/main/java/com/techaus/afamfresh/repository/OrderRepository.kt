@@ -6,9 +6,8 @@ import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.Order
 import com.techaus.afamfresh.models.OrderCreateResponse
 import com.techaus.afamfresh.models.OrdersResponse
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.techaus.afamfresh.utils.ApiError
+import com.techaus.afamfresh.utils.enqueueApi
 
 // Constructor confirmed by MainActivity.kt: OrderRepository(ApiClient.apiService)
 // Method params mirror ApiService.kt's createOrder/updateOrder/cancelOrder exactly.
@@ -33,7 +32,7 @@ class OrderRepository(
         dropoffLng: Double = 0.0,
         distanceKm: Double = 0.0,
         deliveryCost: Double = 0.0,
-        callback: (OrderCreateResponse?) -> Unit
+        callback: (OrderCreateResponse?, ApiError?) -> Unit
     ) {
         try {
             apiService.createOrder(
@@ -54,51 +53,36 @@ class OrderRepository(
                 dropoffLng = dropoffLng,
                 distanceKm = distanceKm,
                 deliveryCost = deliveryCost
-            ).enqueue(object : Callback<OrderCreateResponse> {
-                override fun onResponse(call: Call<OrderCreateResponse>, response: Response<OrderCreateResponse>) {
-                    if (response.isSuccessful) {
-                        callback(response.body())
-                    } else {
-                        Log.e("OrderRepo", "createOrder HTTP error: ${response.code()}")
-                        callback(null)
-                    }
+            ).enqueueApi<OrderCreateResponse>("OrderRepo", "createOrder") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    // Previously the body was passed through even when the
+                    // server said success=false, so a rejected order looked
+                    // like a placed one.
+                    body?.success == true -> callback(body, null)
+                    else -> callback(null, ApiError.reported(body?.error))
                 }
-
-                override fun onFailure(call: Call<OrderCreateResponse>, t: Throwable) {
-                    Log.e("OrderRepo", "createOrder network failure: ${t.message}", t)
-                    callback(null)
-                }
-            })
+            }
         } catch (e: Exception) {
             Log.e("OrderRepo", "createOrder exception: ${e.message}", e)
-            callback(null)
+            callback(null, ApiError.Unexpected(e.message))
         }
     }
 
-    fun getOrders(callback: (List<Order>?) -> Unit) {
-        apiService.getOrders().enqueue(object : Callback<OrdersResponse> {
-            override fun onResponse(call: Call<OrdersResponse>, response: Response<OrdersResponse>) {
-                callback(if (response.isSuccessful) response.body()?.orders else null)
+    fun getOrders(callback: (List<Order>?, ApiError?) -> Unit) {
+        apiService.getOrders().enqueueApi<OrdersResponse>("OrderRepo", "getOrders") { body, error ->
+            when {
+                error != null -> callback(null, error)
+                body?.success == true -> callback(body.orders ?: emptyList(), null)
+                else -> callback(null, ApiError.reported(body?.error))
             }
-
-            override fun onFailure(call: Call<OrdersResponse>, t: Throwable) {
-                Log.e("OrderRepo", "getOrders network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
+        }
     }
 
-    fun getOrder(id: String, callback: (Order?) -> Unit) {
-        apiService.getOrder(id = id).enqueue(object : Callback<Order> {
-            override fun onResponse(call: Call<Order>, response: Response<Order>) {
-                callback(if (response.isSuccessful) response.body() else null)
-            }
-
-            override fun onFailure(call: Call<Order>, t: Throwable) {
-                Log.e("OrderRepo", "getOrder network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
+    fun getOrder(id: String, callback: (Order?, ApiError?) -> Unit) {
+        apiService.getOrder(id = id).enqueueApi<Order>("OrderRepo", "getOrder") { body, error ->
+            callback(body, error)
+        }
     }
 
     fun updateOrder(
@@ -109,7 +93,7 @@ class OrderRepository(
         scheduledDeliveryDate: String? = null,
         scheduledDeliverySlot: String? = null,
         deliveryNotes: String? = null,
-        callback: (Boolean) -> Unit
+        callback: (Boolean, ApiError?) -> Unit
     ) {
         apiService.updateOrder(
             orderId = orderId,
@@ -119,28 +103,23 @@ class OrderRepository(
             scheduledDeliveryDate = scheduledDeliveryDate,
             scheduledDeliverySlot = scheduledDeliverySlot,
             deliveryNotes = deliveryNotes
-        ).enqueue(object : Callback<BaseResponse> {
-            override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
-                callback(response.isSuccessful && response.body()?.success == true)
+        ).enqueueApi<BaseResponse>("OrderRepo", "updateOrder") { body, error ->
+            when {
+                error != null -> callback(false, error)
+                body?.success == true -> callback(true, null)
+                else -> callback(false, ApiError.reported(body?.error))
             }
-
-            override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
-                Log.e("OrderRepo", "updateOrder network failure: ${t.message}", t)
-                callback(false)
-            }
-        })
+        }
     }
 
-    fun cancelOrder(orderId: String, callback: (Boolean) -> Unit) {
-        apiService.cancelOrder(orderId = orderId).enqueue(object : Callback<BaseResponse> {
-            override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
-                callback(response.isSuccessful && response.body()?.success == true)
+    fun cancelOrder(orderId: String, callback: (Boolean, ApiError?) -> Unit) {
+        apiService.cancelOrder(orderId = orderId)
+            .enqueueApi<BaseResponse>("OrderRepo", "cancelOrder") { body, error ->
+                when {
+                    error != null -> callback(false, error)
+                    body?.success == true -> callback(true, null)
+                    else -> callback(false, ApiError.reported(body?.error))
+                }
             }
-
-            override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
-                Log.e("OrderRepo", "cancelOrder network failure: ${t.message}", t)
-                callback(false)
-            }
-        })
     }
 }

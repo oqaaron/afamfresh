@@ -21,15 +21,25 @@ class OrderViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _canRetry = MutableStateFlow(true)
+    val canRetry: StateFlow<Boolean> = _canRetry.asStateFlow()
+
+    /** True once a load has completed, so screens can distinguish
+     *  "not fetched yet" from "fetched and genuinely empty". */
+    private val _hasLoaded = MutableStateFlow(false)
+    val hasLoaded: StateFlow<Boolean> = _hasLoaded.asStateFlow()
+
     fun loadOrders() {
         _isLoading.value = true
         _error.value = null
-        orderRepository.getOrders { orders ->
+        orderRepository.getOrders { orders, error ->
             _isLoading.value = false
+            _hasLoaded.value = true
             if (orders != null) {
                 _orders.value = orders
             } else {
-                _error.value = "Unable to load orders"
+                _error.value = error?.userMessage ?: "Unable to load orders"
+                _canRetry.value = error?.isRetryable ?: true
             }
         }
     }
@@ -42,24 +52,26 @@ class OrderViewModel(
         scheduledDeliveryDate: String? = null,
         scheduledDeliverySlot: String? = null,
         deliveryNotes: String? = null,
-        onResult: (Boolean) -> Unit
+        onResult: (Boolean, String?) -> Unit
     ) {
         _isLoading.value = true
         orderRepository.updateOrder(
             orderId, address, area, mobile, scheduledDeliveryDate, scheduledDeliverySlot, deliveryNotes
-        ) { success ->
+        ) { success, error ->
             _isLoading.value = false
             if (success) loadOrders()
-            onResult(success)
+            // The reason travels to the caller so the screen can say why the
+            // save failed rather than just refusing to close.
+            onResult(success, error?.userMessage)
         }
     }
 
-    fun cancelOrder(orderId: String, onResult: (Boolean) -> Unit) {
+    fun cancelOrder(orderId: String, onResult: (Boolean, String?) -> Unit) {
         _isLoading.value = true
-        orderRepository.cancelOrder(orderId) { success ->
+        orderRepository.cancelOrder(orderId) { success, error ->
             _isLoading.value = false
             if (success) loadOrders()
-            onResult(success)
+            onResult(success, error?.userMessage)
         }
     }
 }

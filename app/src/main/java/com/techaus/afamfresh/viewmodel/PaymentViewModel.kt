@@ -34,23 +34,40 @@ class PaymentViewModel(
         _error.value = null
 
         val request = PaymentRequest(orderId = orderId, amount = amount, email = email, phone = phone)
-        paymentRepository.initiatePayment(request) { response ->
+        paymentRepository.initiatePayment(request) { response, error ->
             _isLoading.value = false
             _paymentResult.value = response
             if (response?.success == true && response.redirectUrl != null && response.transactionId != null) {
                 onRedirect(response.redirectUrl, response.transactionId)
             } else {
-                _error.value = response?.error ?: "Unable to start payment"
+                _error.value = error?.userMessage
+                    ?: response?.error
+                    ?: "Unable to start payment"
             }
         }
     }
 
-    fun verifyPayment(transactionId: String, onResult: (Boolean) -> Unit) {
+    /**
+     * Reports both whether the payment completed and, separately, whether we
+     * could not tell. A verification that fails to reach the server is NOT the
+     * same as a payment that failed — telling a customer their payment failed
+     * when it may have succeeded is the worst outcome here.
+     */
+    fun verifyPayment(transactionId: String, onResult: (completed: Boolean, undetermined: Boolean) -> Unit) {
         _isLoading.value = true
-        paymentRepository.verifyPayment(transactionId) { response ->
+        _error.value = null
+        paymentRepository.verifyPayment(transactionId) { response, error ->
             _isLoading.value = false
             _paymentResult.value = response
-            onResult(response?.success == true && response.status == "completed")
+
+            if (error != null) {
+                _error.value = error.userMessage
+                onResult(false, true)
+                return@verifyPayment
+            }
+
+            val completed = response?.success == true && response.status == "completed"
+            onResult(completed, false)
         }
     }
 

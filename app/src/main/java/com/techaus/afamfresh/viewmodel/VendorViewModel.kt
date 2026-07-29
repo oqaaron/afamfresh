@@ -31,6 +31,12 @@ class VendorViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _canRetry = MutableStateFlow(true)
+    val canRetry: StateFlow<Boolean> = _canRetry.asStateFlow()
+
+    private val _hasLoaded = MutableStateFlow(false)
+    val hasLoaded: StateFlow<Boolean> = _hasLoaded.asStateFlow()
+
     init {
         loadListings()
     }
@@ -38,22 +44,28 @@ class VendorViewModel(
     fun loadListings() {
         _isLoading.value = true
         _error.value = null
-        vendorRepository.getListings { listings ->
+        vendorRepository.getListings { listings, error ->
             _isLoading.value = false
-            if (listings != null) _listings.value = listings else _error.value = "Unable to load your listings"
+            _hasLoaded.value = true
+            if (listings != null) {
+                _listings.value = listings
+            } else {
+                _error.value = error?.userMessage ?: "Unable to load your listings"
+                _canRetry.value = error?.isRetryable ?: true
+            }
         }
     }
 
-    fun createListing(listing: SurplusListing, onResult: (Boolean) -> Unit) {
+    fun createListing(listing: SurplusListing, onResult: (Boolean, String?) -> Unit) {
         _isLoading.value = true
-        vendorRepository.createListing(listing) { created ->
+        vendorRepository.createListing(listing) { created, error ->
             _isLoading.value = false
             if (created != null) {
                 loadListings()
-                onResult(true)
+                onResult(true, null)
             } else {
-                _error.value = "Unable to create listing"
-                onResult(false)
+                _error.value = error?.userMessage ?: "Unable to create listing"
+                onResult(false, _error.value)
             }
         }
     }
@@ -67,38 +79,62 @@ class VendorViewModel(
         quantity: Double,
         unit: String,
         expiresAt: String,
-        onResult: (Boolean) -> Unit
+        onResult: (Boolean, String?) -> Unit
     ) {
         _isLoading.value = true
-        vendorRepository.updateListing(id, title, description, originalPrice, price, quantity, unit, expiresAt) { success ->
+        vendorRepository.updateListing(id, title, description, originalPrice, price, quantity, unit, expiresAt) { success, error ->
             _isLoading.value = false
-            if (success) loadListings() else _error.value = "Unable to save changes"
-            onResult(success)
+            if (success) {
+                loadListings()
+                onResult(true, null)
+            } else {
+                _error.value = error?.userMessage ?: "Unable to save changes"
+                onResult(false, _error.value)
+            }
         }
     }
 
-    fun deleteListing(id: String, onResult: (Boolean) -> Unit) {
+    fun deleteListing(id: String, onResult: (Boolean, String?) -> Unit) {
         _isLoading.value = true
-        vendorRepository.deleteListing(id) { success ->
+        vendorRepository.deleteListing(id) { success, error ->
             _isLoading.value = false
-            if (success) loadListings() else _error.value = "Unable to delete listing"
-            onResult(success)
+            if (success) {
+                loadListings()
+                onResult(true, null)
+            } else {
+                _error.value = error?.userMessage ?: "Unable to delete listing"
+                onResult(false, _error.value)
+            }
         }
     }
 
     fun loadVendorOrders() {
         _isLoading.value = true
-        vendorRepository.getVendorOrders { orders ->
+        _error.value = null
+        vendorRepository.getVendorOrders { orders, error ->
             _isLoading.value = false
-            if (orders != null) _vendorOrders.value = orders else _error.value = "Unable to load orders"
+            _hasLoaded.value = true
+            if (orders != null) {
+                _vendorOrders.value = orders
+            } else {
+                _error.value = error?.userMessage ?: "Unable to load orders"
+                _canRetry.value = error?.isRetryable ?: true
+            }
         }
     }
 
     fun loadVendorProducts() {
         _isLoading.value = true
-        vendorRepository.getVendorProducts { products ->
+        _error.value = null
+        vendorRepository.getVendorProducts { products, error ->
             _isLoading.value = false
-            if (products != null) _vendorProducts.value = products else _error.value = "Unable to load products"
+            _hasLoaded.value = true
+            if (products != null) {
+                _vendorProducts.value = products
+            } else {
+                _error.value = error?.userMessage ?: "Unable to load products"
+                _canRetry.value = error?.isRetryable ?: true
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.LoginRequest
@@ -15,7 +16,9 @@ import com.techaus.afamfresh.models.LoginResponse
 import com.techaus.afamfresh.models.RegisterRequest
 import com.techaus.afamfresh.models.RegisterResponse
 import com.techaus.afamfresh.models.User
+import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.SessionTracker
+import com.techaus.afamfresh.utils.enqueueApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -83,6 +86,10 @@ class AuthRepository(
     fun clearSession() {
         clearToken()
         SessionTracker.clearActivity()
+        // The server-side session lives in a cookie, not the token. Leaving it
+        // behind means the app keeps presenting the old PHPSESSID after the
+        // user has supposedly been signed out.
+        ApiClient.clearCookies()
     }
 
     // ===== USER MANAGEMENT =====
@@ -144,51 +151,49 @@ class AuthRepository(
     fun hasRole(role: String): Boolean = getAvailableRoles().contains(role)
 
     // ===== API CALLS =====
-    fun login(email: String, password: String, callback: (LoginResponse?) -> Unit) {
+    /**
+     * A 401 here means "wrong email or password", not "your session expired" —
+     * there is no session yet. It is mapped explicitly so the generic session
+     * message never appears on the login screen.
+     */
+    fun login(email: String, password: String, callback: (LoginResponse?, ApiError?) -> Unit) {
         try {
-            apiService.login(body = LoginRequest(email, password)).enqueue(object : Callback<LoginResponse> {
-                override fun onResponse(call: Call<LoginResponse>, response: Response<LoginResponse>) {
-                    Log.d("AuthRepo", "Login response received. Code: ${response.code()}")
-                    if (response.isSuccessful) {
-                        val loginResponse = response.body()
-                        if (loginResponse?.success == true && loginResponse.token != null && loginResponse.user != null) {
-                            saveToken(loginResponse.token)
-                            saveUser(loginResponse.user)
+            apiService.login(body = LoginRequest(email, password))
+                .enqueueApi<LoginResponse>("AuthRepo", "login") { body, error ->
+                    when {
+                        error is ApiError.Unauthorized ->
+                            callback(null, ApiError.Reported("Incorrect email or password."))
+
+                        error != null -> callback(null, error)
+
+                        body?.success == true && body.token != null && body.user != null -> {
+                            saveToken(body.token)
+                            saveUser(body.user)
                             updateLastActivity()
-                        } else {
-                            Log.e("AuthRepo", "Login failed: success=${loginResponse?.success}, token=${loginResponse?.token != null}")
+                            callback(body, null)
                         }
-                        callback(loginResponse)
-                    } else {
-                        Log.e("AuthRepo", "Login HTTP error: ${response.code()} - ${response.message()}")
-                        callback(null)
+
+                        else -> callback(null, ApiError.reported(body?.error ?: "Incorrect email or password."))
                     }
                 }
-
-                override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
-                    Log.e("AuthRepo", "Login network failure: ${t.message}", t)
-                    callback(null)
-                }
-            })
         } catch (e: Exception) {
             Log.e("AuthRepo", "Login exception: ${e.message}", e)
-            callback(null)
+            callback(null, ApiError.Unexpected(e.message))
         }
     }
 
-    fun register(request: RegisterRequest, callback: (RegisterResponse?) -> Unit) {
-        apiService.register(body = request).enqueue(object : Callback<RegisterResponse> {
-            override fun onResponse(call: Call<RegisterResponse>, response: Response<RegisterResponse>) {
-                if (response.isSuccessful) {
-                    callback(response.body())
-                } else {
-                    callback(null)
+    fun register(request: RegisterRequest, callback: (RegisterResponse?, ApiError?) -> Unit) {
+        apiService.register(body = request)
+            .enqueueApi<RegisterResponse>("AuthRepo", "register") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body, null)
+                    // The server's wording matters most here — "that email is
+                    // already registered" is far more useful than a generic
+                    // failure, and only the backend knows it.
+                    else -> callback(null, ApiError.reported(body?.error))
                 }
             }
-            override fun onFailure(call: Call<RegisterResponse>, t: Throwable) {
-                callback(null)
-            }
-        })
     }
 
     fun logout(callback: (Boolean) -> Unit) {

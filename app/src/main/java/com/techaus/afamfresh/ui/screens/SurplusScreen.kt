@@ -21,6 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.SurplusViewModel
@@ -37,6 +40,7 @@ fun SurplusScreen(
     val listings by surplusViewModel.listings.collectAsState()
     val isLoading by surplusViewModel.isLoading.collectAsState()
     val error by surplusViewModel.error.collectAsState()
+    val canRetry by surplusViewModel.canRetry.collectAsState()
 
     Scaffold(
         containerColor = Cream,
@@ -55,17 +59,22 @@ fun SurplusScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && listings.isEmpty() -> {
-                    CircularProgressIndicator(color = Forest, modifier = Modifier.align(Alignment.Center))
+                    ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 }
                 error != null && listings.isEmpty() -> {
-                    Text(error ?: "", color = Tomato, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                    ErrorState(
+                        message = error ?: "",
+                        onRetry = if (canRetry) ({ surplusViewModel.loadListings() }) else null
+                    )
                 }
                 listings.isEmpty() -> {
-                    Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.LocalFlorist, contentDescription = null, tint = InkMuted, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("No surplus deals right now", color = InkMuted)
-                    }
+                    EmptyState(
+                        icon = Icons.Default.LocalFlorist,
+                        title = "No surplus deals right now",
+                        detail = "Vendors post discounted produce here when they have extra. Check back soon.",
+                        actionLabel = "REFRESH",
+                        onAction = { surplusViewModel.loadListings() }
+                    )
                 }
                 else -> {
                     LazyColumn(

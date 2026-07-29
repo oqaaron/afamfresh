@@ -86,14 +86,17 @@ class CheckoutViewModel(
             dropoffLng = deliveryResult?.dropoffLng ?: 0.0,
             distanceKm = deliveryResult?.distanceKm ?: 0.0,
             deliveryCost = deliveryCost
-        ) { response ->
+        ) { response, error ->
             _isLoading.value = false
             if (response?.success == true && response.orderId != null) {
                 val placed = OrderPlaced(orderId = response.orderId, total = total)
                 _orderPlaced.value = placed
                 onResult(placed)
             } else {
-                _error.value = response?.error ?: "Unable to place order"
+                // Order placement is the one flow where a vague failure is
+                // worst: the customer does not know whether they have been
+                // charged. Say precisely what went wrong.
+                _error.value = error?.userMessage ?: response?.error ?: "Unable to place order"
                 onResult(null)
             }
         }

@@ -4,50 +4,49 @@ import android.util.Log
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.PaymentRequest
 import com.techaus.afamfresh.models.PaymentResponse
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.techaus.afamfresh.utils.ApiError
+import com.techaus.afamfresh.utils.enqueueApi
 
 // Constructor shape confirmed by MainActivity.kt:
 //   val paymentRepository = PaymentRepository(ApiClient.apiService)
-// Method bodies follow the same callback pattern as AuthRepository.login().
 class PaymentRepository(
     private val apiService: ApiService
 ) {
-    fun initiatePayment(request: PaymentRequest, callback: (PaymentResponse?) -> Unit) {
+    /**
+     * Payment is the flow where a vague error is most damaging — the customer
+     * cannot tell whether money left their account. Every failure here carries
+     * a specific reason.
+     */
+    fun initiatePayment(request: PaymentRequest, callback: (PaymentResponse?, ApiError?) -> Unit) {
         try {
-            apiService.initiatePayment(request).enqueue(object : Callback<PaymentResponse> {
-                override fun onResponse(call: Call<PaymentResponse>, response: Response<PaymentResponse>) {
-                    if (response.isSuccessful) {
-                        callback(response.body())
-                    } else {
-                        Log.e("PaymentRepo", "initiatePayment HTTP error: ${response.code()}")
-                        callback(null)
+            apiService.initiatePayment(request)
+                .enqueueApi<PaymentResponse>("PaymentRepo", "initiatePayment") { body, error ->
+                    when {
+                        error != null -> callback(null, error)
+                        body?.success == true -> callback(body, null)
+                        else -> callback(null, ApiError.reported(body?.error))
                     }
                 }
-
-                override fun onFailure(call: Call<PaymentResponse>, t: Throwable) {
-                    Log.e("PaymentRepo", "initiatePayment network failure: ${t.message}", t)
-                    callback(null)
-                }
-            })
         } catch (e: Exception) {
             Log.e("PaymentRepo", "initiatePayment exception: ${e.message}", e)
-            callback(null)
+            callback(null, ApiError.Unexpected(e.message))
         }
     }
 
-    fun verifyPayment(transactionId: String, reference: String? = null, callback: (PaymentResponse?) -> Unit) {
+    /**
+     * Note that a "not successful yet" verification is NOT an error — a pending
+     * payment is a legitimate state. The body is returned so the caller can
+     * distinguish pending from failed, and only genuine transport or HTTP
+     * problems produce an [ApiError].
+     */
+    fun verifyPayment(
+        transactionId: String,
+        reference: String? = null,
+        callback: (PaymentResponse?, ApiError?) -> Unit
+    ) {
         apiService.verifyPayment(transactionId = transactionId, reference = reference)
-            .enqueue(object : Callback<PaymentResponse> {
-                override fun onResponse(call: Call<PaymentResponse>, response: Response<PaymentResponse>) {
-                    callback(if (response.isSuccessful) response.body() else null)
-                }
-
-                override fun onFailure(call: Call<PaymentResponse>, t: Throwable) {
-                    Log.e("PaymentRepo", "verifyPayment network failure: ${t.message}", t)
-                    callback(null)
-                }
-            })
+            .enqueueApi<PaymentResponse>("PaymentRepo", "verifyPayment") { body, error ->
+                callback(body, error)
+            }
     }
 }

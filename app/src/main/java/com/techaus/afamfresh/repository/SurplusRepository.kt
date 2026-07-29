@@ -1,34 +1,26 @@
 package com.techaus.afamfresh.repository
 
-import android.util.Log
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.SurplusListing
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import com.techaus.afamfresh.models.SurplusListingsResponse
+import com.techaus.afamfresh.utils.ApiError
+import com.techaus.afamfresh.utils.enqueueApi
 
 // Constructor confirmed by MainActivity.kt: SurplusRepository(ApiClient.apiService)
 class SurplusRepository(
     private val apiService: ApiService
 ) {
-    fun getPublicListings(status: String = "approved", callback: (List<SurplusListing>?) -> Unit) {
-        apiService.getSurplusListings(status = status).enqueue(object : Callback<com.techaus.afamfresh.models.SurplusListingsResponse> {
-            override fun onResponse(
-                call: Call<com.techaus.afamfresh.models.SurplusListingsResponse>,
-                response: Response<com.techaus.afamfresh.models.SurplusListingsResponse>
-            ) {
-                if (response.isSuccessful) {
-                    callback(response.body()?.listings ?: emptyList())
-                } else {
-                    Log.e("SurplusRepo", "getPublicListings HTTP error: ${response.code()}")
-                    callback(null)
+    fun getPublicListings(
+        status: String = "approved",
+        callback: (List<SurplusListing>?, ApiError?) -> Unit
+    ) {
+        apiService.getSurplusListings(status = status)
+            .enqueueApi<SurplusListingsResponse>("SurplusRepo", "getPublicListings") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.listings ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
                 }
             }
-
-            override fun onFailure(call: Call<com.techaus.afamfresh.models.SurplusListingsResponse>, t: Throwable) {
-                Log.e("SurplusRepo", "getPublicListings network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
     }
 }

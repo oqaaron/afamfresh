@@ -22,6 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
@@ -40,6 +43,8 @@ fun VendorDashboardScreen(
 ) {
     val listings by vendorViewModel.listings.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
+    val error by vendorViewModel.error.collectAsState()
+    val canRetry by vendorViewModel.canRetry.collectAsState()
 
     val activeCount = listings.count { it.status.equals("approved", ignoreCase = true) }
     val pendingCount = listings.count { it.status.equals("pending", ignoreCase = true) }
@@ -81,9 +86,18 @@ fun VendorDashboardScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             if (isLoading && listings.isEmpty()) {
-                CircularProgressIndicator(color = Forest, modifier = Modifier.padding(20.dp))
+                ListSkeleton(rows = 3)
+            } else if (error != null && listings.isEmpty()) {
+                ErrorState(
+                    message = error ?: "",
+                    onRetry = if (canRetry) ({ vendorViewModel.loadListings() }) else null
+                )
             } else if (listings.isEmpty()) {
-                Text("No listings yet — tap + to add your first one", color = InkMuted)
+                EmptyState(
+                    icon = Icons.Default.Inventory,
+                    title = "No listings yet",
+                    detail = "Tap the + button to post surplus produce at a discount."
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(listings, key = { it.id }) { listing ->

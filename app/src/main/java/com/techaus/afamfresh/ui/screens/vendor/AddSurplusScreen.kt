@@ -65,7 +65,7 @@ fun AddSurplusScreen(
                 quantity = quantityVal,
                 unit = unit,
                 expiresAt = expiresAt
-            ) { success -> if (success) onSave() else formError = "Unable to save changes" }
+            ) { success, reason -> if (success) onSave() else formError = reason ?: "Unable to save changes" }
         } else {
             vendorViewModel.createListing(
                 SurplusListing(
@@ -77,7 +77,7 @@ fun AddSurplusScreen(
                     unit = unit,
                     expiresAt = expiresAt
                 )
-            ) { success -> if (success) onSave() else formError = "Unable to create listing" }
+            ) { success, reason -> if (success) onSave() else formError = reason ?: "Unable to create listing" }
         }
     }
 
@@ -159,7 +159,7 @@ fun AddSurplusScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = {
-                        vendorViewModel.deleteListing(existingListing!!.id) { success -> if (success) onSave() }
+                        vendorViewModel.deleteListing(existingListing!!.id) { success, reason -> if (success) onSave() else formError = reason ?: "Unable to delete listing" }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(14.dp),

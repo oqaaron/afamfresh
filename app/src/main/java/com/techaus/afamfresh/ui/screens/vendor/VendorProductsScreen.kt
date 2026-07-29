@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.ui.components.EmptyState
+import com.techaus.afamfresh.ui.components.ErrorState
+import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
@@ -36,6 +40,8 @@ fun VendorProductsScreen(
 ) {
     val products by vendorViewModel.vendorProducts.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
+    val error by vendorViewModel.error.collectAsState()
+    val canRetry by vendorViewModel.canRetry.collectAsState()
 
     LaunchedEffect(Unit) { vendorViewModel.loadVendorProducts() }
 
@@ -52,8 +58,16 @@ fun VendorProductsScreen(
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                isLoading && products.isEmpty() -> CircularProgressIndicator(color = Forest, modifier = Modifier.align(Alignment.Center))
-                products.isEmpty() -> Text("No products listed yet", color = InkMuted, modifier = Modifier.align(Alignment.Center))
+                isLoading && products.isEmpty() -> ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                error != null && products.isEmpty() -> ErrorState(
+                    message = error ?: "",
+                    onRetry = if (canRetry) ({ vendorViewModel.loadVendorProducts() }) else null
+                )
+                products.isEmpty() -> EmptyState(
+                    icon = Icons.Default.Inventory2,
+                    title = "No products listed yet",
+                    detail = "Products you sell through AfamFresh will appear here."
+                )
                 else -> LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
