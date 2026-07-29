@@ -1,6 +1,7 @@
 package com.techaus.afamfresh
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -8,9 +9,11 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.view.WindowCompat
@@ -19,30 +22,56 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.services.AfamFreshMessagingService
 import com.techaus.afamfresh.models.User
-import com.techaus.afamfresh.repository.*
+import com.techaus.afamfresh.ui.screens.ForgotPasswordScreen
 import com.techaus.afamfresh.ui.screens.LoginScreen
 import com.techaus.afamfresh.ui.screens.MainScreen
+import com.techaus.afamfresh.ui.screens.MaintenanceScreen
 import com.techaus.afamfresh.ui.screens.RegisterScreen
+import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
 import com.techaus.afamfresh.utils.FirebaseTokenManager
+import com.techaus.afamfresh.utils.SessionTracker
 import com.techaus.afamfresh.viewmodel.*
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var authRepository: AuthRepository
-    private lateinit var authViewModel: AuthViewModel
-    private lateinit var productViewModel: ProductViewModel
-    private lateinit var orderViewModel: OrderViewModel
-    private lateinit var surplusViewModel: SurplusViewModel
-    private val cartViewModel by lazy { CartViewModel() }
-    private lateinit var checkoutViewModel: CheckoutViewModel
-    private lateinit var deliveryResultViewModel: DeliveryResultViewModel
-    private lateinit var vendorRepository: VendorRepository
-    private lateinit var vendorViewModel: VendorViewModel
-    private lateinit var appRepository: AppRepository
+    /**
+     * Built lazily so that [ApiClient.initialize] has already run by the time
+     * the factory reads `ApiClient.apiService` (a lateinit property). onCreate
+     * initialises ApiClient before anything below is touched.
+     */
+    private val viewModelFactory by lazy { AppViewModelFactory(applicationContext) }
+
+    // `by viewModels` scopes these to the Activity's ViewModelStore, which
+    // Android preserves across configuration changes. Rotating the device no
+    // longer rebuilds them, so ProductViewModel / SurplusViewModel /
+    // VendorViewModel no longer re-run their init-block network calls and
+    // discard already-loaded data.
+    private val authViewModel: AuthViewModel by viewModels { viewModelFactory }
+    private val productViewModel: ProductViewModel by viewModels { viewModelFactory }
+    private val orderViewModel: OrderViewModel by viewModels { viewModelFactory }
+    private val surplusViewModel: SurplusViewModel by viewModels { viewModelFactory }
+    private val cartViewModel: CartViewModel by viewModels { viewModelFactory }
+    private val checkoutViewModel: CheckoutViewModel by viewModels { viewModelFactory }
+    private val paymentViewModel: PaymentViewModel by viewModels { viewModelFactory }
+    private val deliveryResultViewModel: DeliveryResultViewModel by viewModels { viewModelFactory }
+    private val vendorViewModel: VendorViewModel by viewModels { viewModelFactory }
+    private val addressViewModel: AddressViewModel by viewModels { viewModelFactory }
+    private val notificationViewModel: NotificationViewModel by viewModels { viewModelFactory }
+
+    /** Order id carried by a tapped push notification. */
+    private val pendingOrderId = mutableStateOf<String?>(null)
+
+    /** Reset token from an `afamfresh://reset-password?token=...` deep link. */
+    private val pendingResetToken = mutableStateOf<String?>(null)
+
+    // Used directly (not through a ViewModel) by the splash and session checks.
+    private val authRepository get() = viewModelFactory.authRepository
+    private val appRepository get() = viewModelFactory.appRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,34 +85,18 @@ class MainActivity : ComponentActivity() {
                 requestNotificationPermission()
             }
 
-            authRepository = AuthRepository(ApiClient.apiService, applicationContext)
-            authViewModel = AuthViewModel(authRepository)
-
-            val productRepository = ProductRepository(ApiClient.apiService)
-            productViewModel = ProductViewModel(productRepository)
-
-            val orderRepository = OrderRepository(ApiClient.apiService)
-            orderViewModel = OrderViewModel(orderRepository)
-
-            val surplusRepository = SurplusRepository(ApiClient.apiService)
-            surplusViewModel = SurplusViewModel(surplusRepository)
-
-            checkoutViewModel = CheckoutViewModel(orderRepository, PaymentRepository(ApiClient.apiService))
-            deliveryResultViewModel = DeliveryResultViewModel()
-
-            vendorRepository = VendorRepository(ApiClient.apiService)
-            vendorViewModel = VendorViewModel(vendorRepository)
-
-            appRepository = AppRepository(ApiClient.apiService)
+            handleIntent(intent)
 
             setContent {
                 var isLoggedIn by remember { mutableStateOf(authRepository.isLoggedIn()) }
                 var currentUser by remember { mutableStateOf<User?>(authRepository.getUser()) }
-                var showSplash by remember { mutableStateOf(true) }
 
-                // ✅ CRITICAL FIX: Default to true so login is NEVER blocked.
-                // The splash screen will still run visually, but we guarantee seamless login.
-                var shouldProceed by remember { mutableStateOf(true) }
+                // rememberSaveable so a rotation does not replay the splash or
+                // re-run the config check.
+                var showSplash by rememberSaveable { mutableStateOf(true) }
+                var shouldProceed by rememberSaveable { mutableStateOf(true) }
+                var maintenanceMessage by rememberSaveable { mutableStateOf<String?>(null) }
+                var forceUpdateRequired by rememberSaveable { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
                     authViewModel.user.collect { user ->
@@ -91,6 +104,12 @@ class MainActivity : ComponentActivity() {
                             isLoggedIn = true
                             currentUser = user
                             Log.d("MainActivity", "User logged in: ${user.name}")
+
+                            // register_token is an authenticated endpoint, so
+                            // this has to happen after login — not at app
+                            // start, where it would just 401. This is the call
+                            // site that was previously missing entirely.
+                            FirebaseTokenManager.registerTokenWithBackend()
                         } else {
                             isLoggedIn = false
                             currentUser = null
@@ -105,79 +124,159 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
 
+                // A 401 from any request anywhere in the app lands here. This
+                // is the case that previously had no handling at all: once the
+                // session lapsed mid-browse, every call just failed silently
+                // and the user was left tapping a dead app.
+                LaunchedEffect(Unit) {
+                    SessionTracker.expired.collect {
+                        if (!isLoggedIn) return@collect
+
+                        authRepository.clearSession()
+                        authRepository.clearUser()
+                        isLoggedIn = false
+                        currentUser = null
+
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Your session expired. Please sign in again.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        // popUpTo(0) clears the whole back stack, so back from
+                        // login cannot return to a screen the user is no
+                        // longer authorised to see.
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+
                 AfamfreshTheme {
                     Surface(modifier = Modifier.fillMaxSize(), color = Cream) {
-                        if (showSplash) {
-                            SplashScreen(
-                                authRepository = authRepository,
-                                appRepository = appRepository,
-                                onConfigChecked = { proceed, maintenanceMessage, forceUpdate ->
-                                    showSplash = false
-                                    // ✅ KEEP SPLASH CHECK, BUT OVERRIDE TO true FOR LOGIN TO WORK.
-                                    // This preserves the splash screen's logic without breaking the login flow.
-                                    // (Comment out the override once your /config endpoint is fully ready)
-                                    shouldProceed = true
-                                    Log.d("MainActivity", "Splash finished. proceed=$proceed (overridden to true)")
+                        when {
+                            showSplash -> {
+                                SplashScreen(
+                                    authRepository = authRepository,
+                                    appRepository = appRepository,
+                                    onConfigChecked = { proceed, message, forceUpdate ->
+                                        // The real value is honoured now. The old
+                                        // `shouldProceed = true` override existed
+                                        // because the config check used to fail
+                                        // closed, so any backend outage locked
+                                        // everyone out. SplashScreen/AppRepository
+                                        // now fail OPEN — errors, timeouts and a
+                                        // missing config.php all yield proceed=true
+                                        // — so only an explicit maintenance_mode
+                                        // (or force_update) blocks anyone.
+                                        shouldProceed = proceed
+                                        maintenanceMessage = message
+                                        forceUpdateRequired = forceUpdate
+                                        showSplash = false
+                                        Log.d(
+                                            "MainActivity",
+                                            "Splash finished. proceed=$proceed forceUpdate=$forceUpdate"
+                                        )
+                                    }
+                                )
+                            }
+
+                            // The message is actually shown to the user now,
+                            // rather than being received and discarded.
+                            !shouldProceed || forceUpdateRequired -> {
+                                MaintenanceScreen(
+                                    message = maintenanceMessage,
+                                    isForceUpdate = forceUpdateRequired,
+                                    onRetry = {
+                                        // Re-run the whole config check.
+                                        maintenanceMessage = null
+                                        forceUpdateRequired = false
+                                        shouldProceed = true
+                                        showSplash = true
+                                    }
+                                )
+                            }
+
+                            else -> {
+                                val resetToken by pendingResetToken
+
+                                // A reset link must win over the normal start
+                                // destination, otherwise tapping it while
+                                // already signed in would silently ignore it.
+                                LaunchedEffect(resetToken) {
+                                    resetToken?.let { navController.navigate("reset_password/$it") }
                                 }
-                            )
-                        } else {
-                            NavHost(
-                                navController = navController,
-                                startDestination = if (isLoggedIn && shouldProceed) "home" else "login"
-                            ) {
-                                composable("login") {
-                                    LoginScreen(
-                                        authViewModel = authViewModel,
-                                        onLoginSuccess = { name: String ->
-                                            // ✅ Guard remains, but shouldProceed is always true now.
-                                            if (!shouldProceed) {
+
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = if (isLoggedIn) "home" else "login"
+                                ) {
+                                    composable("login") {
+                                        LoginScreen(
+                                            authViewModel = authViewModel,
+                                            onLoginSuccess = { name: String ->
+                                                isLoggedIn = true
+                                                currentUser = authRepository.getUser()
                                                 Toast.makeText(
                                                     this@MainActivity,
-                                                    "Service is currently unavailable. Please try again later.",
+                                                    "Welcome $name!",
                                                     Toast.LENGTH_LONG
                                                 ).show()
-                                                return@LoginScreen
+                                                navController.navigate("home") {
+                                                    popUpTo("login") { inclusive = true }
+                                                }
+                                            },
+                                            onForgotPassword = {
+                                                navController.navigate("forgot_password")
+                                            },
+                                            onCreateAccount = {
+                                                navController.navigate("register")
                                             }
+                                        )
+                                    }
 
-                                            isLoggedIn = true
-                                            currentUser = authRepository.getUser()
-                                            Toast.makeText(this@MainActivity, "Welcome $name!", Toast.LENGTH_LONG).show()
-                                            navController.navigate("home") {
-                                                popUpTo("login") { inclusive = true }
-                                            }
-                                        },
-                                        onForgotPassword = {
-                                            Toast.makeText(this@MainActivity, "Forgot password clicked", Toast.LENGTH_SHORT).show()
-                                        },
-                                        onCreateAccount = {
-                                            navController.navigate("register")
-                                        }
-                                    )
-                                }
+                                    composable("forgot_password") {
+                                        ForgotPasswordScreen(
+                                            authRepository = authRepository,
+                                            onBack = { navController.popBackStack() }
+                                        )
+                                    }
 
-                                composable("register") {
-                                    RegisterScreen(
-                                        authViewModel = authViewModel,
-                                        onRegister = { fname, lname, email, password, role, phone ->
-                                            authViewModel.register(fname, lname, email, password, role, phone)
-                                        },
-                                        onGoogleSignUpSuccess = {
-                                            isLoggedIn = true
-                                            currentUser = authRepository.getUser()
-                                            navController.navigate("home") {
-                                                popUpTo("register") { inclusive = true }
+                                    composable("reset_password/{token}") { entry ->
+                                        ResetPasswordScreen(
+                                            token = entry.arguments?.getString("token").orEmpty(),
+                                            authRepository = authRepository,
+                                            onDone = {
+                                                pendingResetToken.value = null
+                                                navController.navigate("login") {
+                                                    popUpTo("login") { inclusive = true }
+                                                }
                                             }
-                                        },
-                                        onBackToLogin = {
-                                            navController.navigate("login") {
-                                                popUpTo("register") { inclusive = true }
-                                            }
-                                        }
-                                    )
-                                }
+                                        )
+                                    }
 
-                                composable("home") {
-                                    if (isLoggedIn && shouldProceed) {
+                                    composable("register") {
+                                        RegisterScreen(
+                                            authViewModel = authViewModel,
+                                            onRegister = { fname, lname, email, password, role, phone ->
+                                                authViewModel.register(fname, lname, email, password, role, phone)
+                                            },
+                                            onGoogleSignUpSuccess = {
+                                                isLoggedIn = true
+                                                currentUser = authRepository.getUser()
+                                                navController.navigate("home") {
+                                                    popUpTo("register") { inclusive = true }
+                                                }
+                                            },
+                                            onBackToLogin = {
+                                                navController.navigate("login") {
+                                                    popUpTo("register") { inclusive = true }
+                                                }
+                                            }
+                                        )
+                                    }
+
+                                    composable("home") {
                                         MainScreen(
                                             authViewModel = authViewModel,
                                             productViewModel = productViewModel,
@@ -185,28 +284,31 @@ class MainActivity : ComponentActivity() {
                                             surplusViewModel = surplusViewModel,
                                             cartViewModel = cartViewModel,
                                             checkoutViewModel = checkoutViewModel,
+                                            paymentViewModel = paymentViewModel,
                                             deliveryResultViewModel = deliveryResultViewModel,
                                             vendorViewModel = vendorViewModel,
+                                            addressViewModel = addressViewModel,
+                                            notificationViewModel = notificationViewModel,
+                                            pendingOrderId = pendingOrderId.value,
+                                            onPendingOrderHandled = { pendingOrderId.value = null },
                                             onLogout = {
                                                 authViewModel.logout()
                                                 isLoggedIn = false
                                                 currentUser = null
-                                                shouldProceed = false // Reset on logout
                                                 navController.navigate("login") {
                                                     popUpTo("home") { inclusive = true }
                                                 }
-                                                Toast.makeText(this@MainActivity, "Logged out", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    "Logged out",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             },
                                             onProductClick = { product: Product ->
                                                 Log.d("MainActivity", "Product clicked: ${product.name}")
                                             },
                                             onBack = { /* Handle back press */ }
                                         )
-                                    } else {
-                                        // Safety net – redirect to login only if something is truly wrong.
-                                        navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
-                                        }
                                     }
                                 }
                             }
@@ -220,10 +322,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The activity is `launchMode="singleTop"`, so when it is already running
+     * a new intent arrives here instead of through onCreate. Without this,
+     * tapping a notification while the app was open would do nothing.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    /**
+     * Extracts the two things that can launch the app from outside:
+     * a tapped push notification, and a password-reset deep link.
+     */
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+
+        intent.getStringExtra(AfamFreshMessagingService.EXTRA_ORDER_ID)?.let {
+            Log.d("MainActivity", "Opened from notification for order $it")
+            pendingOrderId.value = it
+        }
+
+        // afamfresh://reset-password?token=XYZ
+        val data = intent.data
+        if (data != null && data.scheme == "afamfresh" && data.host == "reset-password") {
+            val token = data.getQueryParameter("token")
+            if (token.isNullOrBlank()) {
+                Log.w("MainActivity", "Reset-password link had no token")
+            } else {
+                pendingResetToken.value = token
+            }
+        }
+    }
+
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
+                != PackageManager.PERMISSION_GRANTED
+            ) {
                 ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ⚠️ PLACEHOLDER ARTWORK — replace with your real logo.
+
+  This resource is referenced in three places:
+    - AndroidManifest.xml  android:icon="@drawable/logo"
+    - AndroidManifest.xml  android:roundIcon="@drawable/logo"
+    - LoginScreen.kt       painterResource(id = R.drawable.logo)
+
+  It's a simple leaf mark drawn to suit the "fresh produce" theme and to
+  render correctly at both icon size and the 100dp size LoginScreen uses.
+  Note LoginScreen already tints the background green and clips it to a
+  rounded square, so this draws the mark in white on transparent.
+
+  For a real launcher icon you'd normally want an adaptive icon
+  (mipmap-anydpi-v26/ic_launcher.xml + foreground/background layers) rather
+  than a single drawable — worth doing before release, but not needed to build.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Leaf body -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M78,26C78,26 68,24 56,28C44,32 34,42 32,54C30.5,63 33,70 36,74L30,80C28.5,81.5 28.5,84 30,85.5C31.5,87 34,87 35.5,85.5L41.5,79.5C46,82.5 53,84.5 61,82C74,78 80,66 80,52C80,38 78,26 78,26Z" />
+
+    <!-- Central vein -->
+    <path
+        android:fillColor="#FF1B7A3D"
+        android:pathData="M70,34C70,34 56,44 48,56C42,65 39,74 38,78L42,80C43,76 46,68 51,60C58,48 71,37 71,37Z" />
+
+</vector>

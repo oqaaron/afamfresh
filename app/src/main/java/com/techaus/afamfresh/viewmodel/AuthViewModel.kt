@@ -1,6 +1,7 @@
 package com.techaus.afamfresh.viewmodel
 
 import android.content.Intent
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -43,33 +44,33 @@ class AuthViewModel(
 
     // ===== EMAIL/PASSWORD LOGIN =====
     fun login(email: String, password: String, onSuccess: (String) -> Unit) {
-    _isLoading.value = true
-    _error.value = null
-    _loginSuccess.value = false
-    _loginState.value = LoginUiState.Loading
+        _isLoading.value = true
+        _error.value = null
+        _loginSuccess.value = false
+        _loginState.value = LoginUiState.Loading
 
-    try {
-        authRepository.login(email, password) { response ->
-            _isLoading.value = false
-            if (response?.success == true && response.user != null) {
-                _user.value = response.user
-                _loginSuccess.value = true
-                _loginState.value = LoginUiState.Success(response.user)
-                onSuccess(response.user.name)
-            } else {
-                val msg = response?.error ?: "Login failed"
-                _error.value = msg
-                _loginState.value = LoginUiState.Error(msg)
-                onSuccess("") // prevents hanging if onSuccess expects a result
+        try {
+            authRepository.login(email, password) { response ->
+                _isLoading.value = false
+                if (response?.success == true && response.user != null) {
+                    _user.value = response.user
+                    _loginSuccess.value = true
+                    _loginState.value = LoginUiState.Success(response.user)
+                    onSuccess(response.user.name)
+                } else {
+                    val msg = response?.error ?: "Login failed"
+                    _error.value = msg
+                    _loginState.value = LoginUiState.Error(msg)
+                    onSuccess("") // prevents hanging if onSuccess expects a result
+                }
             }
+        } catch (e: Exception) {
+            _isLoading.value = false
+            _error.value = "Network error: ${e.message}"
+            _loginState.value = LoginUiState.Error(e.message ?: "Unknown error")
+            Log.e("AuthVM", "Login exception", e)
         }
-    } catch (e: Exception) {
-        _isLoading.value = false
-        _error.value = "Network error: ${e.message}"
-        _loginState.value = LoginUiState.Error(e.message ?: "Unknown error")
-        Log.e("AuthVM", "Login exception", e)
     }
-}
 
     // ===== REGISTRATION =====
     fun register(fname: String, lname: String, email: String, password: String, role: String = "user", phone: String = "") {

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ====================================================================
+         Theme.AfamFresh — the base application theme.
+
+         ⚠️ Parent choice matters here: this project depends on Compose
+         Material3 (androidx.compose.material3), which provides NO XML themes.
+         The `Theme.Material3.*` XML parents come from the separate
+         com.google.android.material:material library, which is NOT in your
+         build.gradle.kts. Using one would fail to resolve.
+
+         So this uses the framework's own Material theme, which needs no extra
+         dependency. Your actual app colors come from AfamfreshTheme in
+         ui/theme/ once Compose takes over; this XML theme only governs the
+         window before/around Compose (status bar, window background).
+         ==================================================================== -->
+    <style name="Theme.AfamFresh" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/forest</item>
+        <item name="android:navigationBarColor">@color/cream</item>
+        <item name="android:windowBackground">@color/cream</item>
+        <item name="android:colorPrimary">@color/forest</item>
+        <item name="android:colorAccent">@color/forest</item>
+    </style>
+
+    <!-- ====================================================================
+         Theme.AfamFresh.Splash — applied to MainActivity in the manifest.
+
+         ⚠️ Deliberately NOT parented to androidx's Theme.SplashScreen, even
+         though core-splashscreen is in your dependencies. That parent only
+         behaves correctly if MainActivity calls installSplashScreen() before
+         super.onCreate() — and your MainActivity doesn't; it renders a Compose
+         SplashScreen composable instead. Pairing Theme.SplashScreen with no
+         installSplashScreen() call can leave the activity stuck on the splash
+         theme.
+
+         This is a plain themed window that shows your brand color while the
+         activity starts, then your Compose SplashScreen takes over. If you
+         later switch to the androidx splash API, change this parent to
+         Theme.SplashScreen and add postSplashScreenTheme.
+         ==================================================================== -->
+    <style name="Theme.AfamFresh.Splash" parent="Theme.AfamFresh">
+        <item name="android:windowBackground">@color/forest</item>
+        <item name="android:statusBarColor">@color/forest</item>
+    </style>
+
+</resources>

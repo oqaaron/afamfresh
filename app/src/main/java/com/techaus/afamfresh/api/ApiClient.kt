@@ -2,6 +2,10 @@ package com.techaus.afamfresh.api
 
 import android.content.Context
 import com.google.gson.GsonBuilder
+import com.techaus.afamfresh.BuildConfig
+import com.techaus.afamfresh.utils.NetworkStatus
+import com.techaus.afamfresh.utils.SessionTracker
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -34,15 +38,53 @@ object ApiClient {
         .setLenient()
         .create()
     
+    /**
+     * BODY logging serialises every request and response body in full. In a
+     * release build that is two separate problems:
+     *
+     *  1. It writes auth tokens, passwords and customer addresses into logcat,
+     *     where any app with READ_LOGS or anyone with adb can read them.
+     *  2. It costs real CPU and allocation on every single call, for output
+     *     nobody will ever look at.
+     *
+     * NONE in release leaves the interceptor in the chain but makes it a no-op,
+     * so the client is otherwise configured identically across build types.
+     */
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) {
+            HttpLoggingInterceptor.Level.BODY
+        } else {
+            HttpLoggingInterceptor.Level.NONE
+        }
     }
     
     private lateinit var context: Context
-    
+
+    /**
+     * Watches every response for two things:
+     *
+     *  - a 401, meaning the session has lapsed. Catching it here works no
+     *    matter which screen or repository made the call, so the app can sign
+     *    the user out once and explain why, rather than every screen failing
+     *    separately with an unexplained error.
+     *
+     *  - a success, treated as evidence the user is active. This is what makes
+     *    the 30-minute idle timeout measure real idleness rather than time
+     *    since login.
+     */
+    private val sessionInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        when {
+            response.code == 401 -> SessionTracker.notifyExpired()
+            response.isSuccessful -> SessionTracker.touch()
+        }
+        response
+    }
+
     private val okHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(CookieJarImpl(context))
+            .addInterceptor(sessionInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -82,6 +124,10 @@ object ApiClient {
 
     fun initialize(context: Context) {
         this.context = context
+        // Both are used from the interceptor above and from error
+        // classification, so they must be ready before any request runs.
+        SessionTracker.initialize(context)
+        NetworkStatus.initialize(context)
         val retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)

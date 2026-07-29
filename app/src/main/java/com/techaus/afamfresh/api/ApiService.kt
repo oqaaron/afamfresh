@@ -55,6 +55,49 @@ interface ApiService {
     ): Call<LoginResponse>
 
     // ============================================================
+    // PASSWORD RESET
+    // ============================================================
+    //
+    // ⚠️ NOT YET IMPLEMENTED SERVER-SIDE. Both actions need writing in
+    // auth.php. Contract:
+    //
+    //   POST auth.php?action=forgot_password
+    //     field:  email
+    //     returns { "success": true }
+    //
+    //     MUST return success even when the email is unknown. Returning an
+    //     error for unregistered addresses turns this endpoint into a way to
+    //     test which emails have accounts.
+    //
+    //     On a match, email a link of the form:
+    //         afamfresh://reset-password?token=<token>
+    //     where <token> is single-use, random (32+ bytes), stored hashed, and
+    //     expires in ~30 minutes.
+    //
+    //   POST auth.php?action=reset_password
+    //     fields: token, password
+    //     returns { "success": true }
+    //          or { "success": false, "error": "Link expired or already used" }
+    //
+    //     MUST invalidate the token on use and end existing sessions for that
+    //     user, so a stolen session cannot outlive the password change.
+
+    @POST("auth.php")
+    @FormUrlEncoded
+    fun requestPasswordReset(
+        @Query("action") action: String = "forgot_password",
+        @Field("email") email: String
+    ): Call<BaseResponse>
+
+    @POST("auth.php")
+    @FormUrlEncoded
+    fun resetPassword(
+        @Query("action") action: String = "reset_password",
+        @Field("token") token: String,
+        @Field("password") newPassword: String
+    ): Call<BaseResponse>
+
+    // ============================================================
     // PRODUCTS ENDPOINTS
     // ============================================================
     

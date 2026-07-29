@@ -1,0 +1,28 @@
+# --- Secrets / local config ---
+local.properties
+env.yaml
+app/google-services.json
+*.keystore
+*.jks
+
+# --- Build output ---
+build/
+build-temp/
+app/build/
+.gradle/
+gradle-wrapper-8.2/
+captures/
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+
+# --- JVM crash dumps / build logs ---
+hs_err_pid*.log
+replay_pid*.log
+build.log
+
+# --- OS ---
+.DS_Store
+Thumbs.db

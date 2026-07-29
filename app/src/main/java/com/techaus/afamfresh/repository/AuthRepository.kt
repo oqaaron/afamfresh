@@ -3,6 +3,7 @@ package com.techaus.afamfresh.repository
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -14,7 +15,10 @@ import com.techaus.afamfresh.models.LoginResponse
 import com.techaus.afamfresh.models.RegisterRequest
 import com.techaus.afamfresh.models.RegisterResponse
 import com.techaus.afamfresh.models.User
+import com.techaus.afamfresh.utils.SessionTracker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -29,31 +33,40 @@ class AuthRepository(
         context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 15 minutes
-        private const val KEY_LAST_ACTIVITY = "last_activity"
+        private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 minutes
     }
 
     // ===== TOKEN MANAGEMENT =====
-    // ✅ FIX: Changed apply() to commit() for synchronous writes
+    // These all use apply() rather than commit(). commit() performs the disk
+    // write on the calling thread, and every one of these is called from the
+    // main thread (login callbacks, role switches, activity tracking), so it
+    // was blocking the UI on file I/O.
+    //
+    // No call site needed restructuring to make this safe: apply() updates the
+    // in-memory preference map SYNCHRONOUSLY and only defers the disk write.
+    // A getToken() immediately after saveToken() therefore still reads the new
+    // value — the read never goes to disk. The only behaviour given up is
+    // durability if the process is killed within milliseconds of the write,
+    // which is the standard trade-off and far preferable to an ANR.
     fun saveToken(token: String) {
-        prefs.edit().putString("auth_token", token).commit()
+        prefs.edit().putString("auth_token", token).apply()
         updateLastActivity()
     }
 
     fun getToken(): String? = prefs.getString("auth_token", null)
 
     fun clearToken() {
-        prefs.edit().remove("auth_token").commit()
+        prefs.edit().remove("auth_token").apply()
     }
 
     // ===== SESSION TIMEOUT =====
-    fun updateLastActivity() {
-        prefs.edit().putLong(KEY_LAST_ACTIVITY, System.currentTimeMillis()).commit()
-    }
+    // Delegated to SessionTracker so that the OkHttp interceptor and this
+    // class cannot disagree about when the user was last active. The
+    // interceptor calls touch() on every successful response, which is what
+    // makes the timeout measure genuine idleness rather than time since login.
+    fun updateLastActivity() = SessionTracker.touch()
 
-    fun getLastActivity(): Long {
-        return prefs.getLong(KEY_LAST_ACTIVITY, 0)
-    }
+    fun getLastActivity(): Long = SessionTracker.lastActivity()
 
     fun isSessionValid(): Boolean {
         val lastActivity = getLastActivity()
@@ -69,7 +82,7 @@ class AuthRepository(
 
     fun clearSession() {
         clearToken()
-        prefs.edit().remove(KEY_LAST_ACTIVITY).commit()
+        SessionTracker.clearActivity()
     }
 
     // ===== USER MANAGEMENT =====
@@ -81,7 +94,7 @@ class AuthRepository(
             .putString("user_mobile", user.mobile)
             .putString("user_roles", user.roles.joinToString(","))
             .putString("user_current_role", user.currentRole)
-            .commit() // ✅ Fixed
+            .apply()
         updateLastActivity()
     }
 
@@ -110,7 +123,7 @@ class AuthRepository(
             .remove("user_mobile")
             .remove("user_roles")
             .remove("user_current_role")
-            .commit() // ✅ Fixed
+            .apply()
     }
 
     // ===== ROLE MANAGEMENT =====
@@ -119,7 +132,7 @@ class AuthRepository(
     }
 
     fun saveCurrentRole(role: String) {
-        prefs.edit().putString("user_current_role", role).commit() // ✅ Fixed
+        prefs.edit().putString("user_current_role", role).apply()
         updateLastActivity()
     }
 
@@ -132,36 +145,36 @@ class AuthRepository(
 
     // ===== API CALLS =====
     fun login(email: String, password: String, callback: (LoginResponse?) -> Unit) {
-    try {
-        apiService.login(body = LoginRequest(email, password)).enqueue(object : Callback<LoginResponse> {
-            override fun onResponse(call: Call<LoginResponse>, response: Response<LoginResponse>) {
-                Log.d("AuthRepo", "Login response received. Code: ${response.code()}")
-                if (response.isSuccessful) {
-                    val loginResponse = response.body()
-                    if (loginResponse?.success == true && loginResponse.token != null && loginResponse.user != null) {
-                        saveToken(loginResponse.token)
-                        saveUser(loginResponse.user)
-                        updateLastActivity()
+        try {
+            apiService.login(body = LoginRequest(email, password)).enqueue(object : Callback<LoginResponse> {
+                override fun onResponse(call: Call<LoginResponse>, response: Response<LoginResponse>) {
+                    Log.d("AuthRepo", "Login response received. Code: ${response.code()}")
+                    if (response.isSuccessful) {
+                        val loginResponse = response.body()
+                        if (loginResponse?.success == true && loginResponse.token != null && loginResponse.user != null) {
+                            saveToken(loginResponse.token)
+                            saveUser(loginResponse.user)
+                            updateLastActivity()
+                        } else {
+                            Log.e("AuthRepo", "Login failed: success=${loginResponse?.success}, token=${loginResponse?.token != null}")
+                        }
+                        callback(loginResponse)
                     } else {
-                        Log.e("AuthRepo", "Login failed: success=${loginResponse?.success}, token=${loginResponse?.token != null}")
+                        Log.e("AuthRepo", "Login HTTP error: ${response.code()} - ${response.message()}")
+                        callback(null)
                     }
-                    callback(loginResponse)
-                } else {
-                    Log.e("AuthRepo", "Login HTTP error: ${response.code()} - ${response.message()}")
+                }
+
+                override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
+                    Log.e("AuthRepo", "Login network failure: ${t.message}", t)
                     callback(null)
                 }
-            }
-
-            override fun onFailure(call: Call<LoginResponse>, t: Throwable) {
-                Log.e("AuthRepo", "Login network failure: ${t.message}", t)
-                callback(null)
-            }
-        })
-    } catch (e: Exception) {
-        Log.e("AuthRepo", "Login exception: ${e.message}", e)
-        callback(null)
+            })
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "Login exception: ${e.message}", e)
+            callback(null)
+        }
     }
-}
 
     fun register(request: RegisterRequest, callback: (RegisterResponse?) -> Unit) {
         apiService.register(body = request).enqueue(object : Callback<RegisterResponse> {
@@ -191,6 +204,51 @@ class AuthRepository(
                 callback(false)
             }
         })
+    }
+
+    // ===== PASSWORD RESET =====
+
+    /**
+     * Asks the backend to email a reset link.
+     *
+     * Reports success to the caller even on an HTTP error, deliberately: the
+     * UI must not reveal whether an address has an account. Genuine network
+     * failures are still surfaced as false so the user can retry.
+     */
+    fun requestPasswordReset(email: String, callback: (success: Boolean, networkError: Boolean) -> Unit) {
+        apiService.requestPasswordReset(email = email).enqueue(object : Callback<BaseResponse> {
+            override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
+                if (!response.isSuccessful) {
+                    Log.w("AuthRepo", "requestPasswordReset HTTP ${response.code()}")
+                }
+                callback(true, false)
+            }
+
+            override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
+                Log.e("AuthRepo", "requestPasswordReset network failure: ${t.message}", t)
+                callback(false, true)
+            }
+        })
+    }
+
+    /** Completes the reset using the token from the emailed deep link. */
+    fun resetPassword(token: String, newPassword: String, callback: (Boolean, String?) -> Unit) {
+        apiService.resetPassword(token = token, newPassword = newPassword)
+            .enqueue(object : Callback<BaseResponse> {
+                override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
+                    val body = response.body()
+                    if (response.isSuccessful && body?.success == true) {
+                        callback(true, null)
+                    } else {
+                        callback(false, body?.error ?: "That reset link is invalid or has expired.")
+                    }
+                }
+
+                override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
+                    Log.e("AuthRepo", "resetPassword network failure: ${t.message}", t)
+                    callback(false, "Couldn't reach the server. Check your connection and try again.")
+                }
+            })
     }
 
     fun switchRole(role: String, callback: (Boolean) -> Unit) {
@@ -231,8 +289,19 @@ class AuthRepository(
         }
     }
 
-    suspend fun googleLogin(idToken: String): LoginResponse? {
-        return try {
+    /**
+     * Retrofit's [Call.execute] is a BLOCKING network call. This is a suspend
+     * function with no dispatcher of its own, so it inherited whatever context
+     * the caller had — and it is invoked from `viewModelScope`, which is
+     * Dispatchers.Main. That froze the UI for the whole round trip.
+     *
+     * withContext(Dispatchers.IO) moves the blocking call off the main thread
+     * while keeping the simple sequential shape of the function. The
+     * saveToken / saveUser calls inside now also run on IO, which is a bonus:
+     * they touch SharedPreferences.
+     */
+    suspend fun googleLogin(idToken: String): LoginResponse? = withContext(Dispatchers.IO) {
+        try {
             val response = apiService.googleLogin(idToken = idToken).execute()
             if (response.isSuccessful) {
                 val loginResponse = response.body()
@@ -248,6 +317,7 @@ class AuthRepository(
                 null
             }
         } catch (e: Exception) {
+            Log.e("AuthRepo", "googleLogin failed: ${e.message}", e)
             null
         }
     }

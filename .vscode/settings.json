@@ -1,3 +1,27 @@
 {
-    "java.configuration.updateBuildConfiguration": "automatic"
+    // ---------------------------------------------------------------------
+    // Gradle / Java IDE integration is disabled for this workspace.
+    //
+    // This machine has 8 GB RAM and a commit limit of ~12 GB. The Red Hat Java
+    // extension's background Gradle sync spawns its own Gradle JVM, and it
+    // inherits org.gradle.jvmargs from gradle.properties — so a background
+    // task-enumeration was reserving the same ~2.3 GB as a real build.
+    //
+    // Symptom: "CONFIGURE SUCCESSFUL ... Found 593 tasks" immediately followed
+    // by "Gradle server exited unexpectedly (exitCode=1)", auto-restarting up
+    // to 3 times, while command-line builds died at :app:packageDebug.
+    //
+    // Kotlin editing is provided by a different extension and is unaffected.
+    // Command-line Gradle builds are unaffected. Delete these three lines to
+    // restore the previous behaviour.
+    // ---------------------------------------------------------------------
+
+    // Was "automatic": re-imported the whole project on every build-file change.
+    "java.configuration.updateBuildConfiguration": "disabled",
+
+    // Stops the Java language server importing this project through Gradle.
+    "java.import.gradle.enabled": false,
+
+    // Stops the Gradle extension scanning for and enumerating tasks.
+    "gradle.autoDetect": "off"
 }

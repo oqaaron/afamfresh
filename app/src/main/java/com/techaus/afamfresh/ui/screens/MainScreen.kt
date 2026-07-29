@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
@@ -33,6 +34,11 @@ fun MainScreen(
     paymentViewModel: PaymentViewModel,
     deliveryResultViewModel: DeliveryResultViewModel,
     vendorViewModel: VendorViewModel,
+    addressViewModel: AddressViewModel,
+    notificationViewModel: NotificationViewModel,
+    /** Order id from a tapped push notification, if the app was opened by one. */
+    pendingOrderId: String? = null,
+    onPendingOrderHandled: () -> Unit = {},
     onLogout: () -> Unit,
     onProductClick: (Product) -> Unit,
     onBack: () -> Unit
@@ -43,6 +49,22 @@ fun MainScreen(
 
     val user by authViewModel.user.collectAsState()
     val vendorListings by vendorViewModel.listings.collectAsState()
+    val unreadNotifications by notificationViewModel.unreadCount.collectAsState()
+
+    // Notifications are an authenticated endpoint, so this waits for a user
+    // rather than firing from the ViewModel's init block.
+    LaunchedEffect(user?.id) {
+        if (user != null) notificationViewModel.refresh()
+    }
+
+    // A push was tapped: jump straight to that order once, then clear the flag
+    // so returning to home later does not re-navigate.
+    LaunchedEffect(pendingOrderId) {
+        pendingOrderId?.let {
+            navController.navigate("edit_order/$it")
+            onPendingOrderHandled()
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -86,13 +108,27 @@ fun MainScreen(
                     availableRoles = user?.roles ?: listOf("user"),
                     onRoleSwitch = { /* handled in profile */ },
                     onLogout = onLogout,
-                    onProductClick = onProductClick,
+                    onProductClick = { product ->
+                        onProductClick(product) // preserve caller's callback (e.g. logging in MainActivity)
+                        navController.navigate("product_detail/${product.id}") // ✅ FIX: this route existed but was never reachable
+                    },
                     onOrdersClick = { navController.navigate("orders") },
                     onProfileClick = { navController.navigate("profile") },
                     onSurplusClick = { navController.navigate("surplus") },
                     onCartClick = { navController.navigate("cart") },
                     productViewModel = productViewModel,
-                    cartViewModel = cartViewModel
+                    cartViewModel = cartViewModel,
+                    unreadNotifications = unreadNotifications,
+                    onNotificationsClick = { navController.navigate("notifications") }
+                )
+            }
+
+            // ===== NOTIFICATIONS =====
+            composable("notifications") {
+                NotificationsScreen(
+                    notificationViewModel = notificationViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenOrder = { orderId -> navController.navigate("edit_order/$orderId") }
                 )
             }
 
@@ -128,7 +164,8 @@ fun MainScreen(
                     onUpdateQuantity = { item, qty -> cartViewModel.updateQuantity(item, qty) },
                     onCheckout = {
                         navController.navigate("checkout")
-                    }
+                    },
+                    deliveryResultViewModel = deliveryResultViewModel
                 )
             }
 
@@ -150,8 +187,15 @@ fun MainScreen(
                     onLogout = onLogout,
                     onBack = { navController.navigate("home") },
                     onOrdersClick = { navController.navigate("orders") },
-                    onAddressesClick = { /* navigate to addresses */ },
-                    onSettingsClick = { /* navigate to settings */ }
+                    onAddressesClick = { navController.navigate("addresses") },
+                    onSettingsClick = { navController.navigate("settings") } // ✅ FIX: was a no-op comment; "settings" route already existed below
+                )
+            }
+            // ===== ADDRESSES =====
+            composable("addresses") {
+                AddressesScreen(
+                    addressViewModel = addressViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
             // ===== SETTINGS =====
@@ -224,6 +268,7 @@ fun MainScreen(
                     },
                     onSelectLocation = { navController.navigate("delivery_map") },
                     deliveryResultViewModel = deliveryResultViewModel,
+                    addressViewModel = addressViewModel,
                     userEmail = user?.email,
                     userPhone = user?.mobile
                 )

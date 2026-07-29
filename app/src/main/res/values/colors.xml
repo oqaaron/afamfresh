@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the Compose palette in ui/theme/Color.kt so the pre-Compose
+         window (status bar, splash background) matches the app. -->
+    <color name="forest">#FF1B7A3D</color>
+    <color name="forest_dark">#FF14602F</color>
+    <color name="cream">#FFFAFAF7</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

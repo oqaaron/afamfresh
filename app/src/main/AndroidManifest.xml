@@ -58,6 +58,21 @@
             
         </activity>
 
+        <!-- ============= PUSH NOTIFICATIONS ============= -->
+        <!-- Receives FCM messages. Without this registered, data-payload
+             pushes are dropped and never reach the app. -->
+        <service
+            android:name=".services.AfamFreshMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="afamfresh_orders" />
+
     </application>
 
 </manifest>
