@@ -96,8 +96,12 @@ object ApiClient {
         // mid-checkout, and a successful OSRM lookup would keep a stale
         // session alive on third-party traffic.
         //
-        // Matching on the full BASE_URL prefix rather than the host, because
-        // Nominatim is served from the same host on a different port.
+        // Matching on the full BASE_URL prefix rather than the host. This used
+        // to matter because Nominatim was configured on the same host at a
+        // different port; it now points at nominatim.openstreetmap.org, but the
+        // prefix check stays because the app API lives under a subdirectory
+        // (/afamfresh/api/) and a host-only match would also catch anything else
+        // served from the same dev machine.
         if (request.url.toString().startsWith(BASE_URL)) {
             when {
                 response.code == 401 -> SessionTracker.notifyExpired()
@@ -144,10 +148,33 @@ object ApiClient {
             .create(OSRMApiService::class.java)
     }
     
+    /**
+     * Nominatim's public instance requires a User-Agent that identifies the
+     * application, and rejects or rate-limits generic ones — OkHttp otherwise
+     * sends "okhttp/4.12.0". See operations.osmfoundation.org/policies/nominatim.
+     *
+     * A separate client rather than an extra interceptor on the shared one, so
+     * this header is not attached to requests to our own backend or to Google.
+     */
+    private val nominatimClient by lazy {
+        okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header(
+                            "User-Agent",
+                            "AfamFresh/${BuildConfig.VERSION_NAME} (Android; ${BuildConfig.APPLICATION_ID})"
+                        )
+                        .build()
+                )
+            }
+            .build()
+    }
+
     val nominatimApiService: NominatimApiService by lazy {
         Retrofit.Builder()
             .baseUrl(NOMINATIM_BASE_URL)
-            .client(okHttpClient)
+            .client(nominatimClient)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(NominatimApiService::class.java)

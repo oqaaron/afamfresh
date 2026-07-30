@@ -103,9 +103,20 @@ android {
 
     buildTypes {
         debug {
-            // Points at the dev machine on the local network.
-            buildConfigField("String", "BASE_URL", "\"${secret("base.url.debug", "http://192.168.3.41/api/")}\"")
-            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.debug", "http://192.168.3.41:8080/")}\"")
+            // Set base.url.debug in local.properties to your dev machine's
+            // address. The default below is the EMULATOR's alias for the host
+            // (10.0.2.2), because that is the only value which is correct
+            // without knowing the machine — a hardcoded LAN IP goes stale the
+            // moment DHCP hands out a different lease, which is exactly what
+            // happened to the previous default of 192.168.3.41.
+            //
+            // Note the path: afamfresh is a subdirectory of htdocs with no
+            // Apache vhost, so /api/ alone returns 404.
+            buildConfigField("String", "BASE_URL", "\"${secret("base.url.debug", "http://10.0.2.2/afamfresh/api/")}\"")
+
+            // Public Nominatim by default. The previous default pointed at a
+            // self-hosted instance on port 8080 that is not running.
+            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.debug", "https://nominatim.openstreetmap.org/")}\"")
             buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
         }
 
@@ -113,8 +124,17 @@ android {
             // HTTPS only. The network security config forbids cleartext in
             // release, so an http:// URL here would fail at runtime rather
             // than silently sending customer data in the clear.
+            // ⚠️ UNVERIFIED. If production mirrors this dev machine's layout,
+            // the path needs the /afamfresh/ segment as well — check with
+            // `curl -s -o /dev/null -w "%{http_code}" https://afam.techaus.online/api/products.php?action=list`
+            // before shipping a release build.
             buildConfigField("String", "BASE_URL", "\"${secret("base.url.release", "https://afam.techaus.online/api/")}\"")
-            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.release", "https://afam.techaus.online:8080/")}\"")
+
+            // Was https://afam.techaus.online:8080/ — a guessed self-hosted
+            // Nominatim. No such instance was found running anywhere, so this
+            // defaults to the public service. If you do stand one up, set
+            // nominatim.url.release in local.properties.
+            buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.release", "https://nominatim.openstreetmap.org/")}\"")
             buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
 
             isMinifyEnabled = true
