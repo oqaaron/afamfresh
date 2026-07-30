@@ -17,8 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.R
-import com.techaus.afamfresh.config.DeliveryConfig
-import com.techaus.afamfresh.config.toPricingOrNull
 import com.techaus.afamfresh.repository.AppRepository
 import com.techaus.afamfresh.repository.AuthRepository
 import com.techaus.afamfresh.ui.theme.Forest
@@ -65,11 +63,6 @@ fun SplashScreen(
         }
 
         minimumDisplay.await()
-
-        // Delivery rates are server-driven when the backend supplies them, so
-        // prices can change without shipping a new app version. A missing or
-        // incomplete block leaves DeliveryConfig on its built-in fallback.
-        DeliveryConfig.applyServerPricing(config?.deliveryPricing?.toPricingOrNull())
 
         if (config == null) {
             // No config, unreachable backend, or timeout -> let the user in.

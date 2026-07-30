@@ -289,6 +289,7 @@ class MainActivity : ComponentActivity() {
                                             vendorViewModel = vendorViewModel,
                                             addressViewModel = addressViewModel,
                                             notificationViewModel = notificationViewModel,
+                                            deliveryRepository = viewModelFactory.deliveryRepository,
                                             pendingOrderId = pendingOrderId.value,
                                             onPendingOrderHandled = { pendingOrderId.value = null },
                                             onLogout = {

@@ -263,6 +263,23 @@ interface ApiService {
     ): Call<BaseResponse>
 
     // ============================================================
+    // DELIVERY FEE QUOTE
+    // ============================================================
+    //
+    // ✅ VERIFIED against api/calculate-delivery-fee.php — request fields,
+    // response fields and the endpoint path are read from the real file, not
+    // inferred.
+    //
+    // The fee is tiered by order value, so `order_value` is mandatory and the
+    // endpoint rejects anything <= 0.
+
+    @POST("calculate-delivery-fee.php")
+    @Headers("Content-Type: application/json")
+    fun calculateDeliveryFee(
+        @Body request: DeliveryQuoteRequest
+    ): Call<DeliveryQuoteResponse>
+
+    // ============================================================
     // DELIVERY ENDPOINTS
     // ============================================================
     

@@ -25,8 +25,7 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.config.DeliveryConfig
-import com.techaus.afamfresh.config.isWithinRange
-import com.techaus.afamfresh.config.quoteFor
+import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import kotlinx.coroutines.Dispatchers
@@ -34,9 +33,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.*
 
-// Pricing is no longer defined here. It lives in config/DeliveryConfig.kt and
-// is supplied by config.php when the backend provides it, so rates can change
-// without an app release. See that file for the fallback values.
+// This screen does NOT price deliveries. The fee is tiered by order value and
+// configured server-side, so it is obtained from api/calculate-delivery-fee.php
+// via DeliveryRepository. config/DeliveryConfig.kt holds only the pickup
+// coordinates used to draw the origin marker.
 
 private const val TAG = "DeliveryMap"
 
@@ -46,6 +46,13 @@ private const val TAG = "DeliveryMap"
 @Composable
 fun DeliveryMapScreen(
     onBack: () -> Unit,
+    /**
+     * Cart subtotal in UGX. Required, because the delivery fee is tiered by
+     * order value — the same drop-off point costs a different amount depending
+     * on how much is being bought, and can be free entirely.
+     */
+    cartSubtotal: Double,
+    deliveryRepository: DeliveryRepository,
     onLocationSelected: (
         pickupAddress: String,
         dropoffAddress: String,
@@ -59,19 +66,22 @@ fun DeliveryMapScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // Snapshotted once per composition of this screen so a config refresh
-    // mid-selection cannot change the price under the customer's feet between
-    // the quote they see and the quote that gets submitted.
-    val pricing = remember { DeliveryConfig.current }
-    val pickupLatLng = remember(pricing) { LatLng(pricing.pickupLat, pricing.pickupLng) }
+    // Pickup is only used to draw the origin marker and centre the map. The
+    // server measures distance from its own configured warehouse coordinates,
+    // so this cannot influence a price.
+    val pickupLatLng = remember { LatLng(DeliveryConfig.PICKUP_LAT, DeliveryConfig.PICKUP_LNG) }
 
     var dropoff by remember { mutableStateOf<LatLng?>(null) }
     var dropoffAddress by remember { mutableStateOf("") }
     var distanceKm by remember { mutableStateOf(0.0) }
     var totalCost by remember { mutableStateOf(0.0) }
     var isCalculating by remember { mutableStateOf(false) }
-    var usedFallbackDistance by remember { mutableStateOf(false) }
+    var quoteReason by remember { mutableStateOf<String?>(null) }
+    var isFreeDelivery by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Null until a successful quote. Confirm stays disabled while it is null,
+    // so a failed quote can never be submitted as a zero fee.
+    var quotedFee by remember { mutableStateOf<Double?>(null) }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(pickupLatLng, 12f)
@@ -81,35 +91,41 @@ fun DeliveryMapScreen(
         dropoff = point
         isCalculating = true
         errorMessage = null
-        usedFallbackDistance = false
+        quotedFee = null
+        quoteReason = null
 
         scope.launch {
-            // --- distance: OSRM road distance, straight-line fallback ---
-            val osrmKm = fetchOsrmDistanceKm(pickupLatLng, point)
-            val km = if (osrmKm != null) {
-                osrmKm
-            } else {
-                usedFallbackDistance = true
-                haversineKm(pickupLatLng, point)
-            }
-
-            // --- address: Nominatim, then Google, then raw coordinates ---
+            // Reverse-geocode for display only; the fee comes from the server.
             val address = reverseGeocode(point)
-
-            distanceKm = km
             dropoffAddress = address
-            totalCost = pricing.quoteFor(km)
-            isCalculating = false
 
-            if (!pricing.isWithinRange(km)) {
-                errorMessage = "That location is ${"%.1f".format(km)} km away — " +
-                    "outside our ${pricing.maxDeliveryKm.toInt()} km delivery range."
+            deliveryRepository.quote(
+                orderValue = cartSubtotal,
+                lat = point.latitude,
+                lng = point.longitude,
+                address = address
+            ) { quote, error ->
+                isCalculating = false
+
+                if (quote?.fee == null) {
+                    // No local fallback on purpose: showing an invented figure
+                    // that differs from what the backend records is worse than
+                    // telling the customer we could not price it.
+                    errorMessage = error?.userMessage
+                        ?: "Couldn't calculate the delivery fee for that spot. Try again, or pick a nearby point."
+                    return@quote
+                }
+
+                distanceKm = quote.distance ?: 0.0
+                totalCost = quote.fee
+                quotedFee = quote.fee
+                isFreeDelivery = quote.isFree || quote.fee == 0.0
+                quoteReason = quote.reason
             }
         }
     }
 
-    val outOfRange = !pricing.isWithinRange(distanceKm)
-    val canConfirm = dropoff != null && !isCalculating && !outOfRange
+    val canConfirm = dropoff != null && !isCalculating && quotedFee != null
 
     Scaffold(
         containerColor = Cream,
@@ -134,7 +150,7 @@ fun DeliveryMapScreen(
                     Marker(
                         state = MarkerState(position = pickupLatLng),
                         title = "Pickup",
-                        snippet = pricing.pickupLabel
+                        snippet = DeliveryConfig.PICKUP_LABEL
                     )
                     dropoff?.let {
                         Marker(state = MarkerState(position = it), title = "Delivery here")
@@ -170,7 +186,7 @@ fun DeliveryMapScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text("From", fontSize = 11.sp, color = InkMuted)
-                        Text(pricing.pickupLabel, fontWeight = FontWeight.Medium, color = Ink, fontSize = 14.sp)
+                        Text(DeliveryConfig.PICKUP_LABEL, fontWeight = FontWeight.Medium, color = Ink, fontSize = 14.sp)
                     }
                 }
 
@@ -198,17 +214,20 @@ fun DeliveryMapScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Delivery fee", fontWeight = FontWeight.Bold, color = Ink)
-                            Text(formatUgx(totalCost), fontWeight = FontWeight.Bold, color = Forest)
+                            Text(
+                                if (isFreeDelivery) "FREE" else formatUgx(totalCost),
+                                fontWeight = FontWeight.Bold,
+                                color = Forest
+                            )
                         }
 
-                        if (usedFallbackDistance) {
+                        // The server explains its own decision, e.g. "Free
+                        // delivery for orders above 100,000 UGX". Showing it
+                        // tells the customer why, and nudges toward the
+                        // threshold when they are close.
+                        quoteReason?.let { reason ->
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Estimated in a straight line — routing service unavailable, " +
-                                    "so the real driving distance may be longer.",
-                                fontSize = 11.sp,
-                                color = InkMuted
-                            )
+                            Text(reason, fontSize = 11.sp, color = InkMuted)
                         }
                     }
 
@@ -226,7 +245,7 @@ fun DeliveryMapScreen(
                     onClick = {
                         dropoff?.let { d ->
                             onLocationSelected(
-                                pricing.pickupLabel,
+                                DeliveryConfig.PICKUP_LABEL,
                                 dropoffAddress,
                                 pickupLatLng.latitude,
                                 pickupLatLng.longitude,
@@ -250,32 +269,6 @@ fun DeliveryMapScreen(
 }
 
 // ===== helpers =====
-
-/** OSRM road distance in km, or null if the service can't be reached. */
-private suspend fun fetchOsrmDistanceKm(from: LatLng, to: LatLng): Double? =
-    withContext(Dispatchers.IO) {
-        try {
-            // OSRM expects lon,lat order — reversed from the usual lat,lng.
-            val coords = "${from.longitude},${from.latitude};${to.longitude},${to.latitude}"
-            val response = ApiClient.osrmApiService.getRoute(coords).execute()
-            val meters = response.body()?.routes?.firstOrNull()?.distance
-            if (response.isSuccessful && meters != null) meters / 1000.0 else null
-        } catch (e: Exception) {
-            Log.w(TAG, "OSRM unavailable, will fall back to straight-line: ${e.message}")
-            null
-        }
-    }
-
-/** Great-circle distance — a floor, not a real driving distance. */
-private fun haversineKm(a: LatLng, b: LatLng): Double {
-    val earthRadiusKm = 6371.0
-    val dLat = Math.toRadians(b.latitude - a.latitude)
-    val dLon = Math.toRadians(b.longitude - a.longitude)
-    val lat1 = Math.toRadians(a.latitude)
-    val lat2 = Math.toRadians(b.latitude)
-    val h = sin(dLat / 2).pow(2) + sin(dLon / 2).pow(2) * cos(lat1) * cos(lat2)
-    return 2 * earthRadiusKm * asin(sqrt(h))
-}
 
 /** Nominatim first, then Google, then raw coordinates. */
 private suspend fun reverseGeocode(point: LatLng): String = withContext(Dispatchers.IO) {

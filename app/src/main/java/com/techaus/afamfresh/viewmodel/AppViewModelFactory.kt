@@ -7,6 +7,7 @@ import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.repository.AddressRepository
 import com.techaus.afamfresh.repository.AppRepository
 import com.techaus.afamfresh.repository.AuthRepository
+import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.repository.LocalAddressRepository
 import com.techaus.afamfresh.repository.NotificationRepository
 import com.techaus.afamfresh.repository.OrderRepository
@@ -64,6 +65,9 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
     private val addressRepository: AddressRepository = LocalAddressRepository(appContext)
 
     private val notificationRepository = NotificationRepository(apiService)
+
+    /** Exposed because DeliveryMapScreen takes it directly, not via a ViewModel. */
+    val deliveryRepository = DeliveryRepository(apiService)
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

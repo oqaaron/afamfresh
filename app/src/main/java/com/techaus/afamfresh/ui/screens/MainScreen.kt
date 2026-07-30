@@ -18,6 +18,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.models.DeliveryResult
+import com.techaus.afamfresh.repository.DeliveryRepository
+import com.techaus.afamfresh.utils.OrderCalc
 import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.ui.screens.vendor.*
 import com.techaus.afamfresh.ui.screens.SettingsScreen
@@ -36,6 +38,7 @@ fun MainScreen(
     vendorViewModel: VendorViewModel,
     addressViewModel: AddressViewModel,
     notificationViewModel: NotificationViewModel,
+    deliveryRepository: DeliveryRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
     pendingOrderId: String? = null,
     onPendingOrderHandled: () -> Unit = {},
@@ -275,8 +278,13 @@ fun MainScreen(
             }
 
             composable("delivery_map") {
+                val cartItems by cartViewModel.cartItems.collectAsState()
                 DeliveryMapScreen(
                     onBack = { navController.navigate("checkout") },
+                    // The fee is tiered by order value, so the quote cannot be
+                    // requested without the cart subtotal.
+                    cartSubtotal = OrderCalc.subtotal(cartItems),
+                    deliveryRepository = deliveryRepository,
                     onLocationSelected = { pickupAddress, dropoffAddress, pickupLat, pickupLng,
                                           dropoffLat, dropoffLng, distanceKm, totalCost ->
                         deliveryResultViewModel.setDeliveryResult(

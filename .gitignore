@@ -22,6 +22,8 @@ captures/
 hs_err_pid*.log
 replay_pid*.log
 build.log
+test.log
+release-build.log
 
 # --- OS ---
 .DS_Store

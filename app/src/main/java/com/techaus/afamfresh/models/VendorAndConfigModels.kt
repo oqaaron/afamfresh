@@ -22,28 +22,9 @@ data class AppConfigResponse(
     @SerializedName("maintenance_message") val maintenanceMessage: String? = null,
     @SerializedName("force_update") val forceUpdate: Boolean = false,
     @SerializedName("min_supported_version") val minSupportedVersion: Int? = null,
-    /**
-     * Optional. When present, this drives delivery pricing instead of the
-     * app's built-in fallback, so rates can be changed without an app release.
-     * Absent = the app keeps using DeliveryConfig.FALLBACK.
-     */
-    @SerializedName("delivery_pricing") val deliveryPricing: DeliveryPricingConfig? = null,
     @SerializedName("error") val error: String? = null
 )
 
-/**
- * Server-supplied delivery pricing. Every field is required — a partial config
- * is rejected rather than merged, because quoting from half a config would
- * charge customers a number nobody chose.
- */
-data class DeliveryPricingConfig(
-    @SerializedName("pickup_lat") val pickupLat: Double? = null,
-    @SerializedName("pickup_lng") val pickupLng: Double? = null,
-    @SerializedName("pickup_label") val pickupLabel: String? = null,
-    @SerializedName("base_fare") val baseFare: Double? = null,
-    @SerializedName("cost_per_km") val costPerKm: Double? = null,
-    @SerializedName("max_delivery_km") val maxDeliveryKm: Double? = null
-)
 
 data class AppNotification(
     @SerializedName("id") val id: String,
