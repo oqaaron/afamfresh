@@ -149,8 +149,13 @@ private fun VendorListingRow(listing: SurplusListing, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
-            Text(listing.title, fontWeight = FontWeight.SemiBold, color = Ink)
-            Text("${listing.quantity} ${listing.unit}  •  ${formatUgx(listing.price)}", fontSize = 12.sp, color = InkMuted)
+            Text(listing.displayTitle, fontWeight = FontWeight.SemiBold, color = Ink)
+            Text(
+                "${listing.remainingQuantity} ${listing.unit.orEmpty()}".trim() +
+                    "  •  ${formatUgx(listing.discountedPrice)}",
+                fontSize = 12.sp,
+                color = InkMuted
+            )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             StatusDot(status = listing.status)
@@ -165,7 +170,9 @@ private fun StatusDot(status: String) {
     val color = when (status.lowercase()) {
         "approved" -> Forest
         "pending" -> Color(0xFFFFA000)
-        "rejected", "sold_out" -> Tomato
+        // The enum is pending|approved|rejected|cancelled — there is no
+        // "sold_out" status; a sold-out listing has remaining_quantity = 0.
+        "rejected", "cancelled" -> Tomato
         else -> InkMuted
     }
     Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(color))

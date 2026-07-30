@@ -2,6 +2,7 @@ package com.techaus.afamfresh.repository
 
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.models.ProductDetailResponse
 import com.techaus.afamfresh.models.ProductsResponse
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.enqueueApi
@@ -23,5 +24,23 @@ class ProductRepository(
                 else -> callback(null, ApiError.reported(body?.error))
             }
         }
+    }
+
+    /**
+     * Fetches one product by id.
+     *
+     * `items.id` is int(100) and the endpoint does `intval($_GET['id'])`, so the
+     * id is an Int — it used to be passed as a String against a Product-typed
+     * response, and the response is actually a {success, product} envelope.
+     */
+    fun getProduct(id: Int, callback: (Product?, ApiError?) -> Unit) {
+        apiService.getProduct(id = id)
+            .enqueueApi<ProductDetailResponse>("ProductRepo", "getProduct") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true && body.product != null -> callback(body.product, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
     }
 }

@@ -41,8 +41,11 @@ object OrderCalc {
         cartItems.map {
             OrderItem(
                 productId = it.product.id,
-                name = it.product.name,
-                price = it.product.price,
+                productName = it.product.name,
+                // The discounted price, matching what the cart displayed and
+                // what CartItem.lineTotal summed — otherwise the order lines
+                // would not add up to the total sent alongside them.
+                price = it.product.effectivePrice,
                 quantity = it.quantity
             )
         }

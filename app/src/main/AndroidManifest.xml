@@ -22,9 +22,11 @@
         android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="31">
 
-        <meta-data
-            android:name="osmdroid.offline.directory"
-            android:value="/sdcard/osmdroid" />
+        <!-- The osmdroid.offline.directory meta-data was removed along with the
+             osmdroid dependencies: nothing in the app used them, and the value
+             pointed at a hardcoded /sdcard/ path that scoped storage makes
+             unwritable from Android 10 onwards anyway. Maps are Google Maps
+             Compose. -->
 
         <meta-data
             android:name="com.google.android.gms.auth.api.signin.SignInOptions"

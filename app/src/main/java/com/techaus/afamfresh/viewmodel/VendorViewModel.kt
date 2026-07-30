@@ -1,17 +1,36 @@
 package com.techaus.afamfresh.viewmodel
 
-import androidx.lifecycle.ViewModel
-import com.techaus.afamfresh.models.Order
-import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.models.CreateSurplusListingRequest
 import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.VendorProduct
+import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.repository.VendorRepository
+import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-// Constructor confirmed by MainActivity.kt: VendorViewModel(vendorRepository)
-// `listings` name is confirmed exactly — MainScreen.kt reads
-// `vendorViewModel.listings.collectAsState()` directly.
+/**
+ * Vendor-side state.
+ *
+ * IMPORTANT — why this needs an explicit identity step:
+ *
+ * The vendor endpoints do not read the PHP session. They take the vendor's id as
+ * a query parameter, and they disagree about WHICH id:
+ *
+ *   vendor-products.php     -> user_id
+ *   surplus-listings.php    -> vendor_id (GET), user_id (POST)
+ *   surplus-orders.php      -> vendor_id
+ *
+ * Nothing in the auth response carries the vendor id, so [start] must be called
+ * with the signed-in user's id first; it resolves the vendor record and only
+ * then can anything else load.
+ *
+ * This also replaces the old `init { loadListings() }`. That fired at
+ * construction — before any user was known — so it always requested another
+ * vendor's data or none at all.
+ */
 class VendorViewModel(
     private val vendorRepository: VendorRepository
 ) : ViewModel() {
@@ -19,11 +38,14 @@ class VendorViewModel(
     private val _listings = MutableStateFlow<List<SurplusListing>>(emptyList())
     val listings: StateFlow<List<SurplusListing>> = _listings.asStateFlow()
 
-    private val _vendorOrders = MutableStateFlow<List<Order>>(emptyList())
-    val vendorOrders: StateFlow<List<Order>> = _vendorOrders.asStateFlow()
+    private val _vendorOrders = MutableStateFlow<List<SurplusOrder>>(emptyList())
+    val vendorOrders: StateFlow<List<SurplusOrder>> = _vendorOrders.asStateFlow()
 
-    private val _vendorProducts = MutableStateFlow<List<Product>>(emptyList())
-    val vendorProducts: StateFlow<List<Product>> = _vendorProducts.asStateFlow()
+    private val _vendorProducts = MutableStateFlow<List<VendorProduct>>(emptyList())
+    val vendorProducts: StateFlow<List<VendorProduct>> = _vendorProducts.asStateFlow()
+
+    private val _profile = MutableStateFlow<VendorProfile?>(null)
+    val profile: StateFlow<VendorProfile?> = _profile.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -37,14 +59,43 @@ class VendorViewModel(
     private val _hasLoaded = MutableStateFlow(false)
     val hasLoaded: StateFlow<Boolean> = _hasLoaded.asStateFlow()
 
-    init {
-        loadListings()
-    }
+    /** The signed-in user's id, needed by the user_id-keyed endpoints. */
+    private var userId: Int? = null
 
-    fun loadListings() {
+    /** Resolved from [userId] via vendor-profile.php. */
+    private val vendorId: Int? get() = _profile.value?.id
+
+    /**
+     * Identifies the vendor and loads their data. Safe to call repeatedly — it
+     * no-ops when already resolved for the same user, so recomposition does not
+     * re-fire the requests.
+     */
+    fun start(userId: Int) {
+        if (this.userId == userId && _profile.value != null) return
+        this.userId = userId
+
         _isLoading.value = true
         _error.value = null
-        vendorRepository.getListings { listings, error ->
+        vendorRepository.getVendorProfile(userId) { profile, error ->
+            _isLoading.value = false
+            _hasLoaded.value = true
+            if (profile != null) {
+                _profile.value = profile
+                loadListings()
+                loadVendorProducts()
+            } else {
+                _profile.value = null
+                _error.value = error?.userMessage ?: "This account is not registered as a vendor."
+                _canRetry.value = error?.isRetryable ?: false
+            }
+        }
+    }
+
+    fun loadListings(status: String = "approved") {
+        val id = vendorId ?: return reportNotAVendor()
+        _isLoading.value = true
+        _error.value = null
+        vendorRepository.getListings(vendorId = id, status = status) { listings, error ->
             _isLoading.value = false
             _hasLoaded.value = true
             if (listings != null) {
@@ -56,33 +107,72 @@ class VendorViewModel(
         }
     }
 
-    fun createListing(listing: SurplusListing, onResult: (Boolean, String?) -> Unit) {
+    /**
+     * Submits a surplus listing.
+     *
+     * A listing must reference an existing catalogue product — the server joins
+     * `surplus_listings.product_id` onto `items` — so callers pass a productId
+     * rather than a free-text title.
+     */
+    fun createListing(
+        productId: Int,
+        originalPrice: Double,
+        discountPercent: Double,
+        surplusQuantity: Int,
+        expiryDate: String,
+        listingType: String = "goodie_bag",
+        description: String = "",
+        conditionRating: String = "good",
+        pickupOnly: Boolean = false,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val uid = userId
+        if (uid == null) {
+            onResult(false, "You need to be signed in to create a listing.")
+            return
+        }
+
         _isLoading.value = true
-        vendorRepository.createListing(listing) { created, error ->
+        vendorRepository.createListing(
+            CreateSurplusListingRequest(
+                userId = uid,
+                productId = productId,
+                originalPrice = originalPrice,
+                discountPercent = discountPercent,
+                surplusQuantity = surplusQuantity,
+                expiryDate = expiryDate,
+                listingType = listingType,
+                description = description,
+                conditionRating = conditionRating,
+                pickupOnly = pickupOnly
+            )
+        ) { _, error ->
             _isLoading.value = false
-            if (created != null) {
-                loadListings()
+            if (error == null) {
+                // New listings are created as 'pending', so reload that bucket
+                // rather than 'approved' — otherwise the vendor submits a
+                // listing and sees nothing appear.
+                loadListings(status = "pending")
                 onResult(true, null)
             } else {
-                _error.value = error?.userMessage ?: "Unable to create listing"
-                onResult(false, _error.value)
+                _error.value = error.userMessage
+                onResult(false, error.userMessage)
             }
         }
     }
 
-    fun updateListing(
-        id: String,
-        title: String,
-        description: String?,
-        originalPrice: Double,
-        price: Double,
-        quantity: Double,
-        unit: String,
-        expiresAt: String,
+    /**
+     * The only listing field the backend can change is the remaining quantity
+     * (plus status and admin notes, which are not the vendor's to set). Price,
+     * expiry and quantity are fixed once submitted.
+     */
+    fun updateListingQuantity(
+        listingId: Int,
+        remainingQuantity: Int,
         onResult: (Boolean, String?) -> Unit
     ) {
         _isLoading.value = true
-        vendorRepository.updateListing(id, title, description, originalPrice, price, quantity, unit, expiresAt) { success, error ->
+        vendorRepository.updateListingQuantity(listingId, remainingQuantity) { success, error ->
             _isLoading.value = false
             if (success) {
                 loadListings()
@@ -94,9 +184,9 @@ class VendorViewModel(
         }
     }
 
-    fun deleteListing(id: String, onResult: (Boolean, String?) -> Unit) {
+    fun deleteListing(listingId: Int, onResult: (Boolean, String?) -> Unit) {
         _isLoading.value = true
-        vendorRepository.deleteListing(id) { success, error ->
+        vendorRepository.deleteListing(listingId) { success, error ->
             _isLoading.value = false
             if (success) {
                 loadListings()
@@ -109,9 +199,10 @@ class VendorViewModel(
     }
 
     fun loadVendorOrders() {
+        val id = vendorId ?: return reportNotAVendor()
         _isLoading.value = true
         _error.value = null
-        vendorRepository.getVendorOrders { orders, error ->
+        vendorRepository.getVendorOrders(vendorId = id) { orders, error ->
             _isLoading.value = false
             _hasLoaded.value = true
             if (orders != null) {
@@ -124,9 +215,10 @@ class VendorViewModel(
     }
 
     fun loadVendorProducts() {
+        val uid = userId ?: return reportNotAVendor()
         _isLoading.value = true
         _error.value = null
-        vendorRepository.getVendorProducts { products, error ->
+        vendorRepository.getVendorProducts(userId = uid) { products, error ->
             _isLoading.value = false
             _hasLoaded.value = true
             if (products != null) {
@@ -136,5 +228,11 @@ class VendorViewModel(
                 _canRetry.value = error?.isRetryable ?: true
             }
         }
+    }
+
+    private fun reportNotAVendor() {
+        _hasLoaded.value = true
+        _error.value = "Vendor account not loaded yet. Pull to retry."
+        _canRetry.value = true
     }
 }

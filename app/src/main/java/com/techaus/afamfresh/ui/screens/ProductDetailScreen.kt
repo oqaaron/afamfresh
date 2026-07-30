@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.formatUgx
 
 // ⚠️ INFERRED screen. Signature matches MainScreen.kt's
 // composable("product_detail/{productId}") call:
@@ -144,36 +145,47 @@ fun ProductDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // ===== Rating / kcal / prep time badges =====
+                // ===== Product facts =====
+                //
+                // This used to show a star rating, calorie count, prep time and
+                // an ingredient-icon strip. None of those columns exist on
+                // `items`, so the server could never populate them and this
+                // whole block rendered blank. Replaced with the catalogue's real
+                // attributes.
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    product.rating?.let {
-                        BadgeItem(icon = Icons.Default.Star, tint = StarYellow, label = "$it")
+                    product.packLabel?.let {
+                        Text("📦 $it", fontSize = 13.sp, color = Ink)
                     }
-                    product.calories?.let {
-                        Text("🔥 $it Kcal", fontSize = 13.sp, color = Ink)
+                    product.category?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, fontSize = 13.sp, color = InkMuted)
                     }
-                    product.prepTimeMinutes?.let {
-                        Text("⏱ $it Min", fontSize = 13.sp, color = Ink)
+                    if (product.isWeeklyDeal) {
+                        Text("⭐ Weekly deal", fontSize = 13.sp, color = Ink)
                     }
                 }
 
-                if (product.ingredientIcons.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text("Ingredients", fontWeight = FontWeight.SemiBold, color = Ink)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        product.ingredientIcons.forEach { icon ->
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(PillGray),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                NetworkImage(model = icon, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(28.dp))
-                            }
-                        }
+                if (product.hasDiscount) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            formatUgx(product.effectivePrice),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = Ink
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "-${product.discountPercent.toInt()}%",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Tomato
+                        )
                     }
+                }
+
+                product.freshnessDate?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Fresh until $it", fontSize = 13.sp, color = InkMuted)
                 }
             }
         }

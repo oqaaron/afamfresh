@@ -16,6 +16,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.BuildConfig
 import com.techaus.afamfresh.R
 import com.techaus.afamfresh.repository.AppRepository
 import com.techaus.afamfresh.repository.AuthRepository
@@ -69,7 +70,11 @@ fun SplashScreen(
             onConfigChecked(true, null, false)
         } else {
             val proceed = !config.maintenanceMode
-            onConfigChecked(proceed, config.maintenanceMessage, config.forceUpdate)
+            // `force_update` was never a field the server sent. The real signal
+            // is the app_config row `min_version_required` ("1.0"), compared
+            // against this build's versionName.
+            val forceUpdate = config.requiresUpdate(BuildConfig.VERSION_NAME)
+            onConfigChecked(proceed, config.maintenanceMessage, forceUpdate)
         }
     }
 

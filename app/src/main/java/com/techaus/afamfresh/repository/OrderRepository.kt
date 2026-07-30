@@ -5,6 +5,7 @@ import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.Order
 import com.techaus.afamfresh.models.OrderCreateResponse
+import com.techaus.afamfresh.models.OrderDetailResponse
 import com.techaus.afamfresh.models.OrdersResponse
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.enqueueApi
@@ -80,9 +81,18 @@ class OrderRepository(
     }
 
     fun getOrder(id: String, callback: (Order?, ApiError?) -> Unit) {
-        apiService.getOrder(id = id).enqueueApi<Order>("OrderRepo", "getOrder") { body, error ->
-            callback(body, error)
-        }
+        // The response is an envelope, and a failure carries success=false with
+        // an error string. Previously this parsed the envelope AS an Order and
+        // handed back an all-default object, so a missing order looked like a
+        // real one with a blank id.
+        apiService.getOrder(id = id)
+            .enqueueApi<OrderDetailResponse>("OrderRepo", "getOrder") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true && body.order != null -> callback(body.order, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
     }
 
     fun updateOrder(
@@ -92,7 +102,6 @@ class OrderRepository(
         mobile: String,
         scheduledDeliveryDate: String? = null,
         scheduledDeliverySlot: String? = null,
-        deliveryNotes: String? = null,
         callback: (Boolean, ApiError?) -> Unit
     ) {
         apiService.updateOrder(
@@ -101,8 +110,7 @@ class OrderRepository(
             area = area,
             mobile = mobile,
             scheduledDeliveryDate = scheduledDeliveryDate,
-            scheduledDeliverySlot = scheduledDeliverySlot,
-            deliveryNotes = deliveryNotes
+            scheduledDeliverySlot = scheduledDeliverySlot
         ).enqueueApi<BaseResponse>("OrderRepo", "updateOrder") { body, error ->
             when {
                 error != null -> callback(false, error)

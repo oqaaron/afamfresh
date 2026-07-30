@@ -51,12 +51,11 @@ class OrderViewModel(
         mobile: String,
         scheduledDeliveryDate: String? = null,
         scheduledDeliverySlot: String? = null,
-        deliveryNotes: String? = null,
         onResult: (Boolean, String?) -> Unit
     ) {
         _isLoading.value = true
         orderRepository.updateOrder(
-            orderId, address, area, mobile, scheduledDeliveryDate, scheduledDeliverySlot, deliveryNotes
+            orderId, address, area, mobile, scheduledDeliveryDate, scheduledDeliverySlot
         ) { success, error ->
             _isLoading.value = false
             if (success) loadOrders()

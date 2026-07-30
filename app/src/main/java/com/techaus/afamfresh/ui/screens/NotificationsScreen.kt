@@ -1,4 +1,4 @@
-package com.techaus.afamfresh.ui.screens
+﻿package com.techaus.afamfresh.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -143,7 +143,7 @@ private fun NotificationRow(notification: AppNotification, onClick: () -> Unit) 
             .clip(RoundedCornerShape(14.dp))
             // Unread items get the tinted background so they are scannable at
             // a glance rather than relying on the dot alone.
-            .background(if (notification.read) CardWhite else ForestSurface)
+            .background(if (notification.isRead) CardWhite else ForestSurface)
             .clickable { onClick() }
             .padding(14.dp)
     ) {
@@ -152,18 +152,18 @@ private fun NotificationRow(notification: AppNotification, onClick: () -> Unit) 
                 .padding(top = 6.dp)
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(if (notification.read) DividerGray else Forest)
+                .background(if (notification.isRead) DividerGray else Forest)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 notification.title,
-                fontWeight = if (notification.read) FontWeight.Medium else FontWeight.Bold,
+                fontWeight = if (notification.isRead) FontWeight.Medium else FontWeight.Bold,
                 color = Ink,
                 fontSize = 15.sp
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Text(notification.body, color = InkMuted, fontSize = 13.sp)
+            Text(notification.message, color = InkMuted, fontSize = 13.sp)
             notification.createdAt?.let {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(it, color = InkMuted, fontSize = 11.sp)
@@ -171,3 +171,4 @@ private fun NotificationRow(notification: AppNotification, onClick: () -> Unit) 
         }
     }
 }
+

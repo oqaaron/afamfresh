@@ -1,4 +1,4 @@
-package com.techaus.afamfresh.viewmodel
+﻿package com.techaus.afamfresh.viewmodel
 
 import com.techaus.afamfresh.models.CartItem
 import com.techaus.afamfresh.models.Product
@@ -11,7 +11,7 @@ class CartViewModelTest {
 
     private lateinit var cart: CartViewModel
 
-    private fun product(id: Double, name: String, price: Double) = Product(
+    private fun product(id: Int, name: String, price: Double) = Product(
         id = id,
         name = name,
         description = null,
@@ -20,8 +20,8 @@ class CartViewModelTest {
         image = null
     )
 
-    private val tomatoes = product(1.0, "Tomatoes", 2500.0)
-    private val onions = product(2.0, "Onions", 1800.0)
+    private val tomatoes = product(1, "Tomatoes", 2500.0)
+    private val onions = product(2, "Onions", 1800.0)
 
     @Before
     fun setUp() {
@@ -75,9 +75,9 @@ class CartViewModelTest {
         cart.removeFromCart(CartItem(tomatoes, 2))
 
         assertEquals(1, cart.cartItems.value.size)
-        // Product.id is a Double, so this needs a delta — JUnit rejects
-        // assertEquals(double, double) without one.
-        assertEquals(onions.id, cart.cartItems.value.first().product.id, 0.001)
+        // Product.id is an Int now, so no delta is needed (and JUnit's
+        // assertEquals(double, double) overload no longer applies).
+        assertEquals(onions.id, cart.cartItems.value.first().product.id)
         assertEquals(1800.0, cart.subtotal, 0.001)
     }
 
@@ -141,3 +141,4 @@ class CartViewModelTest {
         assertEquals(11100.0, cart.subtotal, 0.001)
     }
 }
+

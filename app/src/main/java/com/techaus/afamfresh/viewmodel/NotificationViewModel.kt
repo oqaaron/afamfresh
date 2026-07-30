@@ -39,36 +39,58 @@ class NotificationViewModel(
                 _error.value = "Couldn't load notifications. Check your connection and try again."
             } else {
                 _notifications.value = list
-                _unreadCount.value = list.count { !it.read }
+                _unreadCount.value = list.count { !it.isRead }
             }
         }
     }
 
-    fun markRead(id: String) {
+    /** `user_notifications.id` is an Int, not a String. */
+    fun markRead(id: Int) {
         // Update locally first so the list and badge respond immediately; the
         // server call is confirmation, not the source of truth for the UI.
-        val alreadyRead = _notifications.value.firstOrNull { it.id == id }?.read ?: return
+        val alreadyRead = _notifications.value.firstOrNull { it.id == id }?.isRead ?: return
         if (alreadyRead) return
 
         _notifications.value = _notifications.value.map {
-            if (it.id == id) it.copy(read = true) else it
+            if (it.id == id) it.copy(isRead = true) else it
         }
-        _unreadCount.value = _notifications.value.count { !it.read }
+        _unreadCount.value = _notifications.value.count { !it.isRead }
 
         notificationRepository.markRead(id) { ok ->
             // If the server rejected it, put it back so the badge stays honest
             // rather than silently under-reporting unread items.
             if (!ok) {
                 _notifications.value = _notifications.value.map {
-                    if (it.id == id) it.copy(read = false) else it
+                    if (it.id == id) it.copy(isRead = false) else it
                 }
-                _unreadCount.value = _notifications.value.count { !it.read }
+                _unreadCount.value = _notifications.value.count { !it.isRead }
             }
         }
     }
 
+    /**
+     * Uses the server's single `mark-all-read` action rather than looping one
+     * request per notification, then reflects the result locally.
+     */
     fun markAllRead() {
-        _notifications.value.filterNot { it.read }.forEach { markRead(it.id) }
+        val unread = _notifications.value.filterNot { it.isRead }
+        if (unread.isEmpty()) return
+
+        _notifications.value = _notifications.value.map {
+            if (it.isRead) it else it.copy(isRead = true)
+        }
+        _unreadCount.value = 0
+
+        notificationRepository.markAllRead { ok ->
+            if (!ok) {
+                // Restore exactly the ones that were unread before.
+                val unreadIds = unread.map { it.id }.toSet()
+                _notifications.value = _notifications.value.map {
+                    if (it.id in unreadIds) it.copy(isRead = false) else it
+                }
+                _unreadCount.value = _notifications.value.count { !it.isRead }
+            }
+        }
     }
 
     /** Called when a push arrives while the app is open. */

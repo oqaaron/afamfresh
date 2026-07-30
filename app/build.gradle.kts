@@ -216,9 +216,26 @@ dependencies {
     // image loading
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // OSMDroid
-    implementation("org.osmdroid:osmdroid-android:6.1.17")
-    implementation("org.osmdroid:osmdroid-mapsforge:6.1.17")
+    // OSMDroid — REMOVED.
+    //
+    // Nothing in the app ever imported osmdroid or mapsforge; maps are drawn
+    // with Google Maps Compose (below). Beyond being dead weight, these broke
+    // the release build outright:
+    //
+    //   ERROR: R8: Library class android.content.res.XmlResourceParser
+    //          implements program class org.xmlpull.v1.XmlPullParser
+    //
+    // osmdroid-mapsforge pulls in net.sf.kxml:kxml2:2.3.0, which bundles its own
+    // copy of org.xmlpull.v1 — classes the Android platform already provides.
+    // R8 refuses to shrink an app where a platform class implements an
+    // app-bundled interface, so assembleRelease failed while assembleDebug (no
+    // R8) passed. That is why this only appeared once the release build was run.
+    //
+    // If OSM tiles are ever wanted, re-add osmdroid-android only, and exclude
+    // the conflicting group:
+    //   implementation("org.osmdroid:osmdroid-mapsforge:6.1.17") {
+    //       exclude(group = "net.sf.kxml", module = "kxml2")
+    //   }
 
     // Google Location Services
     implementation("com.google.android.gms:play-services-location:21.3.0")

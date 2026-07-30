@@ -106,11 +106,14 @@ interface ApiService {
         @Query("action") action: String = "list"
     ): Call<ProductsResponse>
 
+    // Returns {"success":true,"product":{...}} — a wrapper, not a bare Product.
+    // This was Call<Product>, which parsed the envelope and produced an
+    // all-null product.
     @GET("products.php")
     fun getProduct(
         @Query("action") action: String = "detail",
-        @Query("id") id: String
-    ): Call<Product>
+        @Query("id") id: Int
+    ): Call<ProductDetailResponse>
 
     // ============================================================
     // ORDERS ENDPOINTS
@@ -121,11 +124,12 @@ interface ApiService {
         @Query("action") action: String = "list"
     ): Call<OrdersResponse>
 
+    // Returns {"success":true,"order":{...}} — wrapped, not a bare Order.
     @GET("orders.php")
     fun getOrder(
         @Query("action") action: String = "detail",
         @Query("id") id: String
-    ): Call<Order>
+    ): Call<OrderDetailResponse>
 
     @POST("orders.php")
     @FormUrlEncoded
@@ -150,7 +154,14 @@ interface ApiService {
         @Field("delivery_cost") deliveryCost: Double = 0.0
     ): Call<OrderCreateResponse>
 
-    // ✅ Update Order
+    // ✅ Update Order.
+    //
+    // `delivery_notes` was removed: there is no such column on `orders`, and the
+    // endpoint ignores unknown fields, so sending it did nothing.
+    //
+    // The server accepts only these five fields and refuses the request once the
+    // order has left the editable states — see Order.isEditable, which mirrors
+    // isOrderEditable() in orders.php.
     @POST("orders.php")
     @FormUrlEncoded
     fun updateOrder(
@@ -160,8 +171,7 @@ interface ApiService {
         @Field("area") area: String,
         @Field("mobile") mobile: String,
         @Field("scheduled_delivery_date") scheduledDeliveryDate: String? = null,
-        @Field("scheduled_delivery_slot") scheduledDeliverySlot: String? = null,
-        @Field("delivery_notes") deliveryNotes: String? = null
+        @Field("scheduled_delivery_slot") scheduledDeliverySlot: String? = null
     ): Call<BaseResponse>
 
     // ✅ Cancel Order
@@ -176,64 +186,101 @@ interface ApiService {
     // SURPLUS ENDPOINTS (Public)
     // ============================================================
     
+    // ✅ VERIFIED against api/surplus-listings.php.
+    //
+    // There is no `action` parameter — this endpoint dispatches on HTTP method.
+    // Note the server also hard-filters `remaining_quantity > 0` and
+    // `expiry_date > NOW()`, so sold-out and expired listings are never
+    // returned regardless of the status asked for.
     @GET("surplus-listings.php")
     fun getSurplusListings(
-        @Query("status") status: String = "approved"
+        @Query("status") status: String = "approved",
+        @Query("vendor_id") vendorId: Int? = null,
+        @Query("listing_type") listingType: String? = null,
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
     ): Call<SurplusListingsResponse>
 
     // ============================================================
-    // VENDOR SURPLUS ENDPOINTS (Authenticated)
+    // VENDOR SURPLUS ENDPOINTS
     // ============================================================
-    
-    @GET("vendor/surplus/listings.php")
+    //
+    // ⚠️ These previously pointed at `vendor/surplus/listings.php`, which does
+    // not exist — every call 404'd. There is no vendor-specific surplus file;
+    // vendors use the same surplus-listings.php, scoped by vendor_id/user_id.
+    //
+    // `vendor-listings.php` is NOT this endpoint — it is a public directory of
+    // verified vendors.
+
+    /** A vendor's own listings are the public list scoped by vendor_id. */
+    @GET("surplus-listings.php")
     fun getVendorSurplusListings(
-        @Query("action") action: String = "list"
+        @Query("vendor_id") vendorId: Int,
+        @Query("status") status: String = "approved",
+        @Query("limit") limit: Int = 50
     ): Call<SurplusListingsResponse>
 
-    @POST("vendor/surplus/listings.php")
+    /** JSON body, keyed on user_id; server derives vendor_id and sets status=pending. */
+    @POST("surplus-listings.php")
+    @Headers("Content-Type: application/json")
     fun createVendorSurplusListing(
-        @Query("action") action: String = "create",
-        @Body listing: SurplusListing
+        @Body listing: CreateSurplusListingRequest
     ): Call<SurplusListingResponse>
 
-    @PUT("vendor/surplus/listings.php")
-    @FormUrlEncoded
+    /** Only status / remaining_quantity / admin_notes are updatable server-side. */
+    @PUT("surplus-listings.php")
+    @Headers("Content-Type: application/json")
     fun updateVendorSurplusListing(
-        @Query("action") action: String = "update",
-        @Field("id") id: String,
-        @Field("title") title: String,
-        @Field("description") description: String? = null,
-        @Field("original_price") originalPrice: Double,
-        @Field("price") price: Double,
-        @Field("quantity") quantity: Double,
-        @Field("unit") unit: String,
-        @Field("expires_at") expiresAt: String
+        @Body update: UpdateSurplusListingRequest
     ): Call<BaseResponse>
 
-    @DELETE("vendor/surplus/listings.php")
-    @FormUrlEncoded
+    /** Soft delete — sets status='cancelled'. listing_id is a QUERY param. */
+    @DELETE("surplus-listings.php")
     fun deleteVendorSurplusListing(
-        @Query("action") action: String = "delete",
-        @Field("id") id: String
+        @Query("listing_id") listingId: Int
     ): Call<BaseResponse>
 
     // ============================================================
     // VENDOR ORDERS ENDPOINTS
     // ============================================================
-    
-    @GET("vendor/orders.php")
+    //
+    // ⚠️ `vendor/orders.php` does not exist and never did. The nearest real
+    // endpoint is surplus-orders.php scoped by vendor_id, which covers surplus
+    // orders only. Ordinary catalogue orders are not exposed per-vendor at all.
+
+    @GET("surplus-orders.php")
     fun getVendorOrders(
-        @Query("action") action: String = "list"
+        @Query("vendor_id") vendorId: Int,
+        @Query("status") status: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
     ): Call<VendorOrdersResponse>
 
     // ============================================================
     // VENDOR PRODUCTS ENDPOINTS
     // ============================================================
-    
-    @GET("vendor/products.php")
+    //
+    // ⚠️ Was `vendor/products.php` (404). The real file takes `user_id` as a
+    // query parameter and looks the vendor up from it — it does not read the
+    // session, so the caller must supply the logged-in user's id.
+
+    @GET("vendor-products.php")
     fun getVendorProducts(
-        @Query("action") action: String = "list"
+        @Query("user_id") userId: Int
     ): Call<VendorProductsResponse>
+
+    // ============================================================
+    // VENDOR PROFILE
+    // ============================================================
+    //
+    // Resolves user_id -> vendor_id. Required because the vendor endpoints are
+    // inconsistent about which id they take, and the auth response carries
+    // neither the vendor id nor the user's roles.
+
+    @GET("vendor-profile.php")
+    fun getVendorProfile(
+        @Query("user_id") userId: Int
+    ): Call<VendorProfileResponse>
 
     // ============================================================
     // PAYMENT ENDPOINTS
@@ -280,55 +327,78 @@ interface ApiService {
     ): Call<DeliveryQuoteResponse>
 
     // ============================================================
-    // DELIVERY ENDPOINTS
+    // DELIVERY ENDPOINTS — REMOVED
     // ============================================================
-    
-    @GET("delivery.php")
-    fun getDeliveryAreas(
-        @Query("action") action: String = "list"
-    ): Call<DeliveryAreasResponse>
-
-    @POST("delivery.php")
-    @FormUrlEncoded
-    fun saveDeliveryLocation(
-        @Query("action") action: String = "save",
-        @Field("pickup_address") pickupAddress: String,
-        @Field("dropoff_address") dropoffAddress: String,
-        @Field("pickup_lat") pickupLat: Double,
-        @Field("pickup_lng") pickupLng: Double,
-        @Field("dropoff_lat") dropoffLat: Double,
-        @Field("dropoff_lng") dropoffLng: Double,
-        @Field("distance_km") distanceKm: Double,
-        @Field("delivery_cost") deliveryCost: Double
-    ): Call<BaseResponse>
-
-    @GET("delivery.php")
-    fun getSavedDeliveryLocation(
-        @Query("action") action: String = "get_saved"
-    ): Call<DeliveryLocationResponse>
+    //
+    // getDeliveryAreas, saveDeliveryLocation and getSavedDeliveryLocation used
+    // to be declared here against `delivery.php`. That file does not exist in
+    // api/, and nothing in the app ever called them, so they have been deleted
+    // rather than left as three guaranteed 404s.
+    //
+    // `location.php` is not a replacement — it is rider GPS tracking
+    // (?action=update writes the caller's position, ?action=rider&id=N reads a
+    // rider's). Delivery quoting is calculateDeliveryFee above.
 
     // ============================================================
     // NOTIFICATIONS ENDPOINTS
     // ============================================================
-    
-    @POST("notifications.php")
-    @FormUrlEncoded
-    fun registerFCMToken(
-        @Query("action") action: String = "register_token",
-        @Field("fcm_token") fcmToken: String,
-        @Field("device_id") deviceId: String? = null
-    ): Call<BaseResponse>
+    //
+    // ✅ VERIFIED against api/notifications.php. Actions are HYPHENATED:
+    // list | unread-count | mark-read | mark-all-read. The endpoint requires a
+    // session and returns {"success":false,"error":"Not logged in"} otherwise.
 
     @GET("notifications.php")
     fun getNotifications(
         @Query("action") action: String = "list"
     ): Call<NotificationsResponse>
 
+    @GET("notifications.php")
+    fun getUnreadNotificationCount(
+        @Query("action") action: String = "unread-count"
+    ): Call<UnreadCountResponse>
+
+    // Was action="mark_read" with field "notification_id" — both wrong. The PHP
+    // matches "mark-read" and reads $_POST['id'].
     @POST("notifications.php")
     @FormUrlEncoded
     fun markNotificationRead(
-        @Query("action") action: String = "mark_read",
-        @Field("notification_id") notificationId: String
+        @Query("action") action: String = "mark-read",
+        @Field("id") notificationId: Int
+    ): Call<BaseResponse>
+
+    @POST("notifications.php")
+    fun markAllNotificationsRead(
+        @Query("action") action: String = "mark-all-read"
+    ): Call<BaseResponse>
+
+    // ------------------------------------------------------------
+    // FCM TOKEN REGISTRATION
+    // ------------------------------------------------------------
+    //
+    // ⚠️ NOT IMPLEMENTED SERVER-SIDE. There is no endpoint anywhere in api/
+    // that writes `users.fcm_token`. The push pipeline reads that column
+    // (includes/classes/NotificationManager.php) but nothing ever fills it, so
+    // push notifications cannot reach this app until the endpoint below exists.
+    //
+    // Required contract — add to notifications.php alongside the other actions:
+    //
+    //   POST notifications.php?action=register-token
+    //     fields:  fcm_token (required), device_id (optional)
+    //     session: required; the token is stored against $_SESSION user id
+    //     returns  { "success": true }
+    //
+    //     UPDATE users SET fcm_token = :token WHERE id = :user_id
+    //
+    //     Must overwrite, not append: a token is per-install and Firebase
+    //     rotates it, so the previous value is stale the moment this is called.
+    //     Should also clear the column on logout, otherwise pushes keep going
+    //     to a device that has signed out.
+    @POST("notifications.php")
+    @FormUrlEncoded
+    fun registerFCMToken(
+        @Query("action") action: String = "register-token",
+        @Field("fcm_token") fcmToken: String,
+        @Field("device_id") deviceId: String? = null
     ): Call<BaseResponse>
 
     // ============================================================

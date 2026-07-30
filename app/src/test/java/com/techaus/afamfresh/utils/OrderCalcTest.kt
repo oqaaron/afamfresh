@@ -1,4 +1,4 @@
-package com.techaus.afamfresh.utils
+﻿package com.techaus.afamfresh.utils
 
 import com.google.gson.Gson
 import com.techaus.afamfresh.models.CartItem
@@ -14,12 +14,12 @@ import org.junit.Test
  */
 class OrderCalcTest {
 
-    private fun product(id: Double, name: String, price: Double) = Product(
+    private fun product(id: Int, name: String, price: Double) = Product(
         id = id, name = name, price = price
     )
 
-    private val tomatoes = product(1.0, "Tomatoes", 2500.0)
-    private val onions = product(2.0, "Onions", 1800.0)
+    private val tomatoes = product(1, "Tomatoes", 2500.0)
+    private val onions = product(2, "Onions", 1800.0)
 
     private val cart = listOf(
         CartItem(tomatoes, 2),   // 5000
@@ -58,7 +58,7 @@ class OrderCalcTest {
 
     /**
      * No location selected means no delivery charge. This mirrors what the
-     * cart and checkout screens display, and the three must agree — a total
+     * cart and checkout screens display, and the three must agree â€” a total
      * that includes a fee the customer was never shown is the failure mode
      * worth guarding.
      */
@@ -91,8 +91,10 @@ class OrderCalcTest {
         val items = OrderCalc.toOrderItems(cart)
 
         assertEquals(2, items.size)
-        assertEquals(1.0, items[0].productId, 0.001)
-        assertEquals("Tomatoes", items[0].name)
+        // productId is an Int (items.id is int(100)), and the wire field is
+        // product_name — not `name`, which never existed on order_items.
+        assertEquals(1, items[0].productId)
+        assertEquals("Tomatoes", items[0].productName)
         assertEquals(2500.0, items[0].price, 0.001)
         assertEquals(2, items[0].quantity)
     }
@@ -120,7 +122,9 @@ class OrderCalcTest {
 
         // product_id, not productId — the @SerializedName must survive.
         assertTrue("expected product_id in $json", json.contains("\"product_id\""))
-        assertTrue("expected name in $json", json.contains("\"name\""))
+        // product_name is the real order_items column. Sending "name" is what
+        // orders.php used to read as $item['name'].
+        assertTrue("expected product_name in $json", json.contains("\"product_name\""))
         assertTrue("expected price in $json", json.contains("\"price\""))
         assertTrue("expected quantity in $json", json.contains("\"quantity\""))
     }
@@ -133,6 +137,24 @@ class OrderCalcTest {
         assertTrue(json.endsWith("]"))
         assertTrue(json.contains("Tomatoes"))
         assertTrue(json.contains("Onions"))
+    }
+
+    /**
+     * Regression guard for the corruption seen in order_items rows 471-476,
+     * where every app-placed order stored product_id = 0.
+     *
+     * The cause was a field-name mismatch: orders.php read $item['id'] while the
+     * app sent `product_id`, so the id silently defaulted to 0 and those rows
+     * can no longer be joined back to the catalogue. The endpoint now accepts
+     * either spelling, and this asserts the app still sends a real id.
+     */
+    @Test
+    fun `serialised items carry a non-zero product id`() {
+        val json = OrderCalc.serialiseItems(OrderCalc.toOrderItems(cart), Gson())
+
+        assertTrue("expected product_id 1 in $json", json.contains("\"product_id\":1"))
+        assertTrue("expected product_id 2 in $json", json.contains("\"product_id\":2"))
+        assertTrue("no item should have product_id 0: $json", !json.contains("\"product_id\":0"))
     }
 
     @Test
@@ -154,3 +176,4 @@ class OrderCalcTest {
         assertEquals(OrderCalc.total(cart, delivery(6000.0)), fromItems + 6000.0, 0.001)
     }
 }
+

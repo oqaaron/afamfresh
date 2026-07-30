@@ -24,6 +24,7 @@ replay_pid*.log
 build.log
 test.log
 release-build.log
+deps.log
 
 # --- OS ---
 .DS_Store

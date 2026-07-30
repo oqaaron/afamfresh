@@ -93,9 +93,9 @@ fun SurplusScreen(
 
 @Composable
 private fun SurplusCard(listing: SurplusListing, onClick: () -> Unit) {
-    val discountPercent = if (listing.originalPrice > 0)
-        (((listing.originalPrice - listing.price) / listing.originalPrice) * 100).toInt()
-    else 0
+    // The server stores and validates discount_percent itself (30-70%), so use
+    // it rather than recomputing it from the two prices.
+    val discountPercent = listing.discountPercent.toInt()
 
     Row(
         modifier = Modifier
@@ -108,15 +108,22 @@ private fun SurplusCard(listing: SurplusListing, onClick: () -> Unit) {
     ) {
         NetworkImage(
             model = listing.image,
-            contentDescription = listing.title,
+            contentDescription = listing.displayTitle,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)).background(ForestSurface)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(listing.title, fontWeight = FontWeight.SemiBold, color = Ink)
-            listing.vendorName?.let { Text(it, fontSize = 12.sp, color = InkMuted) }
-            Text("${listing.quantity} ${listing.unit} left  •  Expires ${listing.expiresAt}", fontSize = 11.sp, color = InkMuted)
+            Text(listing.displayTitle, fontWeight = FontWeight.SemiBold, color = Ink)
+            listing.vendorDisplayName?.let { Text(it, fontSize = 12.sp, color = InkMuted) }
+            Text(
+                buildString {
+                    append("${listing.remainingQuantity} ${listing.unit.orEmpty()} left".trim())
+                    listing.expiryDate?.let { append("  •  Expires $it") }
+                },
+                fontSize = 11.sp,
+                color = InkMuted
+            )
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -126,7 +133,7 @@ private fun SurplusCard(listing: SurplusListing, onClick: () -> Unit) {
                     textDecoration = TextDecoration.LineThrough
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(formatUgx(listing.price), fontWeight = FontWeight.Bold, color = Forest)
+                Text(formatUgx(listing.discountedPrice), fontWeight = FontWeight.Bold, color = Forest)
             }
         }
         if (discountPercent > 0) {

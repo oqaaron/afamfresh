@@ -295,16 +295,22 @@ private fun ProductGridCard(
         Spacer(modifier = Modifier.height(8.dp))
         Text(product.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Ink)
 
+        // Was prep time and a star rating. Neither exists on `items`, so both
+        // were always null and this row rendered empty on every card. Shows the
+        // pack size and any discount instead — columns that carry real data.
         Spacer(modifier = Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            product.prepTimeMinutes?.let {
-                Text("${it}min", fontSize = 12.sp, color = InkMuted)
+            product.packLabel?.let {
+                Text(it, fontSize = 12.sp, color = InkMuted)
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            product.rating?.let {
-                Icon(Icons.Default.Star, contentDescription = null, tint = StarYellow, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(2.dp))
-                Text("$it", fontSize = 12.sp, color = InkMuted)
+            if (product.hasDiscount) {
+                Text(
+                    "-${product.discountPercent.toInt()}%",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Tomato
+                )
             }
         }
 

@@ -36,9 +36,17 @@ object ApiClient {
      */
     val GOOGLE_MAPS_API_KEY: String = BuildConfig.GOOGLE_MAPS_API_KEY
     
-    private val gson = GsonBuilder()
-        .setLenient()
-        .create()
+    /**
+     * The boolean adapters are not optional. The backend returns MySQL
+     * `tinyint(1)` columns as the integers 0/1, which Gson's default Boolean
+     * adapter rejects with a JsonSyntaxException — and that aborts the entire
+     * response, not just the one field. See [MySqlBooleanAdapter].
+     *
+     * Both the primitive and the boxed type must be registered; Gson treats
+     * `Boolean` and `boolean` as distinct types, and Kotlin's non-null `Boolean`
+     * maps to the primitive.
+     */
+    private val gson = afamFreshGson()
     
     /**
      * BODY logging serialises every request and response body in full. In a

@@ -36,8 +36,10 @@ fun EditOrderScreen(
     var address by remember(order) { mutableStateOf(order?.address ?: "") }
     var area by remember(order) { mutableStateOf(order?.area ?: "") }
     var mobile by remember(order) { mutableStateOf(order?.mobile ?: "") }
-    var notes by remember(order) { mutableStateOf(order?.deliveryNotes ?: "") }
     var saveError by remember { mutableStateOf<String?>(null) }
+    // There is no "delivery notes" field here any more: `orders` has no such
+    // column and orders.php does not accept one, so anything typed into it was
+    // discarded on save.
 
     Scaffold(
         containerColor = Cream,
@@ -61,7 +63,11 @@ fun EditOrderScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
-            val editable = order.status.lowercase() in listOf("pending", "processing")
+            // "pending"/"processing" are not statuses this backend uses — the
+            // real vocabulary is "Received", "Awaiting Payment", "Preparing",
+            // "Out for Delivery", ... so that check disabled editing on every
+            // real order. Order.isEditable mirrors orders.php's own rule.
+            val editable = order.isEditable
 
             if (!editable) {
                 Text(
@@ -87,12 +93,6 @@ fun EditOrderScreen(
                 enabled = editable, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                 shape = RoundedCornerShape(12.dp)
             )
-            OutlinedTextField(
-                value = notes, onValueChange = { notes = it }, label = { Text("Delivery notes") },
-                enabled = editable, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                shape = RoundedCornerShape(12.dp)
-            )
-
             saveError?.let {
                 Text(it, color = Tomato, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
             }
@@ -106,8 +106,7 @@ fun EditOrderScreen(
                             orderId = order.id,
                             address = address,
                             area = area,
-                            mobile = mobile,
-                            deliveryNotes = notes
+                            mobile = mobile
                         ) { success, reason ->
                             if (success) onBack() else saveError = reason ?: "Unable to save changes"
                         }

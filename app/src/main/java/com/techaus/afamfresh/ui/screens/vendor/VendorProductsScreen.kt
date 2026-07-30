@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
-import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
@@ -43,7 +43,14 @@ fun VendorProductsScreen(
     val error by vendorViewModel.error.collectAsState()
     val canRetry by vendorViewModel.canRetry.collectAsState()
 
-    LaunchedEffect(Unit) { vendorViewModel.loadVendorProducts() }
+    val profile by vendorViewModel.profile.collectAsState()
+
+    // Keyed on the vendor profile so this waits for start() to identify the
+    // vendor — vendor-products.php takes the user id as a query parameter and
+    // does not read the session.
+    LaunchedEffect(profile?.id) {
+        if (profile != null) vendorViewModel.loadVendorProducts()
+    }
 
     Scaffold(
         containerColor = Cream,
@@ -79,23 +86,45 @@ fun VendorProductsScreen(
     }
 }
 
+/**
+ * Renders a [VendorProduct] — the vendor's own price and stock for a catalogue
+ * item — rather than a catalogue Product. vendor-products.php returns
+ * `vendor_products` rows joined onto `items`, so `price` here is the vendor's
+ * override and may be null.
+ */
 @Composable
-private fun VendorProductRow(product: Product) {
+private fun VendorProductRow(product: VendorProduct) {
     Row(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CardWhite).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         NetworkImage(
             model = product.image,
-            contentDescription = product.name,
+            contentDescription = product.displayName,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(ForestSurface)
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(product.name, fontWeight = FontWeight.SemiBold, color = Ink)
-            product.category?.let { Text(it, fontSize = 12.sp, color = InkMuted) }
+            Text(product.displayName, fontWeight = FontWeight.SemiBold, color = Ink)
+            Text(
+                buildString {
+                    product.category?.takeIf { it.isNotBlank() }?.let { append(it) }
+                    if (isNotEmpty()) append("  •  ")
+                    append(
+                        if (product.inStock) "${product.stockQuantity} in stock"
+                        else "Out of stock"
+                    )
+                },
+                fontSize = 12.sp,
+                color = InkMuted
+            )
         }
-        Text(formatUgx(product.price), fontWeight = FontWeight.Bold, color = Forest)
+        // Null means "use the catalogue price", so say so rather than showing 0.
+        Text(
+            product.price?.let { formatUgx(it) } ?: "Catalogue price",
+            fontWeight = FontWeight.Bold,
+            color = Forest
+        )
     }
 }

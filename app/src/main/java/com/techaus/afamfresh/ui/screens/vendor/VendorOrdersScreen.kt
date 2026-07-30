@@ -16,7 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.models.Order
+import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
@@ -35,8 +35,14 @@ fun VendorOrdersScreen(
     val isLoading by vendorViewModel.isLoading.collectAsState()
     val error by vendorViewModel.error.collectAsState()
     val canRetry by vendorViewModel.canRetry.collectAsState()
+    val profile by vendorViewModel.profile.collectAsState()
 
-    LaunchedEffect(Unit) { vendorViewModel.loadVendorOrders() }
+    // Keyed on the vendor profile, not Unit: surplus-orders.php needs a
+    // vendor_id, and that is only known once MainScreen's start() has resolved
+    // the vendor record. Firing on Unit could run first and load nothing.
+    LaunchedEffect(profile?.id) {
+        if (profile != null) vendorViewModel.loadVendorOrders()
+    }
 
     Scaffold(
         containerColor = Cream,
@@ -72,16 +78,29 @@ fun VendorOrdersScreen(
     }
 }
 
+/**
+ * Renders a [SurplusOrder], not an Order — surplus-orders.php is the only
+ * per-vendor order endpoint this backend exposes.
+ */
 @Composable
-private fun VendorOrderRow(order: Order) {
+private fun VendorOrderRow(order: SurplusOrder) {
     Row(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CardWhite).padding(14.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text("Order #${order.id}", fontWeight = FontWeight.SemiBold, color = Ink)
-            Text(order.status.replaceFirstChar { it.uppercase() }, fontSize = 12.sp, color = InkMuted)
+            Text(order.displayTitle, fontSize = 13.sp, color = Ink)
+            Text(
+                buildString {
+                    append(order.status.replaceFirstChar { it.uppercase() })
+                    append("  •  ${order.quantity} unit(s)")
+                    order.customerName.takeIf { it.isNotBlank() }?.let { append("  •  $it") }
+                },
+                fontSize = 12.sp,
+                color = InkMuted
+            )
         }
-        Text(formatUgx(order.total), fontWeight = FontWeight.Bold, color = Forest)
+        Text(formatUgx(order.totalPrice), fontWeight = FontWeight.Bold, color = Forest)
     }
 }

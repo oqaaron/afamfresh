@@ -60,6 +60,19 @@ fun MainScreen(
         if (user != null) notificationViewModel.refresh()
     }
 
+    // The vendor endpoints identify the vendor from a query parameter rather
+    // than the session, and they disagree about whether it is the user id or the
+    // vendor id — so VendorViewModel has to resolve the vendor record from the
+    // signed-in user before it can load anything. This replaces the old
+    // `init { loadListings() }`, which ran before any user was known.
+    //
+    // start() is idempotent, so recomposition does not re-issue the request. A
+    // non-vendor user simply gets the "not a vendor" error, which the vendor
+    // screens already render.
+    LaunchedEffect(user?.id) {
+        user?.id?.toIntOrNull()?.let { vendorViewModel.start(it) }
+    }
+
     // A push was tapped: jump straight to that order once, then clear the flag
     // so returning to home later does not re-navigate.
     LaunchedEffect(pendingOrderId) {
@@ -229,8 +242,10 @@ fun MainScreen(
                 )
             }
             composable("edit_surplus/{listingId}") { backStackEntry ->
-                val listingId = backStackEntry.arguments?.getString("listingId")
-                val existingListing = vendorListings.find { it.id == listingId }
+                // surplus_listings.id is int(11), so the route argument has to
+                // be parsed rather than string-compared against it.
+                val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
+                val existingListing = listingId?.let { id -> vendorListings.find { it.id == id } }
                 AddSurplusScreen(
                     vendorViewModel = vendorViewModel,
                     existingListing = existingListing,
@@ -335,9 +350,11 @@ fun MainScreen(
 
             // ========== Product Details ==========
             composable("product_detail/{productId}") { backStackEntry ->
-                val productId = backStackEntry.arguments?.getString("productId")?.toDoubleOrNull() ?: 0.0
+                // items.id is int(100). Parsing this as a Double also meant the
+                // route was built from an id rendered as "4.0".
+                val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
                 val products by productViewModel.products.collectAsState()
-                val product = products.find { it.id == productId }
+                val product = productId?.let { id -> products.find { it.id == id } }
                 ProductDetailScreen(
                     product = product,
                     onBack = { navController.navigate("home") },
