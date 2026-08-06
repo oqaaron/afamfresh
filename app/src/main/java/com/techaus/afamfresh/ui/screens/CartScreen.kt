@@ -176,7 +176,7 @@ private fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -
         verticalAlignment = Alignment.CenterVertically
     ) {
         NetworkImage(
-            model = item.product.image,
+            model = item.product.imageUrl,
             contentDescription = item.product.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier

@@ -13,13 +13,15 @@ class PaymentRepository(
     private val apiService: ApiService
 ) {
     /**
+     * Starts a payment.
+     *
      * Payment is the flow where a vague error is most damaging — the customer
-     * cannot tell whether money left their account. Every failure here carries
-     * a specific reason.
+     * cannot tell whether money left their account. Every failure here carries a
+     * specific reason.
      */
     fun initiatePayment(request: PaymentRequest, callback: (PaymentResponse?, ApiError?) -> Unit) {
         try {
-            apiService.initiatePayment(request)
+            apiService.initiatePayment(request = request)
                 .enqueueApi<PaymentResponse>("PaymentRepo", "initiatePayment") { body, error ->
                     when {
                         error != null -> callback(null, error)
@@ -34,17 +36,28 @@ class PaymentRepository(
     }
 
     /**
-     * Note that a "not successful yet" verification is NOT an error — a pending
-     * payment is a legitimate state. The body is returned so the caller can
-     * distinguish pending from failed, and only genuine transport or HTTP
-     * problems produce an [ApiError].
+     * Asks the server to re-check the payment against Pesapal.
+     *
+     * The body is handed back even when `success` is false, because the caller
+     * must be able to tell three different situations apart:
+     *
+     *   paid          money confirmed received
+     *   pending       still in flight — NOT an error
+     *   unconfirmed   the server could not reach Pesapal, outcome UNKNOWN
+     *
+     * Collapsing the last two into "failed" is what makes customers pay twice, so
+     * only genuine transport problems produce an [ApiError] here.
      */
     fun verifyPayment(
-        transactionId: String,
-        reference: String? = null,
+        transactionId: String? = null,
+        orderId: String? = null,
         callback: (PaymentResponse?, ApiError?) -> Unit
     ) {
-        apiService.verifyPayment(transactionId = transactionId, reference = reference)
+        require(!transactionId.isNullOrBlank() || !orderId.isNullOrBlank()) {
+            "verifyPayment needs either a transactionId or an orderId"
+        }
+
+        apiService.verifyPayment(transactionId = transactionId, orderId = orderId)
             .enqueueApi<PaymentResponse>("PaymentRepo", "verifyPayment") { body, error ->
                 callback(body, error)
             }

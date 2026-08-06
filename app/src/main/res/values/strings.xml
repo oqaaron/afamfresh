@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Referenced by AndroidManifest.xml: android:label="@string/app_name" -->
-    <string name="app_name">AfamFresh</string>
+    <!-- NOTE: app_name is NOT declared here. Each product flavor supplies it
+         via resValue() in app/build.gradle.kts, so the three apps show
+         different names in the launcher ("AfamFresh", "AfamFresh Rider",
+         "AfamFresh Vendor"). Declaring it here as well would be a
+         duplicate-resource error. -->
 
     <!-- NOTE: default_web_client_id is NOT declared here on purpose.
          The Google Services plugin generates it automatically from

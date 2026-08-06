@@ -1,0 +1,287 @@
+package com.techaus.afamfresh.ui.screens.rider
+
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.models.RiderActionState
+import com.techaus.afamfresh.ui.components.NetworkImage
+import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.formatUgx
+import com.techaus.afamfresh.viewmodel.RiderViewModel
+
+/**
+ * One delivery: who it is for, where, what is in it, and the single button
+ * that advances it.
+ *
+ * The button offers only the next stage. The server enforces the same
+ * forward-only order and refuses anything else, so this is a convenience, not
+ * the rule itself.
+ */
+@Composable
+fun RiderDeliveryDetailScreen(
+    orderId: Int,
+    riderViewModel: RiderViewModel,
+    onBack: () -> Unit
+) {
+    val delivery by riderViewModel.selected.collectAsState()
+    val actionState by riderViewModel.actionState.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(orderId) { riderViewModel.loadDelivery(orderId) }
+
+    // Photo picker needs no runtime permission and falls back automatically
+    // below API 30, so it works at this app's minSdk of 24 — the same choice
+    // the avatar flow makes.
+    val pickPhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) riderViewModel.uploadProof(orderId, uri)
+    }
+
+    Scaffold(
+        containerColor = Cream,
+        topBar = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
+                }
+                Text("Order #$orderId", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+            }
+        }
+    ) { padding ->
+        val d = delivery
+        if (d == null) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator(color = Forest) }
+            return@Scaffold
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StageChip(d)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(d.orderStatus.orEmpty(), fontSize = 12.sp, color = InkMuted)
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Card {
+                Text(d.customerOrDash, fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(d.addressOrDash, fontSize = 13.sp, color = InkMuted)
+                if (!d.area.isNullOrBlank()) {
+                    Text(d.area, fontSize = 12.sp, color = InkMuted)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (!d.customerPhone.isNullOrBlank()) {
+                        SmallAction(Icons.Default.Call, "Call") {
+                            // ACTION_DIAL, not ACTION_CALL: it opens the dialler
+                            // with the number filled in and needs no permission.
+                            context.startActivity(
+                                Intent(Intent.ACTION_DIAL, Uri.parse("tel:${d.customerPhone}"))
+                            )
+                        }
+                    }
+                    if (d.destLat != null && d.destLng != null) {
+                        SmallAction(Icons.Default.Map, "Navigate") {
+                            val label = Uri.encode(d.addressOrDash)
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("geo:${d.destLat},${d.destLng}?q=${d.destLat},${d.destLng}($label)")
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card {
+                Text("Items", fontWeight = FontWeight.SemiBold, color = Ink)
+                Spacer(modifier = Modifier.height(8.dp))
+                val items = d.items.orEmpty()
+                if (items.isEmpty()) {
+                    Text("No items recorded for this order.", fontSize = 12.sp, color = InkMuted)
+                } else {
+                    items.forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "${item.quantity ?: 0} × ${item.name.orEmpty()}",
+                                fontSize = 13.sp,
+                                color = Ink,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(formatUgx(item.lineTotal), fontSize = 13.sp, color = InkMuted)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider(color = PillGray)
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Total to collect", fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text(
+                        formatUgx(d.totalAmount ?: 0.0),
+                        fontWeight = FontWeight.Bold,
+                        color = Forest
+                    )
+                }
+                if (!d.paymentStatus.isNullOrBlank()) {
+                    Text(
+                        "Payment: ${d.paymentStatus}",
+                        fontSize = 12.sp,
+                        color = if (d.paymentStatus.equals("paid", true)) Forest else Tomato
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Proof of delivery. Offered from the point the rider is actually
+            // at the door, not before.
+            if (d.status == "on_way" || d.isDelivered) {
+                Card {
+                    Text("Proof of delivery", fontWeight = FontWeight.SemiBold, color = Ink)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (d.proofPhotoUrl != null) {
+                        NetworkImage(
+                            model = d.proofPhotoUrl,
+                            contentDescription = "Proof of delivery",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    SmallAction(
+                        Icons.Default.CameraAlt,
+                        if (d.proofPhotoUrl != null) "Replace photo" else "Add photo"
+                    ) {
+                        pickPhoto.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            if (actionState is RiderActionState.Error) {
+                Text(
+                    (actionState as RiderActionState.Error).message,
+                    color = Tomato,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            val next = d.nextStage
+            if (next != null) {
+                Button(
+                    onClick = {
+                        riderViewModel.clearActionState()
+                        riderViewModel.advance(orderId, next)
+                    },
+                    enabled = actionState !is RiderActionState.Working,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Forest)
+                ) {
+                    if (actionState is RiderActionState.Working) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Text(d.nextStageLabel ?: "Continue", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            } else {
+                Text(
+                    "This delivery is complete.",
+                    color = Forest,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+}
+
+@Composable
+private fun Card(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(CardWhite)
+            .padding(16.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun SmallAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(ForestSurface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = Forest, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, color = Forest, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}

@@ -70,6 +70,58 @@ android {
     }
 
     /**
+     * One codebase, three installable apps.
+     *
+     * Product flavors rather than separate projects: only ~11% of this codebase
+     * is role-specific. The other ~89% — models, api, repositories, viewmodels,
+     * auth, theme — would have to be copied and separately maintained in three
+     * projects, and this codebase has already paid that price once (endpoints
+     * the app called that never existed, images returned in an unusable form,
+     * `current_role` read in a way that silently returned NULL).
+     *
+     * Each flavor gets its own applicationId, so all three install side by side
+     * and each has its own Play listing, icon and notification identity.
+     *
+     * APP_ROLE is the single constant shared code branches on. It matches the
+     * `user_roles.role` values the server already validates against — the apps
+     * are a UX split, NOT a security boundary: api/rider.php and friends still
+     * check the session's role server-side, because anyone can call them
+     * directly.
+     */
+    flavorDimensions += "role"
+
+    productFlavors {
+        create("customer") {
+            dimension = "role"
+            // NOT namespaced. Changing this would orphan every existing install
+            // and register as a brand-new app on Play.
+            // applicationId stays the defaultConfig value.
+            resValue("string", "app_name", "AfamFresh")
+            buildConfigField("String", "APP_ROLE", "\"user\"")
+            // Each app owns its own deep-link scheme. Sharing one would make
+            // Android show an app-chooser on every password-reset link.
+            manifestPlaceholders["deepLinkScheme"] = "afamfresh"
+            buildConfigField("String", "DEEP_LINK_SCHEME", "\"afamfresh\"")
+        }
+        create("rider") {
+            dimension = "role"
+            applicationIdSuffix = ".rider"
+            resValue("string", "app_name", "AfamFresh Rider")
+            buildConfigField("String", "APP_ROLE", "\"rider\"")
+            manifestPlaceholders["deepLinkScheme"] = "afamfresh-rider"
+            buildConfigField("String", "DEEP_LINK_SCHEME", "\"afamfresh-rider\"")
+        }
+        create("vendor") {
+            dimension = "role"
+            applicationIdSuffix = ".vendor"
+            resValue("string", "app_name", "AfamFresh Vendor")
+            buildConfigField("String", "APP_ROLE", "\"vendor\"")
+            manifestPlaceholders["deepLinkScheme"] = "afamfresh-vendor"
+            buildConfigField("String", "DEEP_LINK_SCHEME", "\"afamfresh-vendor\"")
+        }
+    }
+
+    /**
      * Release signing is configured only when the keystore details are present
      * in local.properties, so a plain `assembleDebug` still works on a machine
      * that has never generated a key.
@@ -257,13 +309,20 @@ dependencies {
     //       exclude(group = "net.sf.kxml", module = "kxml2")
     //   }
 
-    // Google Location Services
-    implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    // Scoped per flavor, because each of these SDKs is used by exactly one
+    // screen and that screen now lives in one flavor's source set:
+    //
+    //   Location  -> src/rider/.../ui/screens/rider/RiderLocationUpdates.kt
+    //   Maps      -> src/customer/.../ui/screens/DeliveryMapScreen.kt
+    //
+    // If a stray reference to either ever appears in src/main, the build
+    // breaks for the flavors that no longer have the dependency — which is the
+    // point: the isolation is enforced by the compiler, not by convention.
+    "riderImplementation"("com.google.android.gms:play-services-location:21.3.0")
+    "riderImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 
-    // Google Maps Compose
-    implementation("com.google.maps.android:maps-compose:4.3.0")
-    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    "customerImplementation"("com.google.maps.android:maps-compose:4.3.0")
+    "customerImplementation"("com.google.android.gms:play-services-maps:18.2.0")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -272,8 +331,9 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // Permissions Helper
-    implementation("com.google.accompanist:accompanist-permissions:0.35.0-alpha")
+    // accompanist-permissions was removed: nothing in the app referenced it.
+    // Runtime permissions are requested directly through
+    // ActivityResultContracts (see ui/screens/rider/RiderLocationUpdates.kt).
 
     // Kotlin Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -289,8 +349,9 @@ dependencies {
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // Biometric
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    // androidx.biometric was removed: zero references anywhere in the source.
+    // The app has no biometric unlock; sessions are protected by
+    // EncryptedSharedPreferences instead (see utils/SecurePrefs.kt).
 
     // Encrypted storage for the auth token and session cookie
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

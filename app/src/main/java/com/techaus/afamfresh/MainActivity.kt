@@ -60,6 +60,8 @@ class MainActivity : ComponentActivity() {
     private val paymentViewModel: PaymentViewModel by viewModels { viewModelFactory }
     private val deliveryResultViewModel: DeliveryResultViewModel by viewModels { viewModelFactory }
     private val vendorViewModel: VendorViewModel by viewModels { viewModelFactory }
+    private val riderViewModel: RiderViewModel by viewModels { viewModelFactory }
+    private val roleGateViewModel: RoleGateViewModel by viewModels { viewModelFactory }
     private val addressViewModel: AddressViewModel by viewModels { viewModelFactory }
     private val notificationViewModel: NotificationViewModel by viewModels { viewModelFactory }
 
@@ -89,7 +91,11 @@ class MainActivity : ComponentActivity() {
 
             setContent {
                 var isLoggedIn by remember { mutableStateOf(authRepository.isLoggedIn()) }
-                var currentUser by remember { mutableStateOf<User?>(authRepository.getUser()) }
+                // Must agree with isLoggedIn above. getUser() ignores session
+                // validity, so pairing it with isLoggedIn() gave a signed-out
+                // user a non-null profile — enough for the UI to treat them as
+                // signed in on a cold start.
+                var currentUser by remember { mutableStateOf<User?>(authRepository.getRestorableUser()) }
 
                 // rememberSaveable so a rotation does not replay the splash or
                 // re-run the config check.
@@ -287,6 +293,8 @@ class MainActivity : ComponentActivity() {
                                             paymentViewModel = paymentViewModel,
                                             deliveryResultViewModel = deliveryResultViewModel,
                                             vendorViewModel = vendorViewModel,
+                                            riderViewModel = riderViewModel,
+                                            roleGateViewModel = roleGateViewModel,
                                             addressViewModel = addressViewModel,
                                             notificationViewModel = notificationViewModel,
                                             deliveryRepository = viewModelFactory.deliveryRepository,

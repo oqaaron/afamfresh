@@ -17,12 +17,19 @@
     </base-config>
 
     <domain-config cleartextTrafficPermitted="true">
-        <!-- This dev machine, "Ethernet 2". Verified reachable over the LAN:
-             http://192.168.11.67/afamfresh/api/products.php?action=list -> 200
+        <!-- This dev machine, running XAMPP. Verified reachable over the LAN:
+             http://192.168.1.9/afamfresh/api/products.php?action=list -> 200
 
-             192.168.3.41 was removed: it is no longer this machine's address,
-             so it granted cleartext to whatever host now holds that lease. -->
-        <domain includeSubdomains="false">192.168.11.67</domain>
+             This address keeps moving: 192.168.11.67 -> 192.168.1.9 ->
+             192.168.3.56 -> 192.168.3.135 -> 192.168.1.9 -> 10.34.213.45 ->
+             192.168.1.9 (back on the original network). Old entries are
+             removed rather than kept, since a stale entry grants cleartext to
+             whatever host now holds that lease.
+
+             Changing this alone is not enough: base.url.debug in
+             local.properties has to match AND the app must be rebuilt, because
+             the URL is compiled into BuildConfig. -->
+        <domain includeSubdomains="false">192.168.1.9</domain>
 
         <!-- How the Android emulator reaches the host machine. -->
         <domain includeSubdomains="false">10.0.2.2</domain>

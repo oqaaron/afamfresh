@@ -33,7 +33,17 @@ fun SettingsScreen(
     val context = LocalContext.current
     val user by authViewModel.user.collectAsState()
 
-    var notificationsEnabled by remember { mutableStateOf(FirebaseTokenManager.areNotificationsEnabled()) }
+    // Seed from the server's stored preference where we have it, falling back
+    // to the device-local FCM flag. The two are different things: the local
+    // flag controls whether this install registers a token at all, while the
+    // server preference is what NotificationManager consults before sending.
+    // Both have to agree or a user can switch push "off" and still receive it.
+    var notificationsEnabled by remember(user?.notificationPreferences?.push) {
+        mutableStateOf(user?.notificationPreferences?.push ?: FirebaseTokenManager.areNotificationsEnabled())
+    }
+    var emailNotificationsEnabled by remember(user?.notificationPreferences?.email) {
+        mutableStateOf(user?.notificationPreferences?.email ?: true)
+    }
     var cacheCleared by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -55,9 +65,29 @@ fun SettingsScreen(
                 checked = notificationsEnabled,
                 onCheckedChange = { enabled ->
                     notificationsEnabled = enabled
-                    // Persists the preference and registers/stops registering
-                    // this device's FCM token accordingly.
+                    // Two writes, deliberately. The local one persists the
+                    // preference and registers/stops registering this device's
+                    // FCM token; the server one is what actually stops messages
+                    // being sent. Doing only the first left the server happily
+                    // dispatching to a user who had opted out.
                     FirebaseTokenManager.setNotificationsEnabled(enabled)
+                    authViewModel.setNotificationPrefs(
+                        email = emailNotificationsEnabled,
+                        push = enabled
+                    )
+                }
+            )
+
+            SettingsToggleRow(
+                title = "Email notifications",
+                subtitle = "Order receipts and account updates",
+                checked = emailNotificationsEnabled,
+                onCheckedChange = { enabled ->
+                    emailNotificationsEnabled = enabled
+                    authViewModel.setNotificationPrefs(
+                        email = enabled,
+                        push = notificationsEnabled
+                    )
                 }
             )
 
@@ -67,6 +97,9 @@ fun SettingsScreen(
             SettingsInfoRow(label = "Signed in as", value = user?.email ?: "Not signed in")
             user?.currentRole?.let {
                 SettingsInfoRow(label = "Role", value = it.replaceFirstChar { c -> c.uppercase() })
+            }
+            user?.isGoogleAccount?.let {
+                SettingsInfoRow(label = "Signed in with", value = if (it) "Google" else "Email and password")
             }
 
             Spacer(modifier = Modifier.height(24.dp))

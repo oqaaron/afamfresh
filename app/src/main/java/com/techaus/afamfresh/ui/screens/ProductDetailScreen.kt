@@ -81,7 +81,7 @@ fun ProductDetailScreen(
                     .background(ForestSurface, shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             ) {
                 NetworkImage(
-                    model = product.image,
+                    model = product.imageUrl,
                     contentDescription = product.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier

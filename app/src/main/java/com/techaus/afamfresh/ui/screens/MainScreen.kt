@@ -1,10 +1,14 @@
 package com.techaus.afamfresh.ui.screens
 
+import android.net.Uri
 import android.util.Log
+import com.techaus.afamfresh.BuildConfig
+import com.techaus.afamfresh.models.RoleGateState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
@@ -17,11 +21,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.techaus.afamfresh.models.DeliveryResult
 import com.techaus.afamfresh.repository.DeliveryRepository
-import com.techaus.afamfresh.utils.OrderCalc
+import com.techaus.afamfresh.ui.nav.FlavorRouteDeps
+import com.techaus.afamfresh.ui.nav.flavorRoutes
 import com.techaus.afamfresh.models.Product
-import com.techaus.afamfresh.ui.screens.vendor.*
 import com.techaus.afamfresh.ui.screens.SettingsScreen
 import com.techaus.afamfresh.viewmodel.*
 
@@ -36,6 +39,8 @@ fun MainScreen(
     paymentViewModel: PaymentViewModel,
     deliveryResultViewModel: DeliveryResultViewModel,
     vendorViewModel: VendorViewModel,
+    riderViewModel: RiderViewModel,
+    roleGateViewModel: RoleGateViewModel,
     addressViewModel: AddressViewModel,
     notificationViewModel: NotificationViewModel,
     deliveryRepository: DeliveryRepository,
@@ -46,12 +51,48 @@ fun MainScreen(
     onProductClick: (Product) -> Unit,
     onBack: () -> Unit
 ) {
+    // ===== Which app is this? =====
+    //
+    // Customer, Rider and Vendor are separate installs built from the same
+    // source (see productFlavors in build.gradle.kts). APP_ROLE is fixed per
+    // flavor, so the role is decided at build time and there is no switching.
+    val appRole = BuildConfig.APP_ROLE
+
+    // Shopping — catalogue, cart, checkout, orders, addresses, payment — is
+    // registered ONLY in the Customer app. Those screens live in src/main and
+    // so compile into every build, which meant a rider could still reach the
+    // catalogue: Profile's back button navigated to "home", and the route was
+    // there to receive it. Not registering the destinations removes the whole
+    // class of that bug rather than patching each entry point.
+    val isCustomerApp = appRole == "user"
+
+    val gateState by roleGateViewModel.state.collectAsState()
+    val gateChecked by roleGateViewModel.checked.collectAsState()
+
+    // The Rider and Vendor apps must not open their workspace until the server
+    // confirms the account holds the role. The customer app has no gate —
+    // 'user' is every account's baseline.
+    if (appRole != "user" && !(gateChecked && gateState == RoleGateState.Approved)) {
+        RoleGateScreen(
+            roleGateViewModel = roleGateViewModel,
+            roleLabel = appRole.replaceFirstChar { it.uppercase() },
+            onLogout = onLogout
+        )
+        return
+    }
+
     val navController = rememberNavController()
     val currentRoute by navController.currentBackStackEntryAsState()
-    val currentDestination = currentRoute?.destination?.route ?: "home"
+    val startRoute = when (appRole) {
+        "rider" -> "rider_dashboard"
+        "vendor" -> "vendor_dashboard"
+        else -> "home"
+    }
+    val currentDestination = currentRoute?.destination?.route ?: startRoute
 
     val user by authViewModel.user.collectAsState()
-    val vendorListings by vendorViewModel.listings.collectAsState()
+    // vendorViewModel.listings is now collected inside the vendor flavor's
+    // route file, where the only screen that reads it lives.
     val unreadNotifications by notificationViewModel.unreadCount.collectAsState()
 
     // Notifications are an authenticated endpoint, so this waits for a user
@@ -77,7 +118,13 @@ fun MainScreen(
     // so returning to home later does not re-navigate.
     LaunchedEffect(pendingOrderId) {
         pendingOrderId?.let {
-            navController.navigate("edit_order/$it")
+            // Guarded: "edit_order" is a customer route and is not registered
+            // in the Rider or Vendor apps. Navigating to a route that does not
+            // exist throws, so an order push landing on a rider's phone would
+            // have crashed the app rather than being ignored.
+            if (isCustomerApp) {
+                navController.navigate("edit_order/$it")
+            }
             onPendingOrderHandled()
         }
     }
@@ -85,17 +132,38 @@ fun MainScreen(
     Scaffold(
         bottomBar = {
             NavigationBar {
-                val items = listOf(
-                    "home" to Icons.Default.Home,
-                    "orders" to Icons.Default.List,
-                    "cart" to Icons.Default.ShoppingCart,
-                    "surplus" to Icons.Default.ShoppingCart,
-                    "profile" to Icons.Default.Person
-                )
-                items.forEach { (route, icon) ->
+                // Each app gets its own tabs. A rider has no cart and a vendor
+                // has no surplus basket, so showing the customer bar in those
+                // builds would offer screens their role cannot use.
+                //
+                // Labels are written out rather than derived from the route
+                // name: capitalising "rider_dashboard" produced the tab label
+                // "Rider_dashboard", underscore and all.
+                val items = when (appRole) {
+                    "rider" -> listOf(
+                        Triple("rider_dashboard", Icons.Default.Home, "Home"),
+                        Triple("rider_deliveries", Icons.Default.List, "Deliveries"),
+                        Triple("rider_earnings", Icons.Default.Payments, "Earnings"),
+                        Triple("profile", Icons.Default.Person, "Profile")
+                    )
+                    "vendor" -> listOf(
+                        Triple("vendor_dashboard", Icons.Default.Home, "Home"),
+                        Triple("vendor_orders", Icons.Default.List, "Orders"),
+                        Triple("vendor_products", Icons.Default.ShoppingCart, "Products"),
+                        Triple("profile", Icons.Default.Person, "Profile")
+                    )
+                    else -> listOf(
+                        Triple("home", Icons.Default.Home, "Home"),
+                        Triple("orders", Icons.Default.List, "Orders"),
+                        Triple("cart", Icons.Default.ShoppingCart, "Cart"),
+                        Triple("surplus", Icons.Default.ShoppingCart, "Surplus"),
+                        Triple("profile", Icons.Default.Person, "Profile")
+                    )
+                }
+                items.forEach { (route, icon, label) ->
                     NavigationBarItem(
-                        icon = { Icon(icon, contentDescription = route) },
-                        label = { Text(route.replaceFirstChar { it.uppercase() }) },
+                        icon = { Icon(icon, contentDescription = label) },
+                        label = { Text(label) },
                         selected = currentDestination == route,
                         onClick = {
                             navController.navigate(route) {
@@ -113,11 +181,12 @@ fun MainScreen(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "home",
+            // Per flavor: the Rider app opens on deliveries, not the catalogue.
+            startDestination = startRoute,
             modifier = Modifier.padding(innerPadding)
         ) {
             // ===== HOME =====
-            composable("home") {
+            if (isCustomerApp) composable("home") {
                 HomeScreen(
                     userName = user?.name ?: "User",
                     currentRole = user?.currentRole ?: "user",
@@ -149,7 +218,7 @@ fun MainScreen(
             }
 
             // ===== ORDERS =====
-            composable("orders") {
+            if (isCustomerApp) composable("orders") {
                 OrdersScreen(
                     orderViewModel = orderViewModel,
                     onBack = { navController.navigate("home") },
@@ -160,7 +229,7 @@ fun MainScreen(
             }
 
             // ===== EDIT ORDER =====
-            composable("edit_order/{orderId}") { backStackEntry ->
+            if (isCustomerApp) composable("edit_order/{orderId}") { backStackEntry ->
                 val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
                 EditOrderScreen(
                     orderId = orderId,
@@ -170,7 +239,7 @@ fun MainScreen(
             }
 
             // ===== CART =====
-            composable("cart") {
+            if (isCustomerApp) composable("cart") {
                 val cartItems by cartViewModel.cartItems.collectAsState()
                 Log.d("MainScreen", "Cart screen items: ${cartItems.size}")
                 CartScreen(
@@ -186,7 +255,7 @@ fun MainScreen(
             }
 
             // ===== SURPLUS =====
-            composable("surplus") {
+            if (isCustomerApp) composable("surplus") {
                 SurplusScreen(
                     surplusViewModel = surplusViewModel,
                     onBack = { navController.navigate("home") },
@@ -201,14 +270,35 @@ fun MainScreen(
                 ProfileScreen(
                     authViewModel = authViewModel,
                     onLogout = onLogout,
-                    onBack = { navController.navigate("home") },
+                    // Back goes to THIS app's start screen. Hardcoding "home"
+                    // was how a rider ended up in the shop.
+                    onBack = { navController.navigate(startRoute) },
+                    // Shopping actions are hidden entirely outside the
+                    // Customer app, so the menu cannot offer a dead route.
+                    showCustomerActions = isCustomerApp,
                     onOrdersClick = { navController.navigate("orders") },
                     onAddressesClick = { navController.navigate("addresses") },
-                    onSettingsClick = { navController.navigate("settings") } // ✅ FIX: was a no-op comment; "settings" route already existed below
+                    onSettingsClick = { navController.navigate("settings") }, // ✅ FIX: was a no-op comment; "settings" route already existed below
+                    onEditProfileClick = { navController.navigate("edit_profile") },
+                    onChangePasswordClick = { navController.navigate("change_password") }
+                )
+            }
+            // ===== EDIT PROFILE =====
+            composable("edit_profile") {
+                EditProfileScreen(
+                    authViewModel = authViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            // ===== CHANGE PASSWORD =====
+            composable("change_password") {
+                ChangePasswordScreen(
+                    authViewModel = authViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
             // ===== ADDRESSES =====
-            composable("addresses") {
+            if (isCustomerApp) composable("addresses") {
                 AddressesScreen(
                     addressViewModel = addressViewModel,
                     onBack = { navController.popBackStack() }
@@ -221,53 +311,24 @@ fun MainScreen(
                     onBack = { navController.popBackStack() }
                 )
             }
-            // ========== Vendor Screens ==========
-            composable("vendor_dashboard") {
-                VendorDashboardScreen(
+            // ========== Role-specific routes ==========
+            //
+            // Supplied by the flavor: src/{customer,rider,vendor}/.../ui/nav/
+            // FlavorRoutes.kt. The rider dashboard and vendor screens are not
+            // compiled into every app, so this file cannot name them directly.
+            flavorRoutes(
+                FlavorRouteDeps(
+                    navController = navController,
+                    riderViewModel = riderViewModel,
                     vendorViewModel = vendorViewModel,
-                    onAddListing = { navController.navigate("add_surplus") },
-                    onEditListing = { listing ->
-                        navController.navigate("edit_surplus/${listing.id}")
-                    },
-                    onViewOrders = { navController.navigate("vendor_orders") },
-                    onViewProducts = { navController.navigate("vendor_products") },
-                    onBack = { navController.navigate("home") }
+                    cartViewModel = cartViewModel,
+                    deliveryResultViewModel = deliveryResultViewModel,
+                    deliveryRepository = deliveryRepository,
                 )
-            }
-            composable("add_surplus") {
-                AddSurplusScreen(
-                    vendorViewModel = vendorViewModel,
-                    onSave = { navController.navigate("vendor_dashboard") },
-                    onCancel = { navController.navigate("vendor_dashboard") }
-                )
-            }
-            composable("edit_surplus/{listingId}") { backStackEntry ->
-                // surplus_listings.id is int(11), so the route argument has to
-                // be parsed rather than string-compared against it.
-                val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
-                val existingListing = listingId?.let { id -> vendorListings.find { it.id == id } }
-                AddSurplusScreen(
-                    vendorViewModel = vendorViewModel,
-                    existingListing = existingListing,
-                    onSave = { navController.navigate("vendor_dashboard") },
-                    onCancel = { navController.navigate("vendor_dashboard") }
-                )
-            }
-            composable("vendor_orders") {
-                VendorOrdersScreen(
-                    vendorViewModel = vendorViewModel,
-                    onBack = { navController.navigate("vendor_dashboard") }
-                )
-            }
-            composable("vendor_products") {
-                VendorProductsScreen(
-                    vendorViewModel = vendorViewModel,
-                    onBack = { navController.navigate("vendor_dashboard") }
-                )
-            }
+            )
 
             // ========== Checkout & Maps ==========
-            composable("checkout") {
+            if (isCustomerApp) composable("checkout") {
                 val cartItems by cartViewModel.cartItems.collectAsState()
                 Log.d("MainScreen", "Checkout screen items: ${cartItems.size}")
                 CheckoutScreen(
@@ -276,7 +337,14 @@ fun MainScreen(
                     checkoutViewModel = checkoutViewModel,
                     paymentViewModel = paymentViewModel,
                     onPaymentRedirect = { paymentUrl, transactionId ->
-                        navController.navigate("payment_webview/${paymentUrl}/${transactionId}")
+                        // Uri.encode is essential, not cosmetic: the Pesapal URL
+                        // is an absolute https:// address with a query string, and
+                        // dropping it into a path segment raw makes Navigation
+                        // split it on its own '/' and '?' — the WebView then
+                        // receives a truncated URL and loads a blank page.
+                        navController.navigate(
+                            "payment_webview/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
+                        )
                     },
                     onOrderComplete = {
                         cartViewModel.clearCart()
@@ -292,39 +360,22 @@ fun MainScreen(
                 )
             }
 
-            composable("delivery_map") {
-                val cartItems by cartViewModel.cartItems.collectAsState()
-                DeliveryMapScreen(
-                    onBack = { navController.navigate("checkout") },
-                    // The fee is tiered by order value, so the quote cannot be
-                    // requested without the cart subtotal.
-                    cartSubtotal = OrderCalc.subtotal(cartItems),
-                    deliveryRepository = deliveryRepository,
-                    onLocationSelected = { pickupAddress, dropoffAddress, pickupLat, pickupLng,
-                                          dropoffLat, dropoffLng, distanceKm, totalCost ->
-                        deliveryResultViewModel.setDeliveryResult(
-                            DeliveryResult(
-                                pickupAddress = pickupAddress,
-                                dropoffAddress = dropoffAddress,
-                                pickupLat = pickupLat,
-                                pickupLng = pickupLng,
-                                dropoffLat = dropoffLat,
-                                dropoffLng = dropoffLng,
-                                distanceKm = distanceKm,
-                                cost = totalCost
-                            )
-                        )
-                        navController.navigate("checkout") {
-                            popUpTo("delivery_map") { inclusive = true }
-                        }
-                    }
-                )
-            }
+            // delivery_map moved to src/customer/.../ui/nav/FlavorRoutes.kt.
+            // It is the only screen using the Maps SDK, which is now scoped to
+            // the customer flavor.
 
             // ========== Payment WebView ==========
-            composable("payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
-                val paymentUrl = backStackEntry.arguments?.getString("paymentUrl") ?: ""
+            //
+            // The Pesapal checkout URL is passed URL-ENCODED — see the navigate()
+            // call in the checkout route. A raw https:// URL cannot travel in a
+            // path segment: its own slashes and query string split the route and
+            // the argument arrives truncated, so the WebView would load nothing.
+            if (isCustomerApp) composable("payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
+                val paymentUrl = Uri.decode(
+                    backStackEntry.arguments?.getString("paymentUrl") ?: ""
+                )
                 val transactionId = backStackEntry.arguments?.getString("transactionId") ?: ""
+
                 PaymentWebViewScreen(
                     paymentUrl = paymentUrl,
                     transactionId = transactionId,
@@ -333,23 +384,49 @@ fun MainScreen(
                             popUpTo("checkout") { inclusive = true }
                         }
                     },
-                    onPaymentComplete = { success, txnId ->
-                        if (success) {
-                            cartViewModel.clearCart()
-                            navController.navigate("home") {
-                                popUpTo("checkout") { inclusive = true }
-                            }
-                        } else {
-                            navController.navigate("checkout") {
-                                popUpTo("checkout") { inclusive = true }
-                            }
+                    // The WebView reports only that checkout ENDED. Whether money
+                    // moved is decided by asking Pesapal, because mobile-money
+                    // approval happens on the customer's handset seconds later and
+                    // a URL parameter is not evidence of payment.
+                    onCheckoutFinished = { trackingId ->
+                        navController.navigate("payment_confirming/$trackingId") {
+                            popUpTo("checkout") { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // ========== Payment confirmation (polls the server) ==========
+            if (isCustomerApp) composable("payment_confirming/{trackingId}") { backStackEntry ->
+                val trackingId = backStackEntry.arguments?.getString("trackingId") ?: ""
+                PaymentConfirmingScreen(
+                    trackingId = trackingId,
+                    paymentViewModel = paymentViewModel,
+                    onPaid = {
+                        cartViewModel.clearCart()
+                        navController.navigate("orders") {
+                            popUpTo("home") { inclusive = false }
+                        }
+                    },
+                    onFailed = {
+                        navController.navigate("checkout") {
+                            popUpTo("checkout") { inclusive = true }
+                        }
+                    },
+                    // Unknown outcome: send them to their orders rather than back
+                    // to checkout, so a customer who HAS paid is never nudged into
+                    // paying a second time.
+                    onUnconfirmed = {
+                        cartViewModel.clearCart()
+                        navController.navigate("orders") {
+                            popUpTo("home") { inclusive = false }
                         }
                     }
                 )
             }
 
             // ========== Product Details ==========
-            composable("product_detail/{productId}") { backStackEntry ->
+            if (isCustomerApp) composable("product_detail/{productId}") { backStackEntry ->
                 // items.id is int(100). Parsing this as a Double also meant the
                 // route was built from an id rendered as "4.0".
                 val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()

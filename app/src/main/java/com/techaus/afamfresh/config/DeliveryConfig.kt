@@ -42,4 +42,28 @@ object DeliveryConfig {
     const val PICKUP_LAT = 0.38082497218633615
     const val PICKUP_LNG = 32.65071116168179
     const val PICKUP_LABEL = "AfamFresh Warehouse, Kampala"
+
+    /**
+     * Uganda's bounding box, padded slightly beyond the real extent
+     * (lat -1.4821..4.2340, lng 29.5734..35.0361).
+     *
+     * Order 500384 was placed to dest_lat/dest_lng 51.70892, -88.90354 —
+     * Northwestern Ontario, Canada — and reverse-geocoded, priced and stored
+     * without anything objecting. That happens when the map fails to render
+     * (a blank google.maps.api.key leaves it unauthenticated at world scale)
+     * and a tap projects to arbitrary global coordinates.
+     *
+     * A box is deliberately coarse: it is a sanity check against clearly
+     * impossible input, not a service-area definition. Whether a point inside
+     * Uganda is actually deliverable is the server's call, since only it knows
+     * the distance rules.
+     */
+    const val MIN_LAT = -1.5
+    const val MAX_LAT = 4.3
+    const val MIN_LNG = 29.5
+    const val MAX_LNG = 35.1
+
+    /** True when [lat]/[lng] could plausibly be a Ugandan delivery address. */
+    fun isWithinServiceArea(lat: Double, lng: Double): Boolean =
+        lat in MIN_LAT..MAX_LAT && lng in MIN_LNG..MAX_LNG
 }

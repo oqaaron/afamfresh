@@ -17,6 +17,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.LoginUiState
+import com.techaus.afamfresh.BuildConfig
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.viewmodel.AuthViewModel
 
@@ -35,7 +36,8 @@ fun RegisterScreen(
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("user") }
+    // The account type comes from the build, not the person registering.
+    val role = BuildConfig.APP_ROLE
     var localError by remember { mutableStateOf<String?>(null) }
 
     val isLoading by authViewModel.isLoading.collectAsState()
@@ -120,23 +122,10 @@ fun RegisterScreen(
                 shape = RoundedCornerShape(12.dp), singleLine = true
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("I want to sign up as", fontWeight = FontWeight.Medium, color = Ink, fontSize = 13.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf("user" to "Customer", "vendor" to "Vendor").forEach { (value, label) ->
-                    val selected = role == value
-                    FilterChip(
-                        selected = selected,
-                        onClick = { role = value },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Forest,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
+            // The "sign up as" picker was removed. Which app you install now
+            // decides the account type (BuildConfig.APP_ROLE -> users.account_type),
+            // and it is fixed for the life of the account. Letting someone choose
+            // here is what allowed one account to be both a shopper and a rider.
 
             (localError ?: error)?.let {
                 Spacer(modifier = Modifier.height(12.dp))

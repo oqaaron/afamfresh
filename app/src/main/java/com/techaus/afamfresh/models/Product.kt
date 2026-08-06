@@ -32,7 +32,28 @@ data class Product(
     @SerializedName("description") val description: String? = null,
     @SerializedName("category") val category: String? = null,
     @SerializedName("price") val price: Double = 0.0,
+    /**
+     * The raw `items.image` column: a bare filename like "apple.png".
+     *
+     * Not loadable — Coil cannot resolve a relative name — which is why product
+     * images never rendered. Kept because it is still what the column holds;
+     * use [imageUrl] to display one.
+     */
     @SerializedName("image") val image: String? = null,
+
+    /**
+     * Absolute, loadable URL built server-side by `includes/product_image.php`.
+     *
+     * Null when the file is missing from disk, which is the case for most of
+     * the catalogue: the rows reference filenames that were never uploaded to
+     * this deployment. Null is the signal to draw a placeholder rather than
+     * retry a 404 on every scroll.
+     *
+     * Nullable with a null default, like every other field here — Gson skips
+     * the Kotlin constructor, so a non-null declaration would not survive an
+     * absent JSON key (e.g. against an older backend that predates this field).
+     */
+    @SerializedName("image_url") val imageUrl: String? = null,
 
     /** Numeric part of the pack size, e.g. "500" — VARCHAR(11) upstream. */
     @SerializedName("quantity") val quantity: String? = null,

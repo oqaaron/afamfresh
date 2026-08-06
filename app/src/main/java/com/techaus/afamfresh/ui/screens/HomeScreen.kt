@@ -266,7 +266,7 @@ private fun ProductGridCard(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             NetworkImage(
-                model = product.image,
+                model = product.imageUrl,
                 contentDescription = product.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

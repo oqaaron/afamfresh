@@ -13,6 +13,7 @@ import com.techaus.afamfresh.repository.NotificationRepository
 import com.techaus.afamfresh.repository.OrderRepository
 import com.techaus.afamfresh.repository.PaymentRepository
 import com.techaus.afamfresh.repository.ProductRepository
+import com.techaus.afamfresh.repository.RiderRepository
 import com.techaus.afamfresh.repository.SurplusRepository
 import com.techaus.afamfresh.repository.VendorRepository
 
@@ -66,6 +67,10 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
 
     private val notificationRepository = NotificationRepository(apiService)
 
+    // Takes a Context as well: proof-of-delivery photos are read and compressed
+    // through the ContentResolver before upload, like avatars.
+    private val riderRepository = RiderRepository(apiService, appContext)
+
     /** Exposed because DeliveryMapScreen takes it directly, not via a ViewModel. */
     val deliveryRepository = DeliveryRepository(apiService)
 
@@ -105,6 +110,14 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
 
             modelClass.isAssignableFrom(NotificationViewModel::class.java) ->
                 NotificationViewModel(notificationRepository)
+
+            modelClass.isAssignableFrom(RiderViewModel::class.java) ->
+                RiderViewModel(riderRepository)
+
+            // Talks to api/roles.php directly — there is no repository, because
+            // there is nothing to cache or transform.
+            modelClass.isAssignableFrom(RoleGateViewModel::class.java) ->
+                RoleGateViewModel(apiService)
 
             else -> throw IllegalArgumentException(
                 "AppViewModelFactory cannot build ${modelClass.name}. " +

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.CartItem
+import com.techaus.afamfresh.models.PaymentRequest
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.AddressViewModel
@@ -105,20 +106,27 @@ fun CheckoutScreen(
         ) { placed ->
             if (placed == null) return@placeOrder
 
-            if (paymentMethod == "cash") {
-                // No online payment step needed.
-                onOrderComplete()
-            } else {
-                paymentViewModel.initiatePayment(
-                    orderId = placed.orderId,
-                    amount = placed.total,
-                    email = email,
-                    phone = mobile,
-                    onRedirect = { paymentUrl, transactionId ->
-                        onPaymentRedirect(paymentUrl, transactionId)
-                    }
-                )
-            }
+            // Both branches go through initiatePayment now. Cash used to skip the
+            // server entirely, which left payment_status at its default instead of
+            // 'pending_cash' — so a cash order was indistinguishable from an
+            // unpaid card order in the admin views.
+            //
+            // No amount is passed: the server reads the payable total from the
+            // order row and ignores anything the client sends.
+            paymentViewModel.initiatePayment(
+                orderId = placed.orderId,
+                paymentMethod = if (paymentMethod == "cash") {
+                    PaymentRequest.METHOD_CASH
+                } else {
+                    PaymentRequest.METHOD_MOBILE_MONEY
+                },
+                email = email,
+                phone = mobile,
+                onCashAccepted = { onOrderComplete() },
+                onRedirect = { paymentUrl, transactionId ->
+                    onPaymentRedirect(paymentUrl, transactionId)
+                }
+            )
         }
     }
 

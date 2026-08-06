@@ -34,6 +34,12 @@ jobs:
         run: |
           gcloud builds submit --tag ${{ env.IMAGE }}
 
+      # Every credential the backend needs must be listed here. The PHP
+      # config reads them from the environment and no longer carries
+      # literal fallbacks, so a key missing from this line does not fall
+      # back to a working value — that integration comes up with an empty
+      # credential and fails at the first call. Adding a credential to
+      # env.yaml means adding it here and as a repository secret too.
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
@@ -41,4 +47,4 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER }},DB_PASS=${{ secrets.DB_PASS }},DB_NAME=${{ secrets.DB_NAME }}
+            --set-env-vars DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER }},DB_PASS=${{ secrets.DB_PASS }},DB_NAME=${{ secrets.DB_NAME }},PESAPAL_ENV=${{ secrets.PESAPAL_ENV }},PESAPAL_CONSUMER_KEY=${{ secrets.PESAPAL_CONSUMER_KEY }},PESAPAL_CONSUMER_SECRET=${{ secrets.PESAPAL_CONSUMER_SECRET }},PESAPAL_IPN_ID=${{ secrets.PESAPAL_IPN_ID }},PESAPAL_PUBLIC_BASE_URL=${{ secrets.PESAPAL_PUBLIC_BASE_URL }},BREVO_API_KEY=${{ secrets.BREVO_API_KEY }},TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
