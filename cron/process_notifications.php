@@ -1,0 +1,101 @@
+<?php
+// cron/process_notifications.php
+// Run this every minute via cron (or Task Scheduler on Windows)
+
+// Load configuration
+require_once __DIR__ . '/../admin/includes/config.php';
+require_once __DIR__ . '/../includes/classes/PushNotificationService.php';
+require_once __DIR__ . '/../includes/brevo-email.php';
+
+// Prevent multiple concurrent runs (lock file)
+$lockFile = __DIR__ . '/process_notifications.lock';
+if (file_exists($lockFile) && filemtime($lockFile) > time() - 60) {
+    // If lock file is less than 60 seconds old, another instance is running.
+    exit;
+}
+touch($lockFile);
+
+// Fetch up to 20 pending jobs
+$stmt = $dbh->prepare("
+    SELECT * FROM notification_queue 
+    WHERE status IN ('pending','failed') 
+      AND retries < max_retries 
+      AND (next_attempt_at IS NULL OR next_attempt_at <= NOW()) 
+    ORDER BY id ASC 
+    LIMIT 20
+");
+$stmt->execute();
+$jobs = $stmt->fetchAll();
+
+foreach ($jobs as $job) {
+    // Mark as processing to prevent duplicate pickup
+    $update = $dbh->prepare("UPDATE notification_queue SET status = 'processing', updated_at = NOW() WHERE id = ?");
+    $update->execute([$job['id']]);
+
+    $payload = json_decode($job['payload'], true);
+    $success = false;
+    $error = null;
+
+    try {
+        // Process based on channel
+        if ($job['channel'] === 'email' || $job['channel'] === 'both') {
+            $emailService = new BrevoEmailService();
+            $result = $emailService->send(
+                $payload['to'],
+                $payload['subject'],
+                $payload['htmlContent']
+            );
+            if ($result['success']) {
+                // Update user_notifications
+                $dbh->prepare("UPDATE user_notifications SET email_sent_at = NOW() WHERE id = ?")
+                   ->execute([$job['notification_id']]);
+            } else {
+                throw new Exception($result['error'] ?? 'Email delivery failed');
+            }
+        }
+
+        if ($job['channel'] === 'push' || $job['channel'] === 'both') {
+            $pushService = new PushNotificationService();
+            $sent = $pushService->send(
+                $payload['deviceToken'],
+                $payload['title'],
+                $payload['body'],
+                $payload['data'] ?? []
+            );
+            if ($sent) {
+                $dbh->prepare("UPDATE user_notifications SET push_sent_at = NOW() WHERE id = ?")
+                   ->execute([$job['notification_id']]);
+            } else {
+                throw new Exception('Push delivery failed');
+            }
+        }
+
+        $success = true;
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+
+    // Update job status
+    $status = $success ? 'sent' : 'failed';
+    $retries = $job['retries'] + 1;
+    $nextAttempt = ($retries < $job['max_retries']) 
+        ? date('Y-m-d H:i:s', strtotime("+" . pow(2, $retries) . " seconds")) 
+        : null;
+
+    $update = $dbh->prepare("
+        UPDATE notification_queue 
+        SET status = ?, retries = ?, next_attempt_at = ?, updated_at = NOW() 
+        WHERE id = ?
+    ");
+    $update->execute([$status, $retries, $nextAttempt, $job['id']]);
+
+    // If failed, log error to the notification record
+    if (!$success && $error) {
+        $errField = ($job['channel'] === 'email' || $job['channel'] === 'both') ? 'email_error' : 'push_error';
+        $dbh->prepare("UPDATE user_notifications SET $errField = ? WHERE id = ?")
+           ->execute([$error, $job['notification_id']]);
+    }
+}
+
+// Remove lock file
+unlink($lockFile);

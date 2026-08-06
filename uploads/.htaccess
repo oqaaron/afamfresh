@@ -1,0 +1,36 @@
+# =============================================================
+# uploads/ - serve files, never execute them
+# =============================================================
+# Everything under here is attacker-influenced by definition: it is
+# whatever users and admins uploaded. api/profile.php already refuses
+# anything that is not a real JPEG/PNG/WebP by sniffing the MIME
+# server-side, but admin/add-product.php still takes the stored
+# extension straight from the client-supplied filename with no check,
+# so a .php can reach this directory by that route.
+#
+# This file is the backstop: even if a script lands here, Apache must
+# hand it back as bytes rather than run it. It lives in uploads/ (owned
+# by the normal user, mode 644) rather than in avatars/, because
+# avatars/ has to be world-writable for Apache to save into it — and a
+# protection sitting inside a world-writable directory can be replaced
+# by anything that can write there.
+# =============================================================
+
+# Neutralise every handler that could execute. RemoveHandler alone is
+# not enough: a mod_php AddType mapping would still fire.
+<FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|sh|shtml)$">
+    Require all denied
+</FilesMatch>
+
+RemoveHandler .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+RemoveType .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+AddType text/plain .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+
+php_flag engine off
+
+# This Apache build's mime.types predates WebP, so .webp was served with no
+# Content-Type at all. The uploader accepts WebP, so declare it.
+AddType image/webp .webp
+
+# Nothing here should ever be interpreted as a directory listing either.
+Options -Indexes -ExecCGI

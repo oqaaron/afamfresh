@@ -1,0 +1,487 @@
+<?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+session_start();
+require_once '../admin/includes/config.php';
+// getUserRolesData() and buildUserPayload() live here so profile.php can use
+// them too. Every branch below that returns a user goes through
+// buildUserPayload(), which is what guarantees 'roles' is always present —
+// see the note in that file for why a missing key is a crash, not a nicety.
+require_once __DIR__ . '/../includes/user_payload.php';
+// One account, one purpose: see the header of this file for why the implicit
+// customer baseline had to go.
+require_once __DIR__ . '/../includes/account_type.php';
+header('Content-Type: application/json');
+
+$action = $_GET['action'] ?? '';
+
+// Helper: generate a unique token (session ID or random)
+function generateToken() {
+    return bin2hex(random_bytes(32));
+}
+
+// ============================================================
+// ACTION: LOGIN
+// ============================================================
+if ($action == 'login') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $email = trim($input['email'] ?? '');
+    $password = $input['password'] ?? '';
+    // Which app is asking. Absent for installs that predate the split, which
+    // are all Customer installs — hence the default.
+    $appType = accountTypeForAppRole($input['app_role'] ?? 'customer') ?? 'customer';
+
+    try {
+        $stmt = $dbh->prepare("SELECT id, fname, lname, email, mobile, password, account_type FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user && password_verify($password, $user['password'])) {
+            // Right password, wrong app. Refused here rather than after
+            // sign-in, so the person is told plainly instead of landing in a
+            // workspace that then fails every call.
+            //
+            // Checked AFTER the password so this cannot be used to discover
+            // which addresses are registered as riders.
+            if ($user['account_type'] !== $appType) {
+                echo json_encode([
+                    'success' => false,
+                    'error'   => 'This is ' . accountTypeLabel($user['account_type'])
+                               . ", so it can't be used in this app. "
+                               . 'Please use the AfamFresh app for that account.',
+                ]);
+                exit;
+            }
+
+            $token = generateToken();
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['fname'] . ' ' . $user['lname'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['auth_token'] = $token;
+
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'user' => buildUserPayload($dbh, $user['id'])
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
+        }
+    } catch (PDOException $e) {
+        error_log("Login DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: REGISTER
+// ============================================================
+if ($action == 'register') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $name = trim($input['name'] ?? '');
+    $email = trim($input['email'] ?? '');
+    $password = $input['password'] ?? '';
+    $mobile = trim($input['mobile'] ?? '');
+    $role = trim($input['role'] ?? 'user');
+    
+    $nameParts = explode(' ', $name, 2);
+    $fname = $nameParts[0] ?? '';
+    $lname = $nameParts[1] ?? '';
+    
+    try {
+        // Check if email already exists
+        $checkStmt = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        $checkStmt->execute([$email]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['success' => false, 'error' => 'Email already registered']);
+            exit;
+        }
+        
+        // What the account is FOR, decided once, here. `role` is the app's
+        // BuildConfig.APP_ROLE — the Rider app sends "rider", the Customer app
+        // "user". It used to be read and then ignored, which is how every
+        // account ended up being a customer that could also do anything else.
+        $accountType = accountTypeForAppRole($role) ?? 'customer';
+
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $dbh->prepare("INSERT INTO users (fname, lname, email, password, mobile, area, address, account_type, `current_role`) VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', ?, ?)");
+        $result = $stmt->execute([
+            $fname, $lname, $email, $hashedPassword, $mobile,
+            $accountType,
+            // current_role mirrors the account type so the payload cannot
+            // contradict it. `current_role` is a MariaDB reserved word.
+            $accountType === 'customer' ? 'user' : $accountType,
+        ]);
+
+        if ($result) {
+            $userId = $dbh->lastInsertId();
+
+            // A customer is usable immediately. A rider or vendor is NOT: they
+            // get no user_roles row here, so the workspace stays locked until
+            // an admin approves the request they file from the pending screen
+            // (api/roles.php -> admin/role-requests.php).
+            if ($accountType === 'customer') {
+                $dbh->prepare(
+                    "INSERT INTO user_roles (user_id, role, status) VALUES (?, 'user', 'active')
+                     ON DUPLICATE KEY UPDATE status = 'active'"
+                )->execute([$userId]);
+            }
+            $token = generateToken();
+            $_SESSION['user_id'] = $userId;
+            $_SESSION['user_name'] = $name;
+            $_SESSION['user_email'] = $email;
+            $_SESSION['auth_token'] = $token;
+            
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'message' => 'Registration successful',
+                'user' => buildUserPayload($dbh, $userId)
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Registration failed']);
+        }
+    } catch (PDOException $e) {
+        error_log("Register DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: SWITCH ROLE
+// ============================================================
+// The Android app has declared ApiService.switchRole against this action
+// since the beginning, but the action did not exist — so AuthRepository
+// short-circuited and wrote the new role to SharedPreferences only. The
+// server never knew, which meant the choice was per-device, invisible to
+// the backend, and silently reverted the moment anything re-read the user
+// from the server.
+//
+// Only a role the user actually holds (an ACTIVE row in user_roles) is
+// accepted: current_role is what the app uses to decide which screens to
+// show, so letting a client set it freely would be self-granted access to
+// the vendor and rider surfaces.
+if ($action == 'switch_role') {
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'error' => 'Not logged in']);
+        exit;
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+    $role = trim($input['role'] ?? $_POST['role'] ?? $_GET['role'] ?? '');
+
+    if ($role === '') {
+        echo json_encode(['success' => false, 'error' => 'No role supplied.']);
+        exit;
+    }
+
+    try {
+        $check = $dbh->prepare(
+            "SELECT 1 FROM user_roles WHERE user_id = ? AND role = ? AND status = 'active'"
+        );
+        $check->execute([$_SESSION['user_id'], $role]);
+
+        // 'user' is every account's implicit baseline: registration does not
+        // always write a user_roles row, so requiring one here would stop
+        // people switching back to the customer view.
+        if (!$check->fetch() && $role !== 'user') {
+            echo json_encode(['success' => false, 'error' => "You don't have access to that role."]);
+            exit;
+        }
+
+        $stmt = $dbh->prepare("UPDATE users SET `current_role` = ? WHERE id = ?");
+        $stmt->execute([$role, $_SESSION['user_id']]);
+
+        echo json_encode([
+            'success' => true,
+            'current_role' => $role,
+            'user' => buildUserPayload($dbh, $_SESSION['user_id'])
+        ]);
+    } catch (PDOException $e) {
+        // current_role is an ENUM, so an unknown value is rejected by the
+        // column itself as well as by the check above.
+        error_log("Switch role error for user {$_SESSION['user_id']}: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Could not switch role.']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: GET CURRENT USER
+// ============================================================
+if ($action == 'me') {
+    if (isset($_SESSION['user_id'])) {
+        try {
+            $payload = buildUserPayload($dbh, $_SESSION['user_id']);
+            if ($payload) {
+                echo json_encode(['success' => true, 'user' => $payload]);
+            } else {
+                echo json_encode(['success' => false, 'error' => 'User not found']);
+            }
+        } catch (PDOException $e) {
+            error_log("GetUser DB error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => 'Database error']);
+        }
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Not logged in']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: LOGOUT
+// ============================================================
+if ($action == 'logout') {
+    if (!empty($_SESSION['user_id'])) {
+        // Stop pushes from targeting a device that just signed out —
+        // an FCM token is per-install and outlives the session otherwise.
+        $clearStmt = $dbh->prepare("UPDATE users SET fcm_token = NULL WHERE id = ?");
+        $clearStmt->execute([$_SESSION['user_id']]);
+    }
+    session_destroy();
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+// ============================================================
+// ACTION: GOOGLE LOGIN (FIXED – supports JSON, POST, GET)
+// ============================================================
+if ($action == 'google_login') {
+    // --- Try to get id_token from multiple sources ---
+    $idToken = null;
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (isset($input['id_token'])) {
+        $idToken = trim($input['id_token']);
+    }
+    if (empty($idToken) && isset($_POST['id_token'])) {
+        $idToken = trim($_POST['id_token']);
+    }
+    if (empty($idToken) && isset($_GET['id_token'])) {
+        $idToken = trim($_GET['id_token']);
+    }
+    
+    if (empty($idToken)) {
+        echo json_encode(['success' => false, 'error' => 'ID token missing']);
+        exit;
+    }
+    
+    // Verify the ID token with Google
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://oauth2.googleapis.com/tokeninfo?id_token=$idToken");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // remove in production
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        error_log("Google tokeninfo failed, HTTP: $httpCode, response: $response");
+        echo json_encode(['success' => false, 'error' => 'Invalid ID token']);
+        exit;
+    }
+    
+    $userInfo = json_decode($response, true);
+    $google_id = $userInfo['sub'] ?? null;
+    $email = $userInfo['email'] ?? null;
+    $name = $userInfo['name'] ?? null;
+    $picture = $userInfo['picture'] ?? null;
+    
+    // --- Security Check: Verify audience (aud) matches our Web Client ID ---
+    $expectedAud = '953128851253-cs9l26qrflpi6rd24ulo0emsplrjf8f7.apps.googleusercontent.com';
+    if (isset($userInfo['aud']) && $userInfo['aud'] !== $expectedAud) {
+        error_log("Google Sign-In: Invalid audience. Expected: $expectedAud, Got: " . ($userInfo['aud'] ?? 'null'));
+        echo json_encode(['success' => false, 'error' => 'Invalid token audience']);
+        exit;
+    }
+    
+    if (!$google_id || !$email) {
+        error_log("Google Sign-In: Missing google_id or email from token info");
+        echo json_encode(['success' => false, 'error' => 'Failed to extract user info']);
+        exit;
+    }
+    
+    try {
+        // Check if user exists by google_id or email
+        $stmt = $dbh->prepare("SELECT * FROM users WHERE google_id = ? OR email = ?");
+        $stmt->execute([$google_id, $email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($user) {
+            // If user exists but no google_id, update it
+            if (empty($user['google_id'])) {
+                $updateStmt = $dbh->prepare("UPDATE users SET google_id = ?, google_picture = ? WHERE id = ?");
+                $updateStmt->execute([$google_id, $picture, $user['id']]);
+            }
+            // Login the user
+            $token = generateToken();
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['fname'] . ' ' . $user['lname'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['auth_token'] = $token;
+            
+            echo json_encode([
+                'success' => true,
+                'token' => $token,
+                'user' => buildUserPayload($dbh, $user['id'])
+            ]);
+        } else {
+            // Create new user
+            $fname = explode(' ', $name)[0] ?? '';
+            $lname = implode(' ', array_slice(explode(' ', $name), 1)) ?? '';
+            $insertStmt = $dbh->prepare("
+                INSERT INTO users (fname, lname, email, google_id, google_picture, area, address, mobile) 
+                VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', ?)
+            ");
+            // Set mobile to NULL (if column allows NULL) or an empty string
+            $mobile = null; // Let database use default NULL
+            $result = $insertStmt->execute([$fname, $lname, $email, $google_id, $picture, $mobile]);
+            
+            if ($result) {
+                $userId = $dbh->lastInsertId();
+                $token = generateToken();
+                $_SESSION['user_id'] = $userId;
+                $_SESSION['user_name'] = $name;
+                $_SESSION['user_email'] = $email;
+                $_SESSION['auth_token'] = $token;
+                
+                echo json_encode([
+                    'success' => true,
+                    'token' => $token,
+                    'user' => buildUserPayload($dbh, $userId)
+                ]);
+            } else {
+                $errorInfo = $insertStmt->errorInfo();
+                error_log("Google Sign-Up INSERT failed: " . print_r($errorInfo, true));
+                echo json_encode(['success' => false, 'error' => 'Registration failed: ' . $errorInfo[2]]);
+            }
+        }
+    } catch (PDOException $e) {
+        error_log("Google Sign-In DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: FORGOT PASSWORD (REQUEST RESET)
+// ============================================================
+if ($action == 'forgot_password') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if ($input !== null) {
+        $email = trim($input['email'] ?? '');
+    } else {
+        $email = trim($_POST['email'] ?? '');
+    }
+    
+    if (!$email) {
+        echo json_encode(['success' => false, 'message' => 'Email address required']);
+        exit;
+    }
+
+    // Always report success regardless of whether the email is registered —
+    // an error here would let a caller test which addresses have accounts.
+    try {
+        $stmt = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user) {
+            $rawToken = bin2hex(random_bytes(32));
+            $hashedToken = hash('sha256', $rawToken);
+            $expiry = date('Y-m-d H:i:s', strtotime('+30 minutes'));
+
+            $updateStmt = $dbh->prepare("UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?");
+            $updateStmt->execute([$hashedToken, $expiry, $user['id']]);
+
+            // Must be the app's deep link, not a web URL — the app only
+            // registers an intent filter for <scheme>://reset-password.
+            //
+            // The scheme is per-app: Customer, Rider and Vendor are separate
+            // installs, and if all three claimed "afamfresh" then tapping a
+            // reset link would raise an app-chooser instead of opening the app
+            // that asked for it. The caller supplies its scheme, checked
+            // against a fixed list so a request cannot inject an arbitrary URL
+            // into an email we send on the user's behalf.
+            // Read from JSON or the form body, the same way $email is read
+            // above — the app posts this action form-encoded, so $input is null.
+            $requestedScheme = trim((string)($input['scheme'] ?? $_POST['scheme'] ?? ''));
+            $allowedSchemes  = ['afamfresh', 'afamfresh-rider', 'afamfresh-vendor'];
+            $scheme = in_array($requestedScheme, $allowedSchemes, true)
+                ? $requestedScheme
+                : 'afamfresh';   // installs predating this send nothing
+
+            $resetLink = "$scheme://reset-password?token=$rawToken";
+            $subject = "AfamFresh Password Reset";
+            $message = "Hello,\n\nYou requested a password reset for your AfamFresh account.\n\n";
+            $message .= "Open this link on your phone to reset your password:\n$resetLink\n\n";
+            $message .= "This link will expire in 30 minutes.\n\nIf you did not request this, please ignore this email.";
+            $headers = "From: noreply@afam.techaus.online\r\n";
+            mail($email, $subject, $message, $headers);
+        }
+
+        echo json_encode(['success' => true]);
+    } catch (PDOException $e) {
+        error_log("Forgot password DB error: " . $e->getMessage());
+        // Still report success — a DB error must not leak account existence either,
+        // and the client has no useful action to take on a raw error here.
+        echo json_encode(['success' => true]);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: RESET PASSWORD (WITH TOKEN)
+// ============================================================
+if ($action == 'reset_password') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if ($input !== null) {
+        $token = trim($input['token'] ?? '');
+        $newPassword = $input['password'] ?? '';
+    } else {
+        $token = trim($_POST['token'] ?? '');
+        $newPassword = $_POST['password'] ?? '';
+    }
+    
+    if (!$token || !$newPassword) {
+        echo json_encode(['success' => false, 'message' => 'Token and new password required']);
+        exit;
+    }
+    
+    if (strlen($newPassword) < 6) {
+        echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters']);
+        exit;
+    }
+    
+    try {
+        $hashedToken = hash('sha256', $token);
+        $stmt = $dbh->prepare("SELECT id FROM users WHERE reset_token = ? AND reset_token_expiry > NOW()");
+        $stmt->execute([$hashedToken]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$user) {
+            echo json_encode(['success' => false, 'message' => 'Link expired or already used']);
+            exit;
+        }
+        
+        $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
+        $update = $dbh->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?");
+        $update->execute([$hashed, $user['id']]);
+        
+        echo json_encode(['success' => true, 'message' => 'Password reset successfully']);
+    } catch (PDOException $e) {
+        error_log("Reset password DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error']);
+    }
+    exit;
+}
+
+// ============================================================
+// DEFAULT: INVALID ACTION
+// ============================================================
+echo json_encode(['success' => false, 'error' => 'Invalid action']);
+exit;
+?>

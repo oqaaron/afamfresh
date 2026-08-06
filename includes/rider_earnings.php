@@ -1,0 +1,104 @@
+<?php
+// =============================================================
+// includes/rider_earnings.php
+//
+// What a rider earns per delivery, and how it gets credited.
+//
+// Riders are paid from the MILEAGE component of delivery_fee only —
+// not the service fee, insurance, or processing fee, which cover the
+// platform's own costs. AfamFresh retains RIDER_COMMISSION_RATE of
+// that mileage amount; the rest is the rider's net earning.
+//
+// orders.mileage_fee is what was actually quoted at order time (see
+// api/orders.php's create action). For orders placed before that
+// column existed, mileageFeeFor() recomputes an ESTIMATE from the
+// order's stored dest_lat/dest_lng using the same Haversine distance
+// and tiered per-km rate calculateDeliveryFee() uses — flagged with
+// is_estimated so it is never presented as exact.
+// =============================================================
+
+require_once __DIR__ . '/delivery-fee.php';
+
+/** Percentage of the mileage fee retained by AfamFresh. */
+define('RIDER_COMMISSION_RATE', 10.00);
+
+/**
+ * The mileage fee for one order: the persisted value if there is one,
+ * otherwise a Haversine-based estimate from stored coordinates.
+ *
+ * @return array{amount: float, estimated: bool}|null null when neither
+ *         a persisted value nor coordinates to estimate from exist.
+ */
+function mileageFeeFor($dbh, $orderId) {
+    $stmt = $dbh->prepare(
+        "SELECT mileage_fee, total_amount, dest_lat, dest_lng FROM orders WHERE orderid = ?"
+    );
+    $stmt->execute([$orderId]);
+    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$order) {
+        return null;
+    }
+
+    if ($order['mileage_fee'] !== null) {
+        return ['amount' => (float)$order['mileage_fee'], 'estimated' => false];
+    }
+
+    if ($order['dest_lat'] === null || $order['dest_lng'] === null) {
+        return null;
+    }
+
+    $officeLat = defined('OFFICE_LAT') ? OFFICE_LAT : 0.38082497218633615;
+    $officeLng = defined('OFFICE_LNG') ? OFFICE_LNG : 32.65071116168179;
+    $distance = calculateDistance($officeLat, $officeLng, (float)$order['dest_lat'], (float)$order['dest_lng']);
+    $breakdown = calculateDeliveryFee((float)$order['total_amount'], $distance);
+
+    return ['amount' => (float)$breakdown['distance_fee'], 'estimated' => true];
+}
+
+/**
+ * Credits a rider for a completed delivery, if not already credited.
+ *
+ * Idempotent via the UNIQUE key on rider_earnings.order_id — calling this
+ * twice for the same order (e.g. a retried request) does not double-pay.
+ *
+ * @return array{ok: bool, error: ?string}
+ */
+function creditRiderEarnings($dbh, $riderId, $orderId) {
+    $existing = $dbh->prepare("SELECT id FROM rider_earnings WHERE order_id = ?");
+    $existing->execute([$orderId]);
+    if ($existing->fetchColumn()) {
+        return ['ok' => true, 'error' => null];
+    }
+
+    $fee = mileageFeeFor($dbh, $orderId);
+    if ($fee === null) {
+        // Nothing to estimate from. Logged rather than failing the delivery
+        // itself — the rider still completed the job, they just cannot be
+        // paid for this specific order until someone reconciles it.
+        error_log("creditRiderEarnings: no mileage fee available for order $orderId (rider $riderId)");
+        return ['ok' => false, 'error' => 'No mileage fee could be determined for this order.'];
+    }
+
+    $commission = round($fee['amount'] * (RIDER_COMMISSION_RATE / 100), 2);
+    $net = round($fee['amount'] - $commission, 2);
+
+    try {
+        $dbh->prepare(
+            "INSERT INTO rider_earnings
+                (rider_id, order_id, mileage_fee, commission_rate, commission_amount, net_earnings, is_estimated)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([
+            $riderId, $orderId, $fee['amount'], RIDER_COMMISSION_RATE, $commission, $net,
+            $fee['estimated'] ? 1 : 0,
+        ]);
+        return ['ok' => true, 'error' => null];
+    } catch (PDOException $e) {
+        // 23000 here means a concurrent request won the same UNIQUE(order_id)
+        // race — not a real failure, the order is credited either way.
+        if ($e->getCode() === '23000') {
+            return ['ok' => true, 'error' => null];
+        }
+        error_log("creditRiderEarnings failed for order $orderId: " . $e->getMessage());
+        return ['ok' => false, 'error' => 'Could not record earnings for this delivery.'];
+    }
+}
