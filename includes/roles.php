@@ -191,7 +191,12 @@ function removeRoleFromUser($userId, $role) {
         
         // If the removed role was the current role, switch back to 'user'
         if ($result) {
-            $currentRoleStmt = $dbh->prepare("SELECT current_role FROM users WHERE id = :user_id");
+            // Backticked deliberately: MariaDB parses a bare `current_role` in
+            // a SELECT list as the built-in CURRENT_ROLE() function, which
+            // returns NULL for a normal connection instead of reading the
+            // column. Unquoted, the comparison below never matched and a
+            // revoked role was never reset to 'user'.
+            $currentRoleStmt = $dbh->prepare("SELECT `current_role` FROM users WHERE id = :user_id");
             $currentRoleStmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
             $currentRoleStmt->execute();
             $currentRole = $currentRoleStmt->fetchColumn();
