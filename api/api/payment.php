@@ -1,0 +1,333 @@
+<?php
+/**
+ * api/payment.php — Pesapal payment initiation and verification.
+ *
+ * WHAT THIS REPLACES
+ *
+ * The previous version was a skeleton. `initiate` contained the comment "copy
+ * your full Pesapal code here – I've omitted it for brevity" followed by a
+ * hardcoded response with the literal string 'PESAPAL_TRACKING_ID' and a
+ * payment_url of 'https://pay.pesapal.com/...'. `verify` returned
+ * {"success":true,"status":"completed"} unconditionally — so any caller could
+ * have an order reported as paid without a shilling moving.
+ *
+ * TWO RULES THIS FILE ENFORCES
+ *
+ * 1. The amount is read from the `orders` row, never from the request. The
+ *    client used to send `amount`, which meant a customer could pay 100 UGX for
+ *    a 100,000 UGX order by editing one field. Same class of bug as orders.php
+ *    trusting `delivery_cost`.
+ *
+ * 2. Paid/unpaid is decided only by Pesapal's GetTransactionStatus. See
+ *    includes/pesapal.php for why that matters.
+ */
+
+session_start();
+require_once '../admin/includes/config.php';
+require_once '../includes/pesapal.php';
+header('Content-Type: application/json');
+
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
+// ---------------------------------------------------------------------------
+// Input helpers
+// ---------------------------------------------------------------------------
+$raw  = file_get_contents('php://input');
+$json = json_decode($raw, true);
+
+function param($key, $default = null) {
+    global $json;
+    if (is_array($json) && isset($json[$key])) return $json[$key];
+    if (isset($_POST[$key])) return $_POST[$key];
+    if (isset($_GET[$key]))  return $_GET[$key];
+    return $default;
+}
+
+function reply(array $payload, int $httpCode = 200) {
+    http_response_code($httpCode);
+    echo json_encode($payload);
+    exit;
+}
+
+function fail(string $message, int $httpCode = 200, ?string $code = null) {
+    $body = ['success' => false, 'error' => $message];
+    if ($code !== null) $body['error_code'] = $code;
+    reply($body, $httpCode);
+}
+
+$action = param('action');
+if (!$action && preg_match('#/payment/([a-z-]+)#', $_SERVER['REQUEST_URI'] ?? '', $m)) {
+    $action = $m[1];
+}
+if (!$action) fail('Missing action parameter');
+
+// Every action below concerns one customer's own order.
+$userId = $_SESSION['user_id'] ?? null;
+if (!$userId) fail('Not logged in', 401, 'UNAUTHENTICATED');
+
+/**
+ * Loads an order belonging to the signed-in user.
+ *
+ * user_id sits in the WHERE clause deliberately: order ids come from
+ * `500000 + rand(100,999)`, a 900-wide space that is trivial to enumerate, so
+ * ownership can never be inferred from the id alone.
+ */
+function loadOwnedOrder(PDO $dbh, int $orderId, int $userId): array {
+    $stmt = $dbh->prepare("
+        SELECT orderid, user_id, total_amount, payment_status, status,
+               pesapal_tracking_id, fname, lname, mobile, address, area
+        FROM orders
+        WHERE orderid = ? AND user_id = ?
+    ");
+    $stmt->execute([$orderId, $userId]);
+    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+    return $order;
+}
+
+function loadUserEmail(PDO $dbh, int $userId): string {
+    $stmt = $dbh->prepare("SELECT email FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    return (string)($stmt->fetchColumn() ?: '');
+}
+
+/**
+ * Applies a resolved Pesapal status to the order, once.
+ *
+ * Idempotent: an order already 'paid' is never rewritten, so a late IPN or a
+ * duplicate verify cannot flip a settled payment back to failed.
+ */
+function applyPaymentStatus(PDO $dbh, int $orderId, string $mapped, ?string $trackingId): void {
+    $current = $dbh->prepare("SELECT payment_status FROM orders WHERE orderid = ?");
+    $current->execute([$orderId]);
+    if (strcasecmp((string)$current->fetchColumn(), 'paid') === 0) {
+        return;
+    }
+
+    if ($mapped === 'paid') {
+        $stmt = $dbh->prepare("
+            UPDATE orders
+            SET payment_status = 'paid',
+                payment_captured_at = NOW(),
+                status = CASE WHEN status IN ('Awaiting Payment', 'Pending')
+                              THEN 'Received' ELSE status END,
+                pesapal_tracking_id = COALESCE(?, pesapal_tracking_id)
+            WHERE orderid = ?
+        ");
+        $stmt->execute([$trackingId, $orderId]);
+        return;
+    }
+
+    // Leave 'pending' alone rather than overwriting an in-flight attempt.
+    if ($mapped === 'pending') return;
+
+    $stmt = $dbh->prepare("
+        UPDATE orders
+        SET payment_status = ?, pesapal_tracking_id = COALESCE(?, pesapal_tracking_id)
+        WHERE orderid = ?
+    ");
+    $stmt->execute([$mapped, $trackingId, $orderId]);
+}
+
+$pesapal = new PesapalClient();
+
+switch ($action) {
+
+    // -----------------------------------------------------------------------
+    case 'initiate':
+    // -----------------------------------------------------------------------
+        $orderId = (int)param('order_id', 0);
+        if ($orderId <= 0) fail('order_id is required', 400, 'BAD_REQUEST');
+
+        $order = loadOwnedOrder($dbh, $orderId, (int)$userId);
+
+        // Already settled — do not send the customer to a payment page again.
+        if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
+            reply([
+                'success'  => true,
+                'status'   => 'paid',
+                'paid'     => true,
+                'order_id' => (string)$orderId,
+                'message'  => 'This order is already paid.',
+            ]);
+        }
+
+        // RULE 1: the amount is the stored order total. Any `amount` in the
+        // request is deliberately ignored.
+        $amount = (float)$order['total_amount'];
+        if ($amount <= 0) {
+            fail('This order has no payable total.', 409, 'INVALID_AMOUNT');
+        }
+
+        $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
+
+        // Cash on delivery never touches Pesapal.
+        if ($paymentMethod === 'cash') {
+            $stmt = $dbh->prepare("
+                UPDATE orders
+                SET payment_status = 'pending_cash',
+                    status = CASE WHEN status = 'Awaiting Payment'
+                                  THEN 'Received' ELSE status END
+                WHERE orderid = ? AND user_id = ?
+            ");
+            $stmt->execute([$orderId, $userId]);
+
+            reply([
+                'success'  => true,
+                'status'   => 'pending_cash',
+                'paid'     => false,
+                'order_id' => (string)$orderId,
+                'amount'   => $amount,
+                'currency' => CURRENCY,
+                'message'  => 'Pay with cash when your order arrives.',
+            ]);
+        }
+
+        // A fresh merchant reference per attempt. Reusing the bare order id makes
+        // Pesapal return the earlier (possibly failed) transaction instead of
+        // opening a new one, which strands the customer on a dead page.
+        $merchantReference = $orderId . '-' . time();
+
+        try {
+            $result = $pesapal->submitOrder(
+                $merchantReference,
+                $amount,
+                'AfamFresh order #' . $orderId,
+                [
+                    'email'      => (string)param('email', '') ?: loadUserEmail($dbh, (int)$userId),
+                    'phone'      => (string)param('phone', '') ?: (string)$order['mobile'],
+                    'first_name' => (string)$order['fname'],
+                    'last_name'  => (string)$order['lname'],
+                    'address'    => (string)$order['address'],
+                    'city'       => (string)$order['area'],
+                ]
+            );
+        } catch (PesapalException $e) {
+            error_log("Pesapal initiate failed for order $orderId: " . $e->getMessage());
+            // Detail goes to the log; the customer gets a safe message.
+            fail('We could not start the payment. Please try again in a moment.',
+                 502, 'PESAPAL_UNAVAILABLE');
+        }
+
+        // Store the tracking id BEFORE replying, so an IPN arriving while the
+        // customer is still on the payment page can be matched to this order.
+        $stmt = $dbh->prepare("
+            UPDATE orders
+            SET pesapal_tracking_id = ?,
+                payment_authorization_id = ?,
+                payment_status = 'authorization_pending',
+                payment_authorized_at = NOW()
+            WHERE orderid = ? AND user_id = ?
+        ");
+        $stmt->execute([$result['order_tracking_id'], $merchantReference, $orderId, $userId]);
+
+        reply([
+            'success'        => true,
+            'status'         => 'pending',
+            'paid'           => false,
+            'order_id'       => (string)$orderId,
+            'amount'         => $amount,
+            'currency'       => CURRENCY,
+            // Both keys carry the same value: the Android app reads
+            // redirect_url, older web code reads payment_url.
+            'redirect_url'   => $result['redirect_url'],
+            'payment_url'    => $result['redirect_url'],
+            'transaction_id' => $result['order_tracking_id'],
+            'environment'    => PESAPAL_ENV,
+        ]);
+        break;
+
+    // -----------------------------------------------------------------------
+    case 'verify':
+    case 'status':
+    // -----------------------------------------------------------------------
+        // Accepts a tracking id or an order id: the app knows the order, the
+        // WebView callback knows the tracking id.
+        $trackingId = trim((string)param('transaction_id', param('order_tracking_id', '')));
+        $orderId    = (int)param('order_id', 0);
+
+        if ($trackingId === '' && $orderId <= 0) {
+            fail('transaction_id or order_id is required', 400, 'BAD_REQUEST');
+        }
+
+        if ($orderId > 0) {
+            $order = loadOwnedOrder($dbh, $orderId, (int)$userId);
+            if ($trackingId === '') $trackingId = (string)$order['pesapal_tracking_id'];
+        } else {
+            // Resolve the order from the tracking id, still scoped to this user.
+            $stmt = $dbh->prepare(
+                "SELECT orderid FROM orders WHERE pesapal_tracking_id = ? AND user_id = ?"
+            );
+            $stmt->execute([$trackingId, $userId]);
+            $orderId = (int)($stmt->fetchColumn() ?: 0);
+            if ($orderId === 0) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+            $order = loadOwnedOrder($dbh, $orderId, (int)$userId);
+        }
+
+        // Cash orders have no Pesapal transaction to check.
+        if (strcasecmp((string)$order['payment_status'], 'pending_cash') === 0) {
+            reply([
+                'success'  => true,
+                'status'   => 'pending_cash',
+                'paid'     => false,
+                'order_id' => (string)$orderId,
+                'message'  => 'This order will be paid in cash on delivery.',
+            ]);
+        }
+
+        // Already reconciled — no need to ask Pesapal again.
+        if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
+            reply([
+                'success'  => true,
+                'status'   => 'paid',
+                'paid'     => true,
+                'order_id' => (string)$orderId,
+                'transaction_id' => $trackingId ?: null,
+            ]);
+        }
+
+        if ($trackingId === '') {
+            reply([
+                'success'  => true,
+                'status'   => 'pending',
+                'paid'     => false,
+                'order_id' => (string)$orderId,
+                'message'  => 'No payment has been started for this order yet.',
+            ]);
+        }
+
+        try {
+            $status = $pesapal->getTransactionStatus($trackingId);
+        } catch (PesapalException $e) {
+            error_log("Pesapal verify failed for order $orderId: " . $e->getMessage());
+            // Deliberately NOT reporting 'failed': we do not know the outcome,
+            // and telling the app it failed could show a paying customer an
+            // error and invite a double payment.
+            fail('We could not confirm the payment yet. Please try again shortly.',
+                 502, 'VERIFY_UNAVAILABLE');
+        }
+
+        $mapped = $pesapal->mapStatus($status);
+        applyPaymentStatus($dbh, $orderId, $mapped, $trackingId);
+
+        reply([
+            'success'        => true,
+            'status'         => $mapped,
+            'paid'           => $mapped === 'paid',
+            'order_id'       => (string)$orderId,
+            'transaction_id' => $trackingId,
+            'amount'         => isset($status['amount'])
+                                    ? (float)$status['amount']
+                                    : (float)$order['total_amount'],
+            'currency'       => $status['currency'] ?? CURRENCY,
+            'method'         => $status['payment_method'] ?? null,
+            'description'    => $status['payment_status_description'] ?? null,
+        ]);
+        break;
+
+    // -----------------------------------------------------------------------
+    default:
+        fail('Invalid action');
+}

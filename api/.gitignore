@@ -1,0 +1,31 @@
+# Real credentials — DB, Pesapal, SMTP, Firebase.
+# env.yaml.example is tracked and documents the required keys.
+env.yaml
+
+# User-uploaded content. The folders themselves are tracked (via .gitkeep) so a
+# fresh deploy has somewhere to write, and uploads/.htaccess is real config —
+# but nothing anyone uploaded belongs in git.
+uploads/**
+!uploads/**/
+!uploads/.htaccess
+!uploads/*/.gitkeep
+
+# Firebase service account / any stray key material
+*.json.key
+service-account*.json
+*.pem
+*.p12
+*.key
+
+# Logs and local scratch
+*.log
+error_log
+php_errors.log
+*.bak
+*.orig
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db

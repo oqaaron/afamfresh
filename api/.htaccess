@@ -1,0 +1,45 @@
+# =============================================================
+# AfamFresh - block non-servable files
+# =============================================================
+# The app lives in a subdirectory of htdocs with no vhost, so every
+# file under it is reachable over HTTP by default. Verified: a .yaml
+# file placed here is returned with HTTP 200 and its contents in
+# plain text. Everything below closes that off.
+#
+# This depends on AllowOverride being enabled (it is under XAMPP's
+# default htdocs config). On a server where it is not — or on nginx —
+# these rules are silently ignored, so keep env.yaml outside the
+# document root there and point AFAMFRESH_ENV_FILE at it.
+# =============================================================
+
+# Anything named env.* — the credentials file and every variant of it.
+# Matching the prefix rather than the extension is deliberate: editors
+# leave env.yaml~, env.yaml.save and env.yaml.bak behind, and an
+# extension rule sails straight past all three while they sit in the
+# web root containing the same secrets.
+<FilesMatch "^env\.">
+    Require all denied
+</FilesMatch>
+
+# Credentials, dumps, backups, and anything else that is data rather
+# than a page. .bak/.sql matter because working copies of config and
+# database dumps have a way of ending up next to the code.
+<FilesMatch "\.(yaml|yml|env|bak|sql|ini|log|save|swp|orig)$|~$">
+    Require all denied
+</FilesMatch>
+
+# Source files that are not pages. An ApiService.kt copied into api/ was
+# served with HTTP 200 and handed the whole endpoint list to anyone who
+# guessed the name; nothing here is meant to be fetched, and the only
+# non-PHP file this app actually serves is admin-dashboard.html.
+<FilesMatch "\.(kt|java|kts|gradle|py|rb|sh|pl|json|md|txt|lock|dist|conf|pem|key|crt|p12|jks|keystore)$">
+    Require all denied
+</FilesMatch>
+
+# Dotfiles: .env, .git/, .htpasswd, editor leftovers.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Never list a directory that has no index file.
+Options -Indexes
