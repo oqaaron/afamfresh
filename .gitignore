@@ -1,6 +1,8 @@
 # Real credentials — DB, Pesapal, SMTP, Firebase.
 # env.yaml.example is tracked and documents the required keys.
 env.yaml
+# Generated deployment environment — same secrets, different shape.
+render.env
 
 # User-uploaded content. The folders themselves are tracked (via .gitkeep) so a
 # fresh deploy has somewhere to write, and uploads/.htaccess is real config —
