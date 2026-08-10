@@ -1,50 +1,107 @@
-name: Deploy to Cloud Run
+name: Deploy backend to Cloud Run
 
+# Only when the backend actually changes. The Android app lives in the same
+# repo and its commits used to trigger a pointless container rebuild.
 on:
   push:
-    branches:
-      - main  # or your default branch
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'Dockerfile'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 env:
-  PROJECT_ID: your-gcp-project-id
   SERVICE_NAME: afamfresh-backend
   REGION: us-central1
-  IMAGE: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # Needed for workload identity federation (optional)
+      id-token: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      # Fail early and by name. Without this the job runs for minutes and then
+      # dies inside gcloud with an opaque error, which is how the previous
+      # version of this file wasted its time.
+      - name: Check required secrets are present
+        run: |
+          missing=()
+          for s in GCP_PROJECT_ID GCP_CREDENTIALS CLOUD_SQL_INSTANCE \
+                   DB_USER DB_PASS DB_NAME \
+                   PESAPAL_CONSUMER_KEY PESAPAL_CONSUMER_SECRET \
+                   PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
+                   BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN; do
+            [ -z "${!s:-}" ] && missing+=("$s")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}"
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "All ${#missing[@]} required secrets present."
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          CLOUD_SQL_INSTANCE: ${{ secrets.CLOUD_SQL_INSTANCE }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          PESAPAL_CONSUMER_KEY: ${{ secrets.PESAPAL_CONSUMER_KEY }}
+          PESAPAL_CONSUMER_SECRET: ${{ secrets.PESAPAL_CONSUMER_SECRET }}
+          PESAPAL_IPN_ID: ${{ secrets.PESAPAL_IPN_ID }}
+          PESAPAL_PUBLIC_BASE_URL: ${{ secrets.PESAPAL_PUBLIC_BASE_URL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Build Docker image with Google Cloud Build
-        run: |
-          gcloud builds submit --tag ${{ env.IMAGE }}
+      # The image tag is built here, in a step, not in the workflow-level env
+      # block. `env:` entries cannot reference each other -- the previous
+      # version had IMAGE: gcr.io/${{ env.PROJECT_ID }}/... which silently
+      # resolved to gcr.io//afamfresh-backend and could never have worked.
+      - name: Resolve image tag
+        id: img
+        run: echo "tag=gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      # Every credential the backend needs must be listed here. The PHP
-      # config reads them from the environment and no longer carries
-      # literal fallbacks, so a key missing from this line does not fall
-      # back to a working value — that integration comes up with an empty
-      # credential and fails at the first call. Adding a credential to
-      # env.yaml means adding it here and as a repository secret too.
+      - name: Build image
+        run: gcloud builds submit --tag "${{ steps.img.outputs.tag }}" --quiet
+
+      # Credentials go in as secrets, not --set-env-vars: values passed that
+      # way are readable by anyone with viewer access to the service. The PHP
+      # config reads them from the environment either way.
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image ${{ env.IMAGE }} \
+          gcloud run deploy "${{ env.SERVICE_NAME }}" \
+            --image "${{ steps.img.outputs.tag }}" \
             --platform managed \
-            --region ${{ env.REGION }} \
+            --region "${{ env.REGION }}" \
             --allow-unauthenticated \
-            --set-env-vars DB_HOST=${{ secrets.DB_HOST }},DB_USER=${{ secrets.DB_USER }},DB_PASS=${{ secrets.DB_PASS }},DB_NAME=${{ secrets.DB_NAME }},PESAPAL_ENV=${{ secrets.PESAPAL_ENV }},PESAPAL_CONSUMER_KEY=${{ secrets.PESAPAL_CONSUMER_KEY }},PESAPAL_CONSUMER_SECRET=${{ secrets.PESAPAL_CONSUMER_SECRET }},PESAPAL_IPN_ID=${{ secrets.PESAPAL_IPN_ID }},PESAPAL_PUBLIC_BASE_URL=${{ secrets.PESAPAL_PUBLIC_BASE_URL }},BREVO_API_KEY=${{ secrets.BREVO_API_KEY }},TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }},TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+            --add-cloudsql-instances "${{ secrets.CLOUD_SQL_INSTANCE }}" \
+            --set-env-vars "DB_SOCKET=/cloudsql/${{ secrets.CLOUD_SQL_INSTANCE }}" \
+            --set-secrets "DB_USER=DB_USER:latest,DB_PASS=DB_PASS:latest,DB_NAME=DB_NAME:latest,PESAPAL_ENV=PESAPAL_ENV:latest,PESAPAL_CONSUMER_KEY=PESAPAL_CONSUMER_KEY:latest,PESAPAL_CONSUMER_SECRET=PESAPAL_CONSUMER_SECRET:latest,PESAPAL_IPN_ID=PESAPAL_IPN_ID:latest,PESAPAL_PUBLIC_BASE_URL=PESAPAL_PUBLIC_BASE_URL:latest,BREVO_API_KEY=BREVO_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,FIREBASE_CREDENTIALS_JSON=FIREBASE_CREDENTIALS_JSON:latest" \
+            --quiet
+
+      # A green deploy that serves 500s is worse than a red one, because
+      # nobody looks again. Hit a real endpoint that touches the database.
+      - name: Smoke-test the deployment
+        run: |
+          URL=$(gcloud run services describe "${{ env.SERVICE_NAME }}" \
+                  --region "${{ env.REGION }}" --format='value(status.url)')
+          echo "Deployed to $URL"
+          code=$(curl -s -o /tmp/body -w '%{http_code}' "$URL/api/products.php?action=list")
+          echo "GET /api/products.php?action=list -> $code"
+          head -c 400 /tmp/body; echo
+          [ "$code" = "200" ] || { echo "::error::Smoke test failed ($code)"; exit 1; }
