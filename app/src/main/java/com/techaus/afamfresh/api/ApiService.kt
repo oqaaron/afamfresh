@@ -52,7 +52,18 @@ interface ApiService {
     @FormUrlEncoded
     fun googleLogin(
         @Query("action") action: String = "google_login",
-        @Field("id_token") idToken: String
+        @Field("id_token") idToken: String,
+        /**
+         * Which app is signing in, from BuildConfig.APP_ROLE — the same field
+         * [LoginRequest] carries for email/password.
+         *
+         * It decides `users.account_type` on first Google sign-in, and the
+         * server refuses an existing account whose type does not match. While
+         * this was missing, every Google account was created as a customer,
+         * so "request vendor access" was rejected before it could reach the
+         * admin queue.
+         */
+        @Field("app_role") appRole: String = BuildConfig.APP_ROLE
     ): Call<LoginResponse>
 
     // ============================================================
