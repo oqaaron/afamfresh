@@ -113,24 +113,7 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM rider_payout_requests WHE
 </head>
 <body class="bg-gray-100">
 <div class="flex h-screen">
-    <div class="w-64 bg-green-800 text-white flex flex-col">
-        <div class="p-6 text-xl font-bold border-b border-green-700">AfamFresh</div>
-        <nav class="flex-1 p-4 space-y-2">
-            <a href="dashboard.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-chart-pie mr-2"></i> Dashboard</a>
-            <a href="products.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-box mr-2"></i> Products</a>
-            <a href="orders.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-shopping-cart mr-2"></i> Orders</a>
-            <a href="users.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-users mr-2"></i> Users</a>
-            <a href="riders.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-motorcycle mr-2"></i> Riders</a>
-            <a href="role-requests.php" class="block py-2 px-4 rounded hover:bg-green-700"><i class="fas fa-user-check mr-2"></i> Role Requests</a>
-            <a href="rider-payouts.php" class="block py-2 px-4 rounded bg-green-700">
-                <i class="fas fa-money-bill-wave mr-2"></i> Rider Payouts
-                <?php if ($pendingCount > 0): ?>
-                    <span class="ml-1 bg-amber-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $pendingCount ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="logout.php" class="block py-2 px-4 rounded hover:bg-red-600 mt-8"><i class="fas fa-sign-out-alt mr-2"></i> Logout</a>
-        </nav>
-    </div>
+    <?php include __DIR__ . "/includes/nav.php"; ?>
 
     <div class="flex-1 overflow-y-auto p-6">
         <h1 class="text-2xl font-bold text-green-800 mb-4">Rider Payouts</h1>

@@ -2,13 +2,13 @@
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
+require_once __DIR__ . '/../includes/api_auth.php';
 
-if ($user_id === 0) {
-    echo json_encode(['error' => 'user_id is required']);
-    exit;
-}
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Was: trust $_GET['user_id']. Anyone could read any vendor's
+// records by changing the number. See includes/api_auth.php.
+$user_id = requireOwnUserId($_GET['user_id'] ?? 0);
 
 try {
     // Get vendor_id from user_id

@@ -48,7 +48,11 @@ try {
         // Create new surplus listing (vendor submits, sets status = 'pending')
         $input = json_decode(file_get_contents('php://input'), true);
         
-        $user_id = intval($input['user_id'] ?? 0);
+        // Whoever is signed in is the vendor listing this. Taken from the body
+        // before, so the is_verified check below could be satisfied by naming
+        // a verified vendor's user_id and listing stock in their name.
+        require_once __DIR__ . '/../includes/api_auth.php';
+        $user_id = requireOwnUserId($input['user_id'] ?? 0);
         $product_id = intval($input['product_id'] ?? 0);
         $original_price = floatval($input['original_price'] ?? 0);
         $discount_percent = floatval($input['discount_percent'] ?? 0);

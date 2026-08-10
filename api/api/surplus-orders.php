@@ -1,14 +1,47 @@
 <?php
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/api_auth.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+$isAdminSession = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+$sessionUserId  = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
 try {
     if ($method === 'GET') {
         // Fetch surplus orders (same as before)
         $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
         $vendor_id = isset($_GET['vendor_id']) ? intval($_GET['vendor_id']) : 0;
+
+        // Both filters were optional and neither was checked, so a request
+        // with no parameters at all fell through to "WHERE 1=1" and returned
+        // every surplus order on the platform -- addresses, phone numbers and
+        // all -- to anyone who asked. Unauthenticated.
+        //
+        // A caller must now say whose orders they mean, and prove it is
+        // theirs. Customers pass user_id; vendors pass the vendor_id of a
+        // vendor record they own.
+        if (!$isAdminSession) {
+            if ($sessionUserId === 0) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Please sign in again.']);
+                exit;
+            }
+            if ($vendor_id > 0) {
+                $owns = $dbh->prepare("SELECT 1 FROM vendors WHERE id = ? AND user_id = ?");
+                $owns->execute([$vendor_id, $sessionUserId]);
+                if (!$owns->fetchColumn()) {
+                    http_response_code(403);
+                    echo json_encode(['success' => false, 'error' => 'Not your vendor account.']);
+                    exit;
+                }
+            } else {
+                // No vendor_id: this is a customer asking for their own
+                // orders, whatever user_id they typed.
+                $user_id = requireOwnUserId($user_id);
+            }
+        }
         $status = isset($_GET['status']) ? trim($_GET['status']) : '';
         $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 20;
         $offset = isset($_GET['offset']) ? intval($_GET['offset']) : 0;
@@ -58,7 +91,10 @@ try {
         $input = json_decode(file_get_contents('php://input'), true);
         
         $listing_id = intval($input['listing_id'] ?? 0);
-        $user_id = intval($input['user_id'] ?? 0);
+        // The order is placed for whoever is signed in. This was taken from
+        // the request body, so anyone could place an order in anyone else's
+        // name -- against their account, to their delivery address.
+        $user_id = requireOwnUserId($input['user_id'] ?? 0);
         $quantity = floatval($input['quantity'] ?? 0); // Can be decimal for kg
         $delivery_address = trim($input['delivery_address'] ?? '');
         $delivery_area = trim($input['delivery_area'] ?? '');
