@@ -5,6 +5,11 @@
 -- tables. No customer, order, rider or admin data is included.
 --
 -- Normalised on export for Cloud SQL:
+--   DEFAULT (curdate()) -> DEFAULT (curdate())
+--                      (MariaDB allows a bare expression default;
+--                       MySQL 8.0 rejects it unless parenthesised.
+--                       current_timestamp() is special-cased on
+--                       TIMESTAMP columns, so it is left alone.)
 --   MyISAM -> InnoDB   (Cloud SQL does not support MyISAM)
 --   latin1 -> utf8mb4  (13 legacy tables; verified lossless --
 --                       only 8 values were non-ASCII, all cp1252
@@ -710,7 +715,7 @@ CREATE TABLE `storage_pricing` (
   `minimum_charge` decimal(10,2) DEFAULT 0.00 COMMENT 'Minimum charge per booking',
   `currency` varchar(3) DEFAULT 'UGX',
   `is_active` tinyint(1) DEFAULT 1,
-  `effective_from` date DEFAULT curdate(),
+  `effective_from` date DEFAULT (curdate()),
   `effective_to` date DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
