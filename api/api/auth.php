@@ -386,7 +386,10 @@ if ($action == 'forgot_password') {
     // Always report success regardless of whether the email is registered —
     // an error here would let a caller test which addresses have accounts.
     try {
-        $stmt = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        // fname is selected purely so the email can address the recipient;
+        // nothing downstream branches on it. (The column is fname/lname —
+        // there is no `name` column on users.)
+        $stmt = $dbh->prepare("SELECT id, fname FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -416,12 +419,48 @@ if ($action == 'forgot_password') {
                 : 'afamfresh';   // installs predating this send nothing
 
             $resetLink = "$scheme://reset-password?token=$rawToken";
-            $subject = "AfamFresh Password Reset";
-            $message = "Hello,\n\nYou requested a password reset for your AfamFresh account.\n\n";
-            $message .= "Open this link on your phone to reset your password:\n$resetLink\n\n";
-            $message .= "This link will expire in 30 minutes.\n\nIf you did not request this, please ignore this email.";
-            $headers = "From: noreply@afam.techaus.online\r\n";
-            mail($email, $subject, $message, $headers);
+            $subject = 'AfamFresh Password Reset';
+
+            // Sent through Brevo, not mail(). PHP's mail() needs a local MTA,
+            // and the php:8.2-apache image this runs in on Cloud Run has none —
+            // the call returns false and the email simply never exists, while
+            // the response below still reports success.
+            //
+            // Both a text and an HTML part, deliberately. The link uses a custom
+            // scheme (afamfresh://, afamfresh-rider://, afamfresh-vendor://) and
+            // a good number of mail clients will not linkify, or will strip, a
+            // non-http href — so the plain-text copy is the reliable path and
+            // the HTML one is the convenience.
+            $safeLink = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
+            $textBody = "Hello,\n\n"
+                . "You requested a password reset for your AfamFresh account.\n\n"
+                . "Open this link on your phone to reset your password:\n$resetLink\n\n"
+                . "This link will expire in 30 minutes.\n\n"
+                . "If you did not request this, please ignore this email.";
+            $htmlBody = '<p>Hello,</p>'
+                . '<p>You requested a password reset for your AfamFresh account.</p>'
+                . '<p><a href="' . $safeLink . '">Tap here to reset your password</a></p>'
+                . '<p>If that does not open the app, copy this link into your phone:<br>'
+                . '<code>' . $safeLink . '</code></p>'
+                . '<p>This link will expire in 30 minutes.</p>'
+                . '<p>If you did not request this, please ignore this email.</p>';
+
+            $sent = sendEmailWithBrevo(
+                $email,
+                $user['fname'] ?? '',
+                $subject,
+                $htmlBody,
+                $textBody
+            );
+
+            // Logged, never surfaced. The response stays an unconditional
+            // success so it cannot be used to discover which addresses have
+            // accounts — but a delivery failure has to be findable in the log,
+            // because to the user it looks identical to never having asked.
+            if (empty($sent['result'])) {
+                error_log('[forgot_password] Reset email NOT delivered to ' . $email
+                    . ' — ' . ($sent['message'] ?? 'unknown error'));
+            }
         }
 
         echo json_encode(['success' => true]);
