@@ -130,9 +130,9 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                             <?php foreach ($products as $row): ?>
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4">
-                                    <?php $imgPath = productImageRelPath($row['image']); ?>
+                                    <?php $imgPath = productImageUrl($row['image']); ?>
                                     <?php if ($imgPath): ?>
-                                        <img src="..<?= htmlspecialchars($imgPath) ?>" class="w-12 h-12 object-cover rounded">
+                                        <img src="<?= htmlspecialchars($imgPath) ?>" class="w-12 h-12 object-cover rounded">
                                     <?php elseif (!empty($row['image'])): ?>
                                         <div class="w-12 h-12 bg-amber-100 border border-amber-300 rounded flex items-center justify-center text-amber-600" title="File missing: <?= htmlspecialchars($row['image']) ?>">⚠</div>
                                     <?php else: ?>

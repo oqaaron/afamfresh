@@ -206,61 +206,31 @@ if ($action === 'change_password') {
 if ($action === 'upload_avatar') {
     if (!isset($_FILES['avatar'])) fail('No image was received.');
 
-    $err = $_FILES['avatar']['error'];
-    if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) {
-        fail('That image is too large. Please pick one under 5 MB.');
-    }
-    if ($err !== UPLOAD_ERR_OK) {
-        error_log("Avatar upload error code $err for user $user_id");
-        fail('Upload failed. Please try again.');
-    }
-    if ($_FILES['avatar']['size'] > 5 * 1024 * 1024) {
-        fail('That image is too large. Please pick one under 5 MB.');
-    }
+    // This used to reimplement saveUploadedImage() line for line — the same
+    // size caps, the same MIME sniffing, its own move_uploaded_file. Two
+    // copies meant the storage-backend change had to be made twice, so the
+    // duplicate is gone and this defers to the shared helper.
+    //
+    // The prefix carries the user id so generated names stay
+    // avatar_<id>_<16 hex>.<ext>, matching every value already in the column
+    // and the helper's own replace-the-old-file check.
+    require_once __DIR__ . '/../includes/image_upload.php';
 
-    $tmp = $_FILES['avatar']['tmp_name'];
-
-    // Sniff the type server-side. admin/add-product.php takes the extension
-    // straight from the client-supplied filename with no check, which lets a
-    // .php land in a web-served directory. The stored extension here comes
-    // only from the sniffed MIME — never from the uploaded name.
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime  = finfo_file($finfo, $tmp);
-    finfo_close($finfo);
-
-    if (!isset($allowed[$mime]) || getimagesize($tmp) === false) {
-        fail('Only JPG, PNG or WebP images are supported.');
-    }
-    $ext = $allowed[$mime];
-
-    $dir = __DIR__ . '/../uploads/avatars';
-    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
-        error_log("Avatar dir missing and not creatable: $dir");
-        fail("Couldn't save the image. Please try again.");
-    }
-
-    // Random, namespaced, collision-proof. add-product.php uses time().$ext,
-    // which collides for two uploads in the same second.
-    $filename = 'avatar_' . $user_id . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-
-    if (!move_uploaded_file($tmp, $dir . '/' . $filename)) {
-        // Most likely cause: the directory is not writable by Apache's user.
-        error_log("move_uploaded_file failed to $dir/$filename (permissions?)");
-        fail("Couldn't save the image. Please try again.");
-    }
-
-    // Remove the previous file, but only when it matches a name this endpoint
-    // generated — never unlink an arbitrary string out of the database.
     $prevStmt = $dbh->prepare("SELECT profile_picture FROM users WHERE id = ?");
     $prevStmt->execute([$user_id]);
     $prev = $prevStmt->fetchColumn();
-    if ($prev && preg_match('/^avatar_\d+_[0-9a-f]{16}\.(jpg|png|webp)$/', $prev)) {
-        @unlink($dir . '/' . $prev);
-    }
+
+    $result = saveUploadedImage(
+        $_FILES['avatar'],
+        'avatars',
+        'avatar_' . $user_id,
+        $prev ?: null
+    );
+
+    if (!$result['ok']) fail($result['error']);
 
     $stmt = $dbh->prepare("UPDATE users SET profile_picture = ? WHERE id = ?");
-    $stmt->execute([$filename, $user_id]);
+    $stmt->execute([$result['filename'], $user_id]);
 
     ok($dbh, $user_id);
 }
@@ -273,7 +243,8 @@ if ($action === 'remove_avatar') {
     $prevStmt->execute([$user_id]);
     $prev = $prevStmt->fetchColumn();
     if ($prev && preg_match('/^avatar_\d+_[0-9a-f]{16}\.(jpg|png|webp)$/', $prev)) {
-        @unlink(__DIR__ . '/../uploads/avatars/' . $prev);
+        require_once __DIR__ . '/../includes/storage.php';
+        storageDelete('avatars/' . $prev);
     }
 
     $stmt = $dbh->prepare("UPDATE users SET profile_picture = NULL WHERE id = ?");

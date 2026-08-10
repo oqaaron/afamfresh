@@ -107,7 +107,10 @@ function buildUserPayload($dbh, $userId) {
     // needs the base url; google_picture is already an absolute remote url.
     $avatarUrl = null;
     if (!empty($u['profile_picture'])) {
-        $avatarUrl = appBaseUrl() . '/uploads/avatars/' . $u['profile_picture'];
+        // storageUrl, not appBaseUrl: on Cloud Run avatars live in a bucket
+        // and are not served from this host at all.
+        require_once __DIR__ . '/storage.php';
+        $avatarUrl = storageUrl('avatars/' . $u['profile_picture']);
     } elseif (!empty($u['google_picture'])) {
         $avatarUrl = $u['google_picture'];
     }

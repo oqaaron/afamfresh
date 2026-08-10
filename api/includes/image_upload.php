@@ -26,15 +26,20 @@
  * after a failed write is the bug this function exists to prevent.
  *
  * @param array       $file   One entry from $_FILES.
- * @param string      $absDir Absolute target directory. Must be writable
- *                            by Apache's user; see uploads/avatars for the
- *                            no-root 1777 + sticky-bit pattern.
+ * @param string      $subdir Folder under the uploads root: 'products',
+ *                            'proof' or 'avatars'. Was an absolute path; it
+ *                            is a relative name now because the file may not
+ *                            land on a filesystem at all — on Cloud Run it
+ *                            goes to a GCS bucket, whose objects have no
+ *                            directory to be writable.
  * @param string      $prefix Filename prefix, e.g. 'product' or 'proof'.
- * @param string|null $old    Previous filename, unlinked only when it matches
+ * @param string|null $old    Previous filename, deleted only when it matches
  *                            a name this function generated.
  * @param int         $maxBytes Size cap, default 5 MB.
  */
-function saveUploadedImage($file, $absDir, $prefix, $old = null, $maxBytes = 5242880) {
+function saveUploadedImage($file, $subdir, $prefix, $old = null, $maxBytes = 5242880) {
+    require_once __DIR__ . '/storage.php';
+
     $bad = function ($message) {
         return ['ok' => false, 'filename' => null, 'error' => $message];
     };
@@ -76,26 +81,22 @@ function saveUploadedImage($file, $absDir, $prefix, $old = null, $maxBytes = 524
     }
     $ext = $allowed[$mime];
 
-    if (!is_dir($absDir) && !@mkdir($absDir, 0775, true)) {
-        error_log("Upload dir missing and not creatable: $absDir");
-        return $bad("Couldn't save the image. Please try again.");
-    }
-
     $filename = $prefix . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
 
-    if (!move_uploaded_file($tmp, $absDir . '/' . $filename)) {
-        // Nearly always permissions: the directory has to be writable by
-        // Apache's user (`daemon`), which is why these are created 1777
-        // rather than inheriting the login user's 755.
-        error_log("move_uploaded_file failed to $absDir/$filename (permissions?)");
+    // storagePut handles both backends: move_uploaded_file into uploads/ on
+    // disk, or a PUT to the bucket. Locally the failure is still nearly
+    // always permissions — the directory has to be writable by Apache's user
+    // (`daemon`), which is why these are created 1777 rather than inheriting
+    // the login user's 755.
+    if (!storagePut($tmp, $subdir . '/' . $filename, $mime, true)) {
         return $bad("Couldn't save the image — the server could not write the file.");
     }
 
-    // Only ever unlink a name this code generated. The database also holds
-    // legacy hand-placed filenames, and deleting one of those on the strength
+    // Only ever delete a name this code generated. The database also holds
+    // legacy hand-placed filenames, and removing one of those on the strength
     // of a database string would be unrecoverable.
     if ($old && preg_match('/^' . preg_quote($prefix, '/') . '_[0-9a-f]{16}\.(jpg|png|webp)$/', $old)) {
-        @unlink($absDir . '/' . $old);
+        storageDelete($subdir . '/' . $old);
     }
 
     return ['ok' => true, 'filename' => $filename, 'error' => null];
