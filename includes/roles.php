@@ -367,9 +367,22 @@ function provisionRoleRecord($userId, $role) {
         if ($exists->fetchColumn()) {
             return true;
         }
+        // is_verified starts at 0, and that is the whole point of this row.
+        //
+        // It used to be created with is_verified = 1, which collapsed a
+        // three-stage flow into one: approving the role instantly published a
+        // vendor whose business_name was just the person's own name and whose
+        // phone was blank, because those are all provisioning can infer from a
+        // user account. Nobody ever saw the verification step.
+        //
+        // The stages are: admin approves the role (this record appears,
+        // unverified) -> the vendor fills in their real business details ->
+        // an admin verifies. api/surplus-listings.php already refuses to
+        // create a listing unless is_verified is TRUE, so the gate was there
+        // all along with nothing behind it.
         $ins = $dbh->prepare(
             "INSERT INTO vendors (user_id, business_name, business_type, phone, email, location, is_verified, verification_date)
-             VALUES (?, ?, 'market_vendor', ?, ?, ?, 1, NOW())"
+             VALUES (?, ?, 'market_vendor', ?, ?, ?, 0, NULL)"
         );
         $ins->execute([$userId, $name, $phone, $user['email'], $area]);
         return true;
