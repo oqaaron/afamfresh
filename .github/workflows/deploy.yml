@@ -36,7 +36,7 @@ jobs:
                    DB_USER DB_PASS DB_NAME \
                    PESAPAL_CONSUMER_KEY PESAPAL_CONSUMER_SECRET \
                    PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
-                   BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN; do
+                   BREVO_API_KEY; do
             [ -z "${!s:-}" ] && missing+=("$s")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -59,8 +59,6 @@ jobs:
           PESAPAL_IPN_ID: ${{ secrets.PESAPAL_IPN_ID }}
           PESAPAL_PUBLIC_BASE_URL: ${{ secrets.PESAPAL_PUBLIC_BASE_URL }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -94,7 +92,7 @@ jobs:
             --allow-unauthenticated \
             --add-cloudsql-instances "${{ secrets.CLOUD_SQL_INSTANCE }}" \
             --set-env-vars "DB_SOCKET=/cloudsql/${{ secrets.CLOUD_SQL_INSTANCE }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_WEB_CLIENT_ID }},FIREBASE_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" \
-            --set-secrets "DB_USER=DB_USER:latest,DB_PASS=DB_PASS:latest,DB_NAME=DB_NAME:latest,PESAPAL_ENV=PESAPAL_ENV:latest,PESAPAL_CONSUMER_KEY=PESAPAL_CONSUMER_KEY:latest,PESAPAL_CONSUMER_SECRET=PESAPAL_CONSUMER_SECRET:latest,PESAPAL_IPN_ID=PESAPAL_IPN_ID:latest,PESAPAL_PUBLIC_BASE_URL=PESAPAL_PUBLIC_BASE_URL:latest,BREVO_API_KEY=BREVO_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,FIREBASE_CREDENTIALS_JSON=FIREBASE_CREDENTIALS_JSON:latest" \
+            --set-secrets "DB_USER=DB_USER:latest,DB_PASS=DB_PASS:latest,DB_NAME=DB_NAME:latest,PESAPAL_ENV=PESAPAL_ENV:latest,PESAPAL_CONSUMER_KEY=PESAPAL_CONSUMER_KEY:latest,PESAPAL_CONSUMER_SECRET=PESAPAL_CONSUMER_SECRET:latest,PESAPAL_IPN_ID=PESAPAL_IPN_ID:latest,PESAPAL_PUBLIC_BASE_URL=PESAPAL_PUBLIC_BASE_URL:latest,BREVO_API_KEY=BREVO_API_KEY:latest,FIREBASE_CREDENTIALS_JSON=FIREBASE_CREDENTIALS_JSON:latest" \
             --quiet
 
       # A green deploy that serves 500s is worse than a red one, because
