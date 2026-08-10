@@ -30,7 +30,10 @@ services:
 
     # The container listens on $PORT, which Render sets. The image rewrites
     # Apache's Listen directive at start-up to match.
-    healthCheckPath: /api/products.php?action=list
+    # Root, not an API endpoint. /api/products.php?action=list ran a full
+    # catalogue query against Cloud SQL on every probe, and reported HTTP 200
+    # even while the database was unreachable — cost without signal.
+    healthCheckPath: /
 
     envVars:
       # --- Storage: uploads go to the bucket, never the container disk ---
