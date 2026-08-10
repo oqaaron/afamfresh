@@ -29,3 +29,11 @@ php_errors.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Firebase / Google service account private keys. The backend reads one from
+# storage/firebase/service-account.json locally and from Secret Manager on
+# Cloud Run -- neither belongs in git. Matched by pattern as well as path,
+# because the console downloads them under a generated name.
+storage/
+*adminsdk*.json
+*-firebase-adminsdk-*.json
