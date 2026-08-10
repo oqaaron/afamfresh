@@ -2,6 +2,11 @@
 local.properties
 env.yaml
 app/google-services.json
+# Service account private keys -- the console downloads these under a
+# generated name, so match the pattern, not one filename.
+*adminsdk*.json
+*-firebase-adminsdk-*.json
+service-account*.json
 *.keystore
 *.jks
 
