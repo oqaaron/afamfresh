@@ -29,6 +29,11 @@ ARGS=(--host=localhost --user="$DBU" --default-character-set=utf8mb4
   echo "-- tables. No customer, order, rider or admin data is included."
   echo "--"
   echo "-- Normalised on export for Cloud SQL:"
+  echo "--   DEFAULT curdate() -> DEFAULT (curdate())"
+  echo "--                      (MariaDB allows a bare expression default;"
+  echo "--                       MySQL 8.0 rejects it unless parenthesised."
+  echo "--                       current_timestamp() is special-cased on"
+  echo "--                       TIMESTAMP columns, so it is left alone.)"
   echo "--   MyISAM -> InnoDB   (Cloud SQL does not support MyISAM)"
   echo "--   latin1 -> utf8mb4  (13 legacy tables; verified lossless --"
   echo "--                       only 8 values were non-ASCII, all cp1252"
@@ -45,7 +50,8 @@ ARGS=(--host=localhost --user="$DBU" --default-character-set=utf8mb4
   echo ""
   echo "SET FOREIGN_KEY_CHECKS=1;"
 } \
-| sed -E 's/ENGINE=MyISAM/ENGINE=InnoDB/g;
+| sed -E 's/DEFAULT (curdate|curtime|current_date|current_time|uuid|rand)\(\)/DEFAULT (\1())/g;
+          s/ENGINE=MyISAM/ENGINE=InnoDB/g;
           s/DEFAULT CHARSET=latin1( COLLATE=latin1_swedish_ci)?/DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci/g;
           s/CHARACTER SET latin1 COLLATE latin1_swedish_ci/CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci/g;
           s/CHARACTER SET latin1/CHARACTER SET utf8mb4/g;
