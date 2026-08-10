@@ -32,6 +32,7 @@ jobs:
         run: |
           missing=()
           for s in GCP_PROJECT_ID GCP_CREDENTIALS CLOUD_SQL_INSTANCE GCS_BUCKET \
+                   GOOGLE_WEB_CLIENT_ID \
                    DB_USER DB_PASS DB_NAME \
                    PESAPAL_CONSUMER_KEY PESAPAL_CONSUMER_SECRET \
                    PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
@@ -49,6 +50,7 @@ jobs:
           GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
           CLOUD_SQL_INSTANCE: ${{ secrets.CLOUD_SQL_INSTANCE }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
@@ -91,7 +93,7 @@ jobs:
             --region "${{ env.REGION }}" \
             --allow-unauthenticated \
             --add-cloudsql-instances "${{ secrets.CLOUD_SQL_INSTANCE }}" \
-            --set-env-vars "DB_SOCKET=/cloudsql/${{ secrets.CLOUD_SQL_INSTANCE }},GCS_BUCKET=${{ secrets.GCS_BUCKET }}" \
+            --set-env-vars "DB_SOCKET=/cloudsql/${{ secrets.CLOUD_SQL_INSTANCE }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_WEB_CLIENT_ID }},FIREBASE_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}" \
             --set-secrets "DB_USER=DB_USER:latest,DB_PASS=DB_PASS:latest,DB_NAME=DB_NAME:latest,PESAPAL_ENV=PESAPAL_ENV:latest,PESAPAL_CONSUMER_KEY=PESAPAL_CONSUMER_KEY:latest,PESAPAL_CONSUMER_SECRET=PESAPAL_CONSUMER_SECRET:latest,PESAPAL_IPN_ID=PESAPAL_IPN_ID:latest,PESAPAL_PUBLIC_BASE_URL=PESAPAL_PUBLIC_BASE_URL:latest,BREVO_API_KEY=BREVO_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,FIREBASE_CREDENTIALS_JSON=FIREBASE_CREDENTIALS_JSON:latest" \
             --quiet
 
