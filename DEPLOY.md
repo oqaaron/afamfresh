@@ -1,0 +1,190 @@
+# Deploying the AfamFresh backend to Cloud Run
+
+The backend is PHP 8.2 + MySQL. Firebase cannot host it — Firebase Hosting
+serves static files and Cloud Functions run Node/Python/Go/Java, not PHP. So
+Firebase stays what it already is here (Cloud Messaging + Analytics, and
+optionally App Distribution for test APKs) and the container runs on Cloud
+Run against Cloud SQL, in the **same GCP project as Firebase**
+(`afamfresh-c9afb`), so there is one account, one bill and one IAM.
+
+Everything below marked **[you]** needs console or billing access and cannot
+be scripted from the repo.
+
+---
+
+## 1. Enable the services **[you]**
+
+In project `afamfresh-c9afb`, with billing enabled:
+
+```bash
+gcloud config set project afamfresh-c9afb
+gcloud services enable \
+  run.googleapis.com \
+  sqladmin.googleapis.com \
+  cloudbuild.googleapis.com \
+  secretmanager.googleapis.com \
+  artifactregistry.googleapis.com
+```
+
+## 2. Create the database **[you]**
+
+Cloud SQL has no MariaDB flavour, so this moves to **MySQL 8.0**. That is
+fine — `schema.sql` is exported already normalised for it, and the SQL the
+app uses is portable. The one MariaDB-specific trap (`current_role` parsing
+as the built-in `CURRENT_ROLE()` function rather than the column) exists in
+MySQL 8.0 too, and is already fixed by backticking everywhere it is read.
+
+```bash
+gcloud sql instances create afamfresh-db-instance \
+  --database-version=MYSQL_8_0 \
+  --tier=db-f1-micro \
+  --region=us-central1 \
+  --storage-size=10GB \
+  --storage-auto-increase
+
+gcloud sql databases create kitchen \
+  --instance=afamfresh-db-instance \
+  --charset=utf8mb4 --collation=utf8mb4_unicode_ci
+
+gcloud sql users create afamfresh \
+  --instance=afamfresh-db-instance \
+  --password='<pick a strong one>'
+```
+
+The instance connection name is what Cloud Run needs — note it down:
+
+```bash
+gcloud sql instances describe afamfresh-db-instance \
+  --format='value(connectionName)'
+# afamfresh-c9afb:us-central1:afamfresh-db-instance
+```
+
+`db-f1-micro` is the cheapest tier and is enough for current traffic
+(55 tables, 2.8 MB, 153 orders). Expect roughly **$9–10/month** — this is the
+only meaningful running cost; Cloud Run scales to zero and will be
+approximately free at this volume.
+
+## 3. Load the schema **[you]**
+
+`schema.sql` holds the structure of all 55 tables plus the catalogue,
+pricing, delivery slots and UI copy. It deliberately contains **no customer,
+order, rider or admin rows**.
+
+```bash
+gcloud sql connect afamfresh-db-instance --user=afamfresh --database=kitchen < schema.sql
+```
+
+Regenerate it any time the schema changes:
+
+```bash
+./scripts/export-schema.sh      # writes schema.sql
+```
+
+If you also want the existing live data (orders, users), that is a separate
+`mysqldump` of those tables — decide deliberately, since it moves personal
+data into a new jurisdiction.
+
+## 4. Put the credentials in Secret Manager **[you]**
+
+The workflow injects these with `--set-secrets`, not `--set-env-vars`,
+because values passed as plain env vars are readable by anyone with viewer
+access on the service.
+
+```bash
+for s in DB_USER DB_PASS DB_NAME PESAPAL_ENV \
+         PESAPAL_CONSUMER_KEY PESAPAL_CONSUMER_SECRET \
+         PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
+         BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN; do
+  printf '%s' "<value>" | gcloud secrets create "$s" --data-file=-
+done
+
+# The Firebase service account, as JSON content rather than a file:
+gcloud secrets create FIREBASE_CREDENTIALS_JSON \
+  --data-file=afamfresh-c9afb-firebase-adminsdk-XXXX.json
+```
+
+Grant the Cloud Run runtime service account read access:
+
+```bash
+PROJNUM=$(gcloud projects describe afamfresh-c9afb --format='value(projectNumber)')
+for s in DB_USER DB_PASS DB_NAME PESAPAL_ENV PESAPAL_CONSUMER_KEY \
+         PESAPAL_CONSUMER_SECRET PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
+         BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN \
+         FIREBASE_CREDENTIALS_JSON; do
+  gcloud secrets add-iam-policy-binding "$s" \
+    --member="serviceAccount:${PROJNUM}-compute@developer.gserviceaccount.com" \
+    --role=roles/secretmanager.secretAccessor
+done
+```
+
+> **Reissue the Pesapal live key and secret first.** They were exposed in a
+> development transcript. Moving them into Secret Manager protects them from
+> here on but does not undo that exposure — generate a new pair in the
+> Pesapal merchant dashboard and store the new values.
+
+## 5. GitHub repository secrets **[you]**
+
+Settings → Secrets and variables → Actions. The workflow checks all of these
+up front and fails by name if any is missing.
+
+| Secret | Value |
+| --- | --- |
+| `GCP_PROJECT_ID` | `afamfresh-c9afb` |
+| `GCP_CREDENTIALS` | JSON key for a deployer service account |
+| `CLOUD_SQL_INSTANCE` | `afamfresh-c9afb:us-central1:afamfresh-db-instance` |
+| `DB_USER` `DB_PASS` `DB_NAME` | same values as the secrets above |
+| `PESAPAL_*`, `BREVO_API_KEY`, `TWILIO_*` | same values as the secrets above |
+
+The deployer service account needs `roles/run.admin`,
+`roles/cloudbuild.builds.editor`, `roles/storage.admin` and
+`roles/iam.serviceAccountUser`.
+
+## 6. Deploy
+
+Push to `main` touching `api/**` or `Dockerfile`, or run the workflow
+manually from the Actions tab. It builds, deploys with the Cloud SQL socket
+attached, then smoke-tests `GET /api/products.php?action=list` and fails the
+run on anything other than 200 — a green deploy serving 500s is worse than a
+red one, because nobody looks twice.
+
+## 7. Point the apps at it
+
+Cloud Run gives the service its own HTTPS URL immediately:
+
+```bash
+gcloud run services describe afamfresh-backend \
+  --region=us-central1 --format='value(status.url)'
+# https://afamfresh-backend-XXXXXX-uc.a.run.app
+```
+
+Put it in `local.properties` (not committed):
+
+```properties
+base.url.release=https://afamfresh-backend-XXXXXX-uc.a.run.app/api/
+```
+
+This sidesteps DNS entirely. `afam.techaus.online` currently has **no DNS
+record** — it does not resolve — so any release build pointing there reaches
+nothing. Use the Cloud Run URL until you decide to map the domain; when you
+do, `gcloud run domain-mappings create` handles the certificate.
+
+Release builds block cleartext HTTP, so the URL must be `https://`. It will
+be.
+
+## 8. Still outstanding, console-only **[you]**
+
+- **Google Sign-In is broken in all three apps.** `google-services.json` has
+  `oauth_client: []` and zero certificate hashes. Add the debug SHA-1
+  `5C:DB:E2:34:4E:5B:1D:B7:D3:D4:F3:47:44:26:36:B3:25:24:AF:23` (and the
+  release SHA-1 when you sign) for each of `com.techaus.afamfresh`,
+  `.rider` and `.vendor`, confirm Authentication → Sign-in method → Google
+  is enabled, then re-download `google-services.json`. Verify with
+  `grep -c client_type app/google-services.json` — it is `0` today.
+- **Push notifications are dead until `FIREBASE_CREDENTIALS_JSON` is set.**
+  The send path is correct FCM v1 code, but no service account key exists
+  anywhere on the current machine. Generate one at Project settings →
+  Service accounts → Generate new private key.
+- **Uploads do not survive a redeploy.** Cloud Run's filesystem is
+  ephemeral, so `uploads/` is wiped every deployment. Product images and
+  delivery proof photos need a GCS bucket before this is production-real.
+  This is the one genuine code change still outstanding.
