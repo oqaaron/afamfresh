@@ -165,11 +165,67 @@ function storageDelete($objectPath) {
 }
 
 /**
+ * Every object name in the bucket, as a lookup set, fetched once per request.
+ *
+ * Returns null when the listing could not be completed, which callers must
+ * treat as "unknown" rather than "empty".
+ */
+function storageObjectIndex() {
+    static $index = false;
+    if ($index !== false) return $index;
+
+    $token = googleAccessToken(STORAGE_SCOPE);
+    if ($token === null) return $index = null;
+
+    $names = [];
+    $pageToken = '';
+    // Bounded so a bucket that grows past ~5k objects degrades into extra
+    // requests rather than an unbounded loop inside a web request.
+    for ($page = 0; $page < 5; $page++) {
+        $url = 'https://storage.googleapis.com/storage/v1/b/' . rawurlencode(storageBucket())
+            . '/o?fields=items(name),nextPageToken&maxResults=1000'
+            . ($pageToken !== '' ? '&pageToken=' . rawurlencode($pageToken) : '');
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $token],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($res === false || $code !== 200) {
+            error_log("[storage] object listing failed ($code)");
+            return $index = null;
+        }
+
+        $body = json_decode($res, true);
+        foreach (($body['items'] ?? []) as $o) {
+            if (isset($o['name'])) $names[$o['name']] = true;
+        }
+        $pageToken = $body['nextPageToken'] ?? '';
+        if ($pageToken === '') break;
+    }
+
+    return $index = $names;
+}
+
+/**
  * Does the object exist?
  *
- * Callers use this to decide between an image URL and a placeholder. On GCS
- * it costs a metadata round trip, so it is cached per request — a catalogue
- * page asks about the same handful of images repeatedly.
+ * Callers use this to decide between an image URL and a placeholder.
+ *
+ * On GCS this reads a single listing of the bucket, cached for the request,
+ * rather than one metadata call per object. A catalogue page asks about ~70
+ * distinct images; as individual round trips that was 70 sequential HTTPS
+ * calls — slow enough in-region and, measured from outside it, slow enough to
+ * exceed a two-minute timeout.
+ *
+ * If the listing fails we answer true rather than false. A wrong true shows a
+ * broken image; a wrong false hides one that is really there, and would blank
+ * the whole catalogue the moment the listing call had a bad minute.
  */
 function storageExists($objectPath) {
     if (!storagePathIsSafe($objectPath)) return false;
@@ -178,24 +234,10 @@ function storageExists($objectPath) {
         return is_file(storageLocalPath($objectPath));
     }
 
-    static $seen = [];
-    if (isset($seen[$objectPath])) return $seen[$objectPath];
+    $index = storageObjectIndex();
+    if ($index === null) return true;
 
-    $token = googleAccessToken(STORAGE_SCOPE);
-    if ($token === null) return $seen[$objectPath] = false;
-
-    $ch = curl_init('https://storage.googleapis.com/storage/v1/b/' . rawurlencode(storageBucket())
-        . '/o/' . rawurlencode($objectPath) . '?fields=name');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 15,
-        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $token],
-    ]);
-    curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    return $seen[$objectPath] = ($code === 200);
+    return isset($index[$objectPath]);
 }
 
 /**
