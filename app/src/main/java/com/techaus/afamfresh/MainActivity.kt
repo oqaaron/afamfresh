@@ -354,9 +354,20 @@ class MainActivity : ComponentActivity() {
             pendingOrderId.value = it
         }
 
-        // afamfresh://reset-password?token=XYZ
+        // afamfresh://reset-password?token=XYZ — and the per-flavor variants
+        // afamfresh-rider:// and afamfresh-vendor://.
+        //
+        // Compared against BuildConfig.DEEP_LINK_SCHEME, not the literal
+        // "afamfresh". The manifest registers whichever scheme the flavor
+        // declares, so Android does launch the Rider and Vendor apps on their
+        // own links — but a hardcoded "afamfresh" here then failed to match,
+        // dropped the token, and left the reset silently doing nothing in two
+        // of the three apps.
         val data = intent.data
-        if (data != null && data.scheme == "afamfresh" && data.host == "reset-password") {
+        if (data != null &&
+            data.scheme == BuildConfig.DEEP_LINK_SCHEME &&
+            data.host == "reset-password"
+        ) {
             val token = data.getQueryParameter("token")
             if (token.isNullOrBlank()) {
                 Log.w("MainActivity", "Reset-password link had no token")
