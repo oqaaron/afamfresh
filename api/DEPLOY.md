@@ -35,28 +35,28 @@ as the built-in `CURRENT_ROLE()` function rather than the column) exists in
 MySQL 8.0 too, and is already fixed by backticking everywhere it is read.
 
 ```bash
-gcloud sql instances create afamfresh-db-instance \
+gcloud sql instances create afamfresh \
   --database-version=MYSQL_8_0 \
   --tier=db-f1-micro \
-  --region=us-central1 \
+  --region=europe-west3 \
   --storage-size=10GB \
   --storage-auto-increase
 
 gcloud sql databases create kitchen \
-  --instance=afamfresh-db-instance \
+  --instance=afamfresh \
   --charset=utf8mb4 --collation=utf8mb4_unicode_ci
 
 gcloud sql users create afamfresh \
-  --instance=afamfresh-db-instance \
+  --instance=afamfresh \
   --password='<pick a strong one>'
 ```
 
 The instance connection name is what Cloud Run needs — note it down:
 
 ```bash
-gcloud sql instances describe afamfresh-db-instance \
+gcloud sql instances describe afamfresh \
   --format='value(connectionName)'
-# afamfresh-f68c6:us-central1:afamfresh-db-instance
+# afamfresh-f68c6:europe-west3:afamfresh
 ```
 
 `db-f1-micro` is the cheapest tier and is enough for current traffic
@@ -71,7 +71,7 @@ pricing, delivery slots and UI copy. It deliberately contains **no customer,
 order, rider or admin rows**.
 
 ```bash
-gcloud sql connect afamfresh-db-instance --user=afamfresh --database=kitchen < schema.sql
+gcloud sql connect afamfresh --user=afamfresh --database=kitchen < schema.sql
 ```
 
 Regenerate it any time the schema changes:
@@ -92,7 +92,7 @@ next deploy. Uploads therefore go to a bucket.
 
 ```bash
 gcloud storage buckets create gs://afamfresh-uploads \
-  --location=us-central1 --uniform-bucket-level-access
+  --location=europe-west3 --uniform-bucket-level-access
 
 # Objects are served straight to the app, so they must be publicly readable.
 gcloud storage buckets add-iam-policy-binding gs://afamfresh-uploads \
@@ -167,7 +167,7 @@ up front and fails by name if any is missing.
 | --- | --- |
 | `GCP_PROJECT_ID` | `afamfresh-f68c6` |
 | `GCP_CREDENTIALS` | JSON key for a deployer service account |
-| `CLOUD_SQL_INSTANCE` | `afamfresh-f68c6:us-central1:afamfresh-db-instance` |
+| `CLOUD_SQL_INSTANCE` | `afamfresh-f68c6:europe-west3:afamfresh` |
 | `DB_USER` `DB_PASS` `DB_NAME` | same values as the secrets above |
 | `GCS_BUCKET` | `afamfresh-uploads` |
 | `GOOGLE_WEB_CLIENT_ID` | Web client id from the new project's OAuth credentials |
@@ -191,14 +191,14 @@ Cloud Run gives the service its own HTTPS URL immediately:
 
 ```bash
 gcloud run services describe afamfresh-backend \
-  --region=us-central1 --format='value(status.url)'
-# https://afamfresh-backend-XXXXXX-uc.a.run.app
+  --region=europe-west3 --format='value(status.url)'
+# https://afamfresh-backend-XXXXXX-ew.a.run.app
 ```
 
 Put it in `local.properties` (not committed):
 
 ```properties
-base.url.release=https://afamfresh-backend-XXXXXX-uc.a.run.app/api/
+base.url.release=https://afamfresh-backend-XXXXXX-ew.a.run.app/api/
 ```
 
 This sidesteps DNS entirely. `afam.techaus.online` currently has **no DNS
