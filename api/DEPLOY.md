@@ -34,10 +34,15 @@ app uses is portable. The one MariaDB-specific trap (`current_role` parsing
 as the built-in `CURRENT_ROLE()` function rather than the column) exists in
 MySQL 8.0 too, and is already fixed by backticking everywhere it is read.
 
+> **Check the tier before you confirm.** The console's default is an
+> enterprise machine. `db-custom-8-32768` (8 vCPU / 32 GB) runs roughly
+> **$400–600/month in europe-west3** — for a 2.8 MB database. `db-g1-small`
+> is ~$25/month and already generous; `db-f1-micro` is ~$10 and sufficient.
+
 ```bash
 gcloud sql instances create afamfresh \
-  --database-version=MYSQL_8_0 \
-  --tier=db-f1-micro \
+  --database-version=MYSQL_8_4 \
+  --tier=db-g1-small \
   --region=europe-west3 \
   --storage-size=10GB \
   --storage-auto-increase
@@ -70,8 +75,48 @@ approximately free at this volume.
 pricing, delivery slots and UI copy. It deliberately contains **no customer,
 order, rider or admin rows**.
 
+`gcloud sql connect` does **not** work for this on MySQL 8.4, for two
+separate reasons: `--database` is PostgreSQL/SQL Server only, and the default
+`caching_sha2_password` plugin refuses to authenticate over the proxy's
+plaintext localhost hop ("Authentication requires secure connection").
+
+Import server-side instead — Cloud SQL reads the file itself, so no client
+authentication is involved:
+
 ```bash
-gcloud sql connect afamfresh --user=afamfresh --database=kitchen < schema.sql
+gcloud storage buckets create gs://afamfresh-sql-import \
+  --location=europe-west3 --uniform-bucket-level-access
+
+gcloud storage cp schema.sql gs://afamfresh-sql-import/
+
+# The Cloud SQL service agent needs to read it. Find yours with:
+#   gcloud projects describe <project> --format='value(projectNumber)'
+gcloud storage buckets add-iam-policy-binding gs://afamfresh-sql-import \
+  --member=serviceAccount:p953128851253-u8adeh@gcp-sa-cloud-sql.iam.gserviceaccount.com \
+  --role=roles/storage.objectViewer
+
+gcloud sql import sql afamfresh gs://afamfresh-sql-import/schema.sql \
+  --database=kitchen
+
+gcloud storage rm -r gs://afamfresh-sql-import
+```
+
+Do not stage the dump in the public uploads bucket — it would publish the
+whole schema. Use a throwaway private one, as above.
+
+To query the instance afterwards, run the proxy and pass the flag that lets
+`caching_sha2_password` do its key exchange:
+
+```bash
+cloud-sql-proxy afamfresh-f68c6:europe-west3:afamfresh --port 3307 &
+mysql -h 127.0.0.1 -P 3307 -u root -p --get-server-public-key kitchen
+```
+
+Verify the load:
+
+```sql
+SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='kitchen';  -- 55
+SELECT COUNT(*) FROM items;                                                   -- 72
 ```
 
 Regenerate it any time the schema changes:
