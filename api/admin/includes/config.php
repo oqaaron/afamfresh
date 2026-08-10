@@ -179,9 +179,14 @@ define('SMTP_FROM_EMAIL', 'noreply@afamfresh.com');
 // =============================================================
 // SMS CONFIGURATION (Twilio)
 // =============================================================
-define('TWILIO_ACCOUNT_SID', env_required('TWILIO_ACCOUNT_SID', 'SMS'));
-define('TWILIO_AUTH_TOKEN', env_required('TWILIO_AUTH_TOKEN', 'SMS'));
-define('TWILIO_PHONE_NUMBER', '+19127582805');
+// Optional, not required. sendSMS() in includes/twilio-sms.php has no callers
+// anywhere in the app — SMS is wired up but never sent. Declaring these with
+// env_required() logged a missing-credential warning on every request, and
+// made them mandatory deployment secrets, for a feature that does not run.
+// If SMS is ever switched on, set all three and move the number out of here.
+define('TWILIO_ACCOUNT_SID', env('TWILIO_ACCOUNT_SID', ''));
+define('TWILIO_AUTH_TOKEN', env('TWILIO_AUTH_TOKEN', ''));
+define('TWILIO_PHONE_NUMBER', env('TWILIO_PHONE_NUMBER', '+19127582805'));
 
 // =============================================================
 // OFFICE / WAREHOUSE LOCATION (for delivery calculations)

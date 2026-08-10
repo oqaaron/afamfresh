@@ -175,7 +175,7 @@ access on the service.
 for s in DB_USER DB_PASS DB_NAME PESAPAL_ENV \
          PESAPAL_CONSUMER_KEY PESAPAL_CONSUMER_SECRET \
          PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
-         BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN; do
+         BREVO_API_KEY; do
   printf '%s' "<value>" | gcloud secrets create "$s" --data-file=-
 done
 
@@ -190,8 +190,7 @@ Grant the Cloud Run runtime service account read access:
 PROJNUM=$(gcloud projects describe afamfresh-f68c6 --format='value(projectNumber)')
 for s in DB_USER DB_PASS DB_NAME PESAPAL_ENV PESAPAL_CONSUMER_KEY \
          PESAPAL_CONSUMER_SECRET PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
-         BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN \
-         FIREBASE_CREDENTIALS_JSON; do
+         BREVO_API_KEY FIREBASE_CREDENTIALS_JSON; do
   gcloud secrets add-iam-policy-binding "$s" \
     --member="serviceAccount:${PROJNUM}-compute@developer.gserviceaccount.com" \
     --role=roles/secretmanager.secretAccessor
@@ -216,7 +215,11 @@ up front and fails by name if any is missing.
 | `DB_USER` `DB_PASS` `DB_NAME` | same values as the secrets above |
 | `GCS_BUCKET` | `afamfresh-uploads` |
 | `GOOGLE_WEB_CLIENT_ID` | Web client id from the new project's OAuth credentials |
-| `PESAPAL_*`, `BREVO_API_KEY`, `TWILIO_*` | same values as the secrets above |
+| `PESAPAL_*`, `BREVO_API_KEY` | same values as the secrets above |
+
+Twilio is deliberately absent: `sendSMS()` has no callers, so SMS never runs.
+If it is ever switched on, add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and
+`TWILIO_PHONE_NUMBER` in both places.
 
 The deployer service account needs `roles/run.admin`,
 `roles/cloudbuild.builds.editor`, `roles/storage.admin` and
