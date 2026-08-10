@@ -157,9 +157,14 @@ function getFirebaseServiceAccount()
 // The client ID is not a secret — it ships inside the Android app and
 // is sent to Google in the clear on every sign-in. The client SECRET
 // is, and lives in a file under storage/, never here.
-define('GOOGLE_CLIENT_ID', env('GOOGLE_CLIENT_ID', '157327414248-1rqea452acim3bsqjh9m4966sgg16siv.apps.googleusercontent.com'));
-define('GOOGLE_CLIENT_SECRET_STORAGE', __DIR__ . '/../../storage/google/client_secret.json');
-define('GOOGLE_REDIRECT_URI', env('GOOGLE_REDIRECT_URI', 'https://afam.techaus.online/google-callback.php'));
+// Nothing reads these. They described a server-side OAuth redirect flow that
+// does not exist -- google-callback.php was never written, and the only
+// consumer, getGoogleClient(), lived in the firebase-config.php that has been
+// deleted. The client id here also named a third Google project
+// (157327414248), unrelated to both afamfresh-f68c6 and the app.
+//
+// Google Sign-In verification is GOOGLE_WEB_CLIENT_ID, read in api/auth.php.
+// Left out entirely rather than carried as a wrong default nobody reads.
 
 // =============================================================
 // EMAIL CONFIGURATION (Brevo / Sendinblue API v3)
@@ -211,11 +216,39 @@ try {
         // testing stays clean — the worst possible failure shape.
         $dsn = sprintf('mysql:dbname=%s;unix_socket=%s;charset=utf8mb4', DB_NAME, DB_SOCKET);
     } else {
-        // Fallback to local host connection
-        $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_NAME);
+        // TCP. Two very different situations use this branch: local XAMPP over
+        // loopback, and a host outside Google (Render, a VPS) reaching Cloud
+        // SQL's public IP across the open internet.
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+            DB_HOST, (int)env('DB_PORT', 3306), DB_NAME
+        );
     }
 
-    $dbh = new PDO($dsn, DB_USER, DB_PASS);
+    // TLS for the TCP case. Without it, the database password and every row
+    // returned cross the public internet in clear text — fine over loopback,
+    // not fine from another cloud. Cloud SQL will accept an unencrypted
+    // connection unless told otherwise, so this cannot be left to the server.
+    //
+    // DB_SSL_CA holds the PEM itself rather than a path, because the platforms
+    // this runs on inject configuration as environment variables and have no
+    // persistent disk to put a file on.
+    $pdoOptions = [];
+    $sslCa = trim((string)env('DB_SSL_CA', ''));
+    if ($sslCa !== '' && !file_exists(DB_SOCKET)) {
+        $caPath = sys_get_temp_dir() . '/cloudsql-server-ca.pem';
+        if (!is_file($caPath) || md5_file($caPath) !== md5($sslCa)) {
+            file_put_contents($caPath, $sslCa);
+            chmod($caPath, 0600);
+        }
+        $pdoOptions[PDO::MYSQL_ATTR_SSL_CA] = $caPath;
+        // Cloud SQL's certificate is issued for the instance name, not the IP
+        // being dialled, so hostname verification cannot succeed. The CA check
+        // above is what establishes we are talking to the right server.
+        $pdoOptions[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = false;
+    }
+
+    $dbh = new PDO($dsn, DB_USER, DB_PASS, $pdoOptions);
     $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $dbh->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $dbh->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
