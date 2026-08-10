@@ -98,8 +98,54 @@ define('CURRENCY', 'UGX');
 // =============================================================
 // FIREBASE CONFIGURATION (Push Notifications)
 // =============================================================
-define('FIREBASE_PROJECT_ID', 'afamfresh-c9afb');
-define('FIREBASE_CREDENTIALS', __DIR__ . '/../../storage/firebase/afamfresh-c9afb-firebase-adminsdk-fbsvc-a6dfe39e6d.json');
+define('FIREBASE_PROJECT_ID', env('FIREBASE_PROJECT_ID', 'afamfresh-c9afb'));
+
+// Two ways in, because the two environments differ in kind.
+//
+// On Cloud Run there is no persistent disk to put a key file on, so the
+// service account arrives as JSON in FIREBASE_CREDENTIALS_JSON (a Secret
+// Manager secret). Locally it is a file under storage/, outside the web
+// root so Apache cannot serve it.
+//
+// Whichever is set, getFirebaseServiceAccount() below returns the decoded
+// array or null. Nothing else should read these two constants directly.
+define('FIREBASE_CREDENTIALS_JSON', env('FIREBASE_CREDENTIALS_JSON', ''));
+define('FIREBASE_CREDENTIALS', env(
+    'FIREBASE_CREDENTIALS',
+    __DIR__ . '/../../storage/firebase/afamfresh-c9afb-firebase-adminsdk-fbsvc-a6dfe39e6d.json'
+));
+
+/**
+ * The Firebase service account, or null if this deployment has none.
+ *
+ * Returns null rather than throwing: push is a side effect of orders and
+ * deliveries, and a missing key must not take down checkout. Callers log
+ * and carry on.
+ */
+function getFirebaseServiceAccount()
+{
+    static $cached = false;
+    if ($cached !== false) {
+        return $cached;
+    }
+
+    $raw = FIREBASE_CREDENTIALS_JSON !== ''
+        ? FIREBASE_CREDENTIALS_JSON
+        : (is_readable(FIREBASE_CREDENTIALS) ? file_get_contents(FIREBASE_CREDENTIALS) : '');
+
+    if ($raw === '') {
+        error_log('[FCM] No service account configured — set FIREBASE_CREDENTIALS_JSON, or put the key file at ' . FIREBASE_CREDENTIALS . '. Push notifications are disabled.');
+        return $cached = null;
+    }
+
+    $account = json_decode($raw, true);
+    if (!is_array($account) || empty($account['private_key']) || empty($account['client_email'])) {
+        error_log('[FCM] Service account JSON is unreadable or missing private_key/client_email. Push notifications are disabled.');
+        return $cached = null;
+    }
+
+    return $cached = $account;
+}
 
 // =============================================================
 // GOOGLE OAUTH CONFIGURATION (Google Sign-In)
@@ -146,8 +192,15 @@ define('OFFICE_ADDRESS', 'AfamFresh Warehouse, Kampala');
 try {
     // Determine connection type: Cloud SQL UNIX Socket vs TCP Host/IP
     if (file_exists(DB_SOCKET)) {
-        // Connect via Cloud SQL Unix Socket
-        $dsn = sprintf('mysql:dbname=%s;unix_socket=%s', DB_NAME, DB_SOCKET);
+        // Connect via Cloud SQL Unix Socket.
+        //
+        // charset=utf8mb4 is not optional here even though it looks like
+        // boilerplate: this is the branch that runs on Cloud Run, and without
+        // it PDO falls back to the server's default charset. Local XAMPP and
+        // Cloud SQL do not necessarily agree on that default, so omitting it
+        // corrupts any non-ASCII name or address in production while local
+        // testing stays clean — the worst possible failure shape.
+        $dsn = sprintf('mysql:dbname=%s;unix_socket=%s;charset=utf8mb4', DB_NAME, DB_SOCKET);
     } else {
         // Fallback to local host connection
         $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_NAME);
@@ -245,14 +298,9 @@ function base64UrlEncode($data) {
  * Send an FCM v1 Push Notification using Google Service Account Credentials.
  */
 function sendPushNotification($deviceToken, $title, $body, $customData = []) {
-    if (!file_exists(FIREBASE_CREDENTIALS)) {
-        error_log("[FCM Error] Service account JSON credentials file not found.");
-        return false;
-    }
-
-    $serviceAccount = json_decode(file_get_contents(FIREBASE_CREDENTIALS), true);
-    if (!$serviceAccount || !isset($serviceAccount['private_key']) || !isset($serviceAccount['client_email'])) {
-        error_log("[FCM Error] Invalid formatting or unreadable configuration inside JSON credentials.");
+    $serviceAccount = getFirebaseServiceAccount();
+    if ($serviceAccount === null) {
+        // Already logged, with the reason and the fix. Nothing to add here.
         return false;
     }
 
