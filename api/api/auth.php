@@ -268,7 +268,19 @@ if ($action == 'google_login') {
         echo json_encode(['success' => false, 'error' => 'ID token missing']);
         exit;
     }
-    
+
+    // Which app is asking, read the same three ways as the token above because
+    // the client posts this form-encoded while older builds sent JSON.
+    //
+    // This block did not exist, and its absence broke role requests entirely:
+    // the INSERT below omitted account_type, so every Google account was
+    // created with the column default 'customer'. api/roles.php then refused
+    // "request vendor access" at its account-type check before a row could
+    // reach role_requests, so the admin queue stayed empty with nothing to
+    // show for it.
+    $appRoleRaw = $input['app_role'] ?? $_POST['app_role'] ?? $_GET['app_role'] ?? 'customer';
+    $appType = accountTypeForAppRole($appRoleRaw) ?? 'customer';
+
     // Verify the ID token with Google
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, "https://oauth2.googleapis.com/tokeninfo?id_token=$idToken");
@@ -330,6 +342,24 @@ if ($action == 'google_login') {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($user) {
+            // Right account, wrong app — the check the password path has done
+            // all along at the top of this file, missing here. Without it
+            // Google Sign-In walked a customer account straight into the
+            // Vendor and Rider apps, which is the one thing account_type
+            // exists to prevent.
+            //
+            // Checked before google_id is written, so a refused sign-in
+            // leaves no trace on the account.
+            if ($user['account_type'] !== $appType) {
+                echo json_encode([
+                    'success' => false,
+                    'error'   => 'This is ' . accountTypeLabel($user['account_type'])
+                               . ", so it can't be used in this app. "
+                               . 'Please use the AfamFresh app for that account.',
+                ]);
+                exit;
+            }
+
             // If user exists but no google_id, update it
             if (empty($user['google_id'])) {
                 $updateStmt = $dbh->prepare("UPDATE users SET google_id = ?, google_picture = ? WHERE id = ?");
@@ -351,13 +381,23 @@ if ($action == 'google_login') {
             // Create new user
             $fname = explode(' ', $name)[0] ?? '';
             $lname = implode(' ', array_slice(explode(' ', $name), 1)) ?? '';
+            // account_type and current_role are set here for the same reason
+            // the password registration above sets them: the account type is
+            // fixed at creation and nothing later can change it. Leaving them
+            // to the column default made every Google account a customer.
             $insertStmt = $dbh->prepare("
-                INSERT INTO users (fname, lname, email, google_id, google_picture, area, address, mobile) 
-                VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', ?)
+                INSERT INTO users (fname, lname, email, google_id, google_picture, area, address, mobile, account_type, `current_role`)
+                VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', ?, ?, ?)
             ");
             // Set mobile to NULL (if column allows NULL) or an empty string
             $mobile = null; // Let database use default NULL
-            $result = $insertStmt->execute([$fname, $lname, $email, $google_id, $picture, $mobile]);
+            $result = $insertStmt->execute([
+                $fname, $lname, $email, $google_id, $picture, $mobile,
+                $appType,
+                // Mirrors the account type so the payload cannot contradict
+                // it. `current_role` is a MariaDB reserved word.
+                $appType === 'customer' ? 'user' : $appType,
+            ]);
             
             if ($result) {
                 $userId = $dbh->lastInsertId();
