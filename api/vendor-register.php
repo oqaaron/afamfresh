@@ -16,7 +16,13 @@ $phone = trim($input['phone'] ?? '');
 $email = trim($input['email'] ?? '');
 $location = trim($input['location'] ?? '');
 $market_stall = trim($input['market_stall'] ?? '');
-$user_id = intval($input['user_id'] ?? 0);
+// Was taken from the body, which let a caller create a vendor record against
+// any user id. Note this endpoint bypasses the role-request approval in
+// includes/roles.php entirely -- it is a second, older way to become a vendor,
+// and nothing in the three apps calls it. It writes is_verified = 0, so a
+// record made this way still cannot list anything until an admin verifies it.
+require_once __DIR__ . '/../includes/api_auth.php';
+$user_id = requireOwnUserId($input['user_id'] ?? 0);
 
 // Validate required fields
 if (empty($business_name) || empty($phone) || $user_id === 0) {

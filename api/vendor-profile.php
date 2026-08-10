@@ -100,11 +100,47 @@ if (($_GET['action'] ?? '') === 'update') {
     exit;
 }
 
-// Get user_id from query parameter or POST
-$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : (isset($_POST['user_id']) ? intval($_POST['user_id']) : 0);
+// =============================================================
+// READ: the vendor's own dashboard payload.
+// =============================================================
+// This used to take user_id from the query string and answer for
+// whoever was named, with no authentication at all. Incrementing
+// that number walked through every vendor on the platform and
+// returned their revenue, commission rate, net earnings and
+// reviews. It was reachable from the open internet.
+//
+// The signed-in user is now the default and the only permitted
+// subject. The parameter is kept because the app sends it, but it
+// must match the session -- an admin session may look at any
+// vendor, because the admin pages legitimately do.
+// =============================================================
+$isAdmin = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+
+if (!isset($_SESSION['user_id']) && !$isAdmin) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Please sign in again.']);
+    exit;
+}
+
+$sessionUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
+$requested = isset($_GET['user_id'])
+    ? intval($_GET['user_id'])
+    : (isset($_POST['user_id']) ? intval($_POST['user_id']) : 0);
+
+// No parameter means "me", which is what every app caller wants anyway.
+$user_id = $requested !== 0 ? $requested : $sessionUserId;
 
 if ($user_id === 0) {
     echo json_encode(['error' => 'user_id is required']);
+    exit;
+}
+
+if ($user_id !== $sessionUserId && !$isAdmin) {
+    // Deliberately the same wording whether or not that vendor exists, so
+    // this cannot be used to enumerate which accounts are vendors.
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Not your vendor account.']);
     exit;
 }
 
