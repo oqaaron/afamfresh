@@ -8,6 +8,8 @@ import com.techaus.afamfresh.models.SurplusListingResponse
 import com.techaus.afamfresh.models.SurplusListingsResponse
 import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.UpdateSurplusListingRequest
+import com.techaus.afamfresh.models.UpdateVendorProfileRequest
+import com.techaus.afamfresh.models.UpdateVendorProfileResponse
 import com.techaus.afamfresh.models.VendorOrdersResponse
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
@@ -19,10 +21,15 @@ import com.techaus.afamfresh.utils.enqueueApi
 /**
  * Wraps the vendor-facing endpoints.
  *
- * ⚠️ These endpoints do NOT read the PHP session — they identify the vendor from
- * an explicit `user_id` / `vendor_id` query parameter. That is why every method
- * here takes an id, unlike the customer repositories. The caller must pass the
- * signed-in user's id; see VendorViewModel.
+ * These endpoints take an explicit `user_id` / `vendor_id`, which is why every
+ * method here takes an id, unlike the customer repositories. The caller must
+ * pass the signed-in user's id; see VendorViewModel.
+ *
+ * They DO now read the PHP session, and the id must match it. It previously did
+ * not: user_id was taken on trust, so any vendor's earnings, commission rate and
+ * orders could be read by changing the number. The id is still sent because the
+ * server accepts it when it agrees with the session — but it is no longer what
+ * decides whose records come back.
  *
  * Previously this class called `vendor/products.php`, `vendor/orders.php` and
  * `vendor/surplus/listings.php`, none of which exist — every vendor screen was
@@ -46,6 +53,27 @@ class VendorRepository(
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.vendor, null)
                     else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Saves the vendor's business details.
+     *
+     * Reports back whether the account is verified, because that is what
+     * decides if they can list products yet — saving details does not grant it,
+     * an admin does.
+     */
+    fun updateVendorProfile(
+        request: UpdateVendorProfileRequest,
+        callback: (isVerified: Boolean, message: String?, error: ApiError?) -> Unit
+    ) {
+        apiService.updateVendorProfile(body = request)
+            .enqueueApi<UpdateVendorProfileResponse>("VendorRepo", "updateVendorProfile") { body, error ->
+                when {
+                    error != null -> callback(false, null, error)
+                    body?.success == true -> callback(body.isVerified, body.message, null)
+                    else -> callback(false, null, ApiError.reported(body?.error))
                 }
             }
     }

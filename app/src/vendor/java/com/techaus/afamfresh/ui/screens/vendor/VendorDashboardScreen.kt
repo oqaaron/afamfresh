@@ -39,12 +39,19 @@ fun VendorDashboardScreen(
     onEditListing: (SurplusListing) -> Unit,
     onViewOrders: () -> Unit,
     onViewProducts: () -> Unit,
+    onEditBusinessDetails: () -> Unit,
     onBack: () -> Unit
 ) {
     val listings by vendorViewModel.listings.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
     val error by vendorViewModel.error.collectAsState()
     val canRetry by vendorViewModel.canRetry.collectAsState()
+    val profile by vendorViewModel.profile.collectAsState()
+
+    // api/surplus-listings.php refuses to create a listing unless the vendor is
+    // verified. Without this the FAB was offered anyway and the request came
+    // back rejected with nothing on screen explaining why.
+    val isVerified = profile?.isVerified == true
 
     val activeCount = listings.count { it.status.equals("approved", ignoreCase = true) }
     val pendingCount = listings.count { it.status.equals("pending", ignoreCase = true) }
@@ -60,12 +67,51 @@ fun VendorDashboardScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddListing, containerColor = Forest) {
-                Icon(Icons.Default.Add, contentDescription = "Add listing", tint = Color.White)
+            if (isVerified) {
+                FloatingActionButton(onClick = onAddListing, containerColor = Forest) {
+                    Icon(Icons.Default.Add, contentDescription = "Add listing", tint = Color.White)
+                }
             }
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+
+            // ===== Verification gate =====
+            // Shown until an admin verifies. It is the only route to the
+            // business-details form, and the only place the vendor is told why
+            // they cannot list anything yet.
+            if (profile != null && !isVerified) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = ForestSurface),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "Your account is not verified yet",
+                            fontWeight = FontWeight.Bold,
+                            color = Ink,
+                            fontSize = 15.sp
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Add your business details so an administrator can review " +
+                                "them. You can start listing products once they do.",
+                            color = InkMuted,
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = onEditBusinessDetails,
+                            colors = ButtonDefaults.buttonColors(containerColor = Forest),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Business details", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // ===== Quick stats =====
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

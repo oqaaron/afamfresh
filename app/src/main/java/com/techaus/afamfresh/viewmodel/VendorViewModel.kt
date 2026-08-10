@@ -3,6 +3,7 @@ package com.techaus.afamfresh.viewmodel
 import com.techaus.afamfresh.models.CreateSurplusListingRequest
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.repository.VendorRepository
@@ -16,8 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * IMPORTANT — why this needs an explicit identity step:
  *
- * The vendor endpoints do not read the PHP session. They take the vendor's id as
- * a query parameter, and they disagree about WHICH id:
+ * The vendor endpoints take the vendor's id as a parameter, and they disagree
+ * about WHICH id:
  *
  *   vendor-products.php     -> user_id
  *   surplus-listings.php    -> vendor_id (GET), user_id (POST)
@@ -26,6 +27,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * Nothing in the auth response carries the vendor id, so [start] must be called
  * with the signed-in user's id first; it resolves the vendor record and only
  * then can anything else load.
+ *
+ * They do also read the PHP session now, and refuse an id that disagrees with
+ * it — so a stale or expired session shows up here as a 401 on calls that used
+ * to succeed, not as somebody else's data.
  *
  * This also replaces the old `init { loadListings() }`. That fired at
  * construction — before any user was known — so it always requested another
@@ -46,6 +51,13 @@ class VendorViewModel(
 
     private val _profile = MutableStateFlow<VendorProfile?>(null)
     val profile: StateFlow<VendorProfile?> = _profile.asStateFlow()
+
+    /**
+     * Save state for the business-details form, kept separate from [isLoading]
+     * so saving does not blank the screen the form is sitting on.
+     */
+    private val _detailsSaveState = MutableStateFlow<VendorDetailsSaveState>(VendorDetailsSaveState.Idle)
+    val detailsSaveState: StateFlow<VendorDetailsSaveState> = _detailsSaveState.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -89,6 +101,53 @@ class VendorViewModel(
                 _canRetry.value = error?.isRetryable ?: false
             }
         }
+    }
+
+    /**
+     * Saves the business details an approved vendor supplies before an admin
+     * verifies them.
+     *
+     * Refreshes the profile on success so `is_verified` and the new details are
+     * what the dashboard reads — without it the screen would keep showing the
+     * placeholder name approval generated.
+     */
+    fun saveBusinessDetails(
+        businessName: String,
+        phone: String,
+        businessType: String,
+        location: String?,
+        marketStall: String?
+    ) {
+        _detailsSaveState.value = VendorDetailsSaveState.Saving
+        vendorRepository.updateVendorProfile(
+            UpdateVendorProfileRequest(
+                businessName = businessName.trim(),
+                phone = phone.trim(),
+                businessType = businessType,
+                location = location?.trim()?.ifEmpty { null },
+                marketStall = marketStall?.trim()?.ifEmpty { null }
+            )
+        ) { isVerified, message, error ->
+            if (error != null) {
+                _detailsSaveState.value = VendorDetailsSaveState.Error(error.userMessage)
+                return@updateVendorProfile
+            }
+            _detailsSaveState.value = VendorDetailsSaveState.Saved(isVerified, message)
+
+            // Re-read the record rather than patching it locally, so the
+            // dashboard cannot disagree with the server about is_verified.
+            val id = userId
+            if (id != null) {
+                vendorRepository.getVendorProfile(id) { profile, _ ->
+                    if (profile != null) _profile.value = profile
+                }
+            }
+        }
+    }
+
+    /** Lets the form clear a message after it has been shown. */
+    fun clearDetailsSaveState() {
+        _detailsSaveState.value = VendorDetailsSaveState.Idle
     }
 
     fun loadListings(status: String = "approved") {
@@ -235,4 +294,18 @@ class VendorViewModel(
         _error.value = "Vendor account not loaded yet. Pull to retry."
         _canRetry.value = true
     }
+}
+
+/**
+ * Outcome of saving the business-details form.
+ *
+ * [Saved] carries is_verified because saving details is not what grants
+ * permission to list products — an admin verifying the record is. The form
+ * says so rather than implying the vendor is now live.
+ */
+sealed class VendorDetailsSaveState {
+    object Idle : VendorDetailsSaveState()
+    object Saving : VendorDetailsSaveState()
+    data class Saved(val isVerified: Boolean, val message: String?) : VendorDetailsSaveState()
+    data class Error(val message: String) : VendorDetailsSaveState()
 }

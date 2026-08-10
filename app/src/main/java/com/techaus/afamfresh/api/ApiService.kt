@@ -301,6 +301,17 @@ interface ApiService {
         @Query("user_id") userId: Int
     ): Call<VendorProfileResponse>
 
+    // Second stage of vendor onboarding: the details the vendor supplies after
+    // an admin approves their role request, before an admin verifies them.
+    //
+    // Sends no user_id — the server takes the vendor from the session, so this
+    // cannot be pointed at someone else's account.
+    @POST("vendor-profile.php")
+    fun updateVendorProfile(
+        @Query("action") action: String = "update",
+        @Body body: UpdateVendorProfileRequest
+    ): Call<UpdateVendorProfileResponse>
+
     // ============================================================
     // PAYMENT ENDPOINTS
     // ============================================================

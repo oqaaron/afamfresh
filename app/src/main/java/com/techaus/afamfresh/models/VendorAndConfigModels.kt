@@ -50,6 +50,35 @@ data class VendorProfileResponse(
 )
 
 /**
+ * The business details a vendor fills in after their role request is approved.
+ *
+ * Approval creates the `vendors` row from what a user account can supply — the
+ * person's own name as the business name, and a blank phone — so this is the
+ * step that turns it into a real business record. An admin verifies it
+ * afterwards, and api/surplus-listings.php refuses to create a listing until
+ * they have.
+ *
+ * No user_id: api/vendor-profile.php?action=update takes the vendor from the
+ * session, so the account being edited cannot be chosen by the caller.
+ */
+data class UpdateVendorProfileRequest(
+    @SerializedName("business_name") val businessName: String,
+    @SerializedName("phone") val phone: String,
+    /** One of the `vendors.business_type` ENUM values; the server whitelists it. */
+    @SerializedName("business_type") val businessType: String,
+    @SerializedName("location") val location: String? = null,
+    @SerializedName("market_stall") val marketStall: String? = null
+)
+
+data class UpdateVendorProfileResponse(
+    @SerializedName("success") val success: Boolean = false,
+    /** False until an admin verifies, which is what gates listing products. */
+    @SerializedName("is_verified") val isVerified: Boolean = false,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+/**
  * ✅ VERIFIED against api/surplus-orders.php.
  *
  * `getVendorOrders` used to be typed as List<Order>, but the only per-vendor
