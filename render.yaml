@@ -1,0 +1,78 @@
+# Render blueprint for the AfamFresh backend.
+#
+# Render runs the container; the database stays on Cloud SQL and the uploaded
+# files stay in Cloud Storage. That split is deliberate — Render offers no
+# managed MySQL, and this schema has 33 ENUM/SET columns plus MySQL-dialect SQL
+# throughout, so moving it to Render's Postgres would be a rewrite, not a
+# migration.
+#
+# Two consequences follow from the database being outside Render:
+#
+#   1. Traffic crosses the public internet, so DB_SSL_CA must be set. Download
+#      the server CA from the Cloud SQL instance (Connections -> Security) and
+#      paste the PEM in as a secret env var.
+#   2. Cloud SQL must allow Render's outbound addresses. Add them under
+#      Connections -> Networking -> Authorized networks. Render publishes the
+#      static outbound IPs for a service on its Connect page; a service with
+#      no static outbound IP cannot reach a Cloud SQL public endpoint at all.
+#
+# Region is frankfurt to match Cloud SQL in europe-west3 — a service in Oregon
+# would put an Atlantic round trip on every query.
+
+services:
+  - type: web
+    name: afamfresh-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: frankfurt
+    plan: starter
+
+    # The container listens on $PORT, which Render sets. The image rewrites
+    # Apache's Listen directive at start-up to match.
+    healthCheckPath: /api/products.php?action=list
+
+    envVars:
+      # --- Storage: uploads go to the bucket, never the container disk ---
+      - key: GCS_BUCKET
+        value: afamfresh-uploads
+
+      # --- Database (Cloud SQL over TCP; DB_SOCKET stays unset here) ---
+      - key: DB_HOST
+        sync: false          # Cloud SQL public IP
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        value: kitchen
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: DB_SSL_CA
+        sync: false          # paste the Cloud SQL server CA PEM
+
+      # --- Firebase: push notifications and bucket uploads ---
+      - key: FIREBASE_PROJECT_ID
+        value: afamfresh-f68c6
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false          # the whole service account JSON
+
+      # --- Google Sign-In: must match what the app sends ---
+      - key: GOOGLE_WEB_CLIENT_ID
+        sync: false
+
+      # --- Payments ---
+      - key: PESAPAL_ENV
+        value: live
+      - key: PESAPAL_CONSUMER_KEY
+        sync: false
+      - key: PESAPAL_CONSUMER_SECRET
+        sync: false
+      - key: PESAPAL_IPN_ID
+        sync: false
+      - key: PESAPAL_PUBLIC_BASE_URL
+        sync: false          # this service's own https URL, once known
+
+      # --- Email ---
+      - key: BREVO_API_KEY
+        sync: false
