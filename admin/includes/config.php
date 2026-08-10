@@ -22,7 +22,7 @@ define('DB_PASS', env('DB_PASS', ''));   // empty is normal for local XAMPP
 define('DB_NAME', env('DB_NAME', 'kitchen'));
 
 // Cloud SQL Unix Socket (Injected automatically by Cloud Run when connected)
-define('DB_SOCKET', env('DB_SOCKET', '/cloudsql/afamfresh-c9afb:us-central1:afamfresh-db-instance'));
+define('DB_SOCKET', env('DB_SOCKET', '/cloudsql/afamfresh-f68c6:us-central1:afamfresh-db-instance'));
 
 // =============================================================
 // PESAPAL PAYMENT CONFIGURATION
@@ -61,7 +61,7 @@ define('PESAPAL_LIVE_IPN_ID', env('PESAPAL_IPN_ID', ''));
 // GetTransactionStatus instead — which api/payment.php?action=verify does.
 //
 // Override with PESAPAL_PUBLIC_BASE_URL in env.yaml, e.g.
-//   PESAPAL_PUBLIC_BASE_URL: https://afamfresh-736537583604.us-central1.run.app
+//   PESAPAL_PUBLIC_BASE_URL: https://afamfresh-backend-xxxxxx-uc.a.run.app
 define('PESAPAL_PUBLIC_BASE_URL', rtrim(env('PESAPAL_PUBLIC_BASE_URL', 'https://afam.techaus.online'), '/'));
 define('PESAPAL_CALLBACK_URL', PESAPAL_PUBLIC_BASE_URL . '/pesapal-callback.php');
 define('PESAPAL_IPN_NOTIFICATION_URL', PESAPAL_PUBLIC_BASE_URL . '/pesapal-ipn.php');
@@ -98,7 +98,7 @@ define('CURRENCY', 'UGX');
 // =============================================================
 // FIREBASE CONFIGURATION (Push Notifications)
 // =============================================================
-define('FIREBASE_PROJECT_ID', env('FIREBASE_PROJECT_ID', 'afamfresh-c9afb'));
+define('FIREBASE_PROJECT_ID', env('FIREBASE_PROJECT_ID', 'afamfresh-f68c6'));
 
 // Two ways in, because the two environments differ in kind.
 //
@@ -112,7 +112,7 @@ define('FIREBASE_PROJECT_ID', env('FIREBASE_PROJECT_ID', 'afamfresh-c9afb'));
 define('FIREBASE_CREDENTIALS_JSON', env('FIREBASE_CREDENTIALS_JSON', ''));
 define('FIREBASE_CREDENTIALS', env(
     'FIREBASE_CREDENTIALS',
-    __DIR__ . '/../../storage/firebase/afamfresh-c9afb-firebase-adminsdk-fbsvc-a6dfe39e6d.json'
+    __DIR__ . '/../../storage/firebase/service-account.json'
 ));
 
 /**

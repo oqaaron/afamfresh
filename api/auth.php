@@ -293,21 +293,25 @@ if ($action == 'google_login') {
     
     // --- Security Check: Verify audience (aud) matches our Web Client ID ---
     //
-    // This check is the reason Google Sign-In could not have worked even once
-    // the SHA-1 fingerprints are registered: the literal here was
-    // 953128851253-..., a client from a different Google Cloud project, while
-    // the app requests its token with 736537583604-... from afamfresh-c9afb.
-    // Every token would have been rejected as the wrong audience.
+    // The audience is what stops a Google token minted for some other app
+    // being replayed here to log in as that user. It must be the WEB client
+    // id — the value the app passes to requestIdToken — not an Android one.
     //
-    // Env-driven now, so the two sides can be corrected together without a
-    // code change, and defaulted to the app's actual client id. It must stay
-    // the WEB client id — the value passed to requestIdToken in
-    // AuthRepository.kt — not an Android client id.
-    $expectedAud = env(
-        'GOOGLE_WEB_CLIENT_ID',
-        '736537583604-anb6k5tufbkkvbskvg02f4iatl93tuuf.apps.googleusercontent.com'
-    );
-    if (isset($userInfo['aud']) && $userInfo['aud'] !== $expectedAud) {
+    // No default. A wrong default is how this broke before: the literal was a
+    // client from an unrelated project, so every sign-in was rejected. An
+    // unset value now refuses the sign-in loudly rather than falling back to
+    // a guess.
+    $expectedAud = trim((string)env('GOOGLE_WEB_CLIENT_ID', ''));
+    if ($expectedAud === '') {
+        error_log('Google Sign-In: GOOGLE_WEB_CLIENT_ID is not set — refusing to verify a token with no known audience.');
+        echo json_encode(['success' => false, 'error' => 'Google Sign-In is not configured on this server.']);
+        exit;
+    }
+
+    // Note the !isset half. This was `isset($aud) && $aud !== $expected`,
+    // which ACCEPTED a token carrying no aud claim at all — the one case the
+    // check exists to catch.
+    if (!isset($userInfo['aud']) || $userInfo['aud'] !== $expectedAud) {
         error_log("Google Sign-In: Invalid audience. Expected: $expectedAud, Got: " . ($userInfo['aud'] ?? 'null'));
         echo json_encode(['success' => false, 'error' => 'Invalid token audience']);
         exit;

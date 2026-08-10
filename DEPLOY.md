@@ -5,7 +5,7 @@ serves static files and Cloud Functions run Node/Python/Go/Java, not PHP. So
 Firebase stays what it already is here (Cloud Messaging + Analytics, and
 optionally App Distribution for test APKs) and the container runs on Cloud
 Run against Cloud SQL, in the **same GCP project as Firebase**
-(`afamfresh-c9afb`), so there is one account, one bill and one IAM.
+(`afamfresh-f68c6`), so there is one account, one bill and one IAM.
 
 Everything below marked **[you]** needs console or billing access and cannot
 be scripted from the repo.
@@ -14,10 +14,10 @@ be scripted from the repo.
 
 ## 1. Enable the services **[you]**
 
-In project `afamfresh-c9afb`, with billing enabled:
+In project `afamfresh-f68c6`, with billing enabled:
 
 ```bash
-gcloud config set project afamfresh-c9afb
+gcloud config set project afamfresh-f68c6
 gcloud services enable \
   run.googleapis.com \
   sqladmin.googleapis.com \
@@ -56,7 +56,7 @@ The instance connection name is what Cloud Run needs — note it down:
 ```bash
 gcloud sql instances describe afamfresh-db-instance \
   --format='value(connectionName)'
-# afamfresh-c9afb:us-central1:afamfresh-db-instance
+# afamfresh-f68c6:us-central1:afamfresh-db-instance
 ```
 
 `db-f1-micro` is the cheapest tier and is enough for current traffic
@@ -136,13 +136,13 @@ done
 
 # The Firebase service account, as JSON content rather than a file:
 gcloud secrets create FIREBASE_CREDENTIALS_JSON \
-  --data-file=afamfresh-c9afb-firebase-adminsdk-XXXX.json
+  --data-file=afamfresh-f68c6-firebase-adminsdk-XXXX.json
 ```
 
 Grant the Cloud Run runtime service account read access:
 
 ```bash
-PROJNUM=$(gcloud projects describe afamfresh-c9afb --format='value(projectNumber)')
+PROJNUM=$(gcloud projects describe afamfresh-f68c6 --format='value(projectNumber)')
 for s in DB_USER DB_PASS DB_NAME PESAPAL_ENV PESAPAL_CONSUMER_KEY \
          PESAPAL_CONSUMER_SECRET PESAPAL_IPN_ID PESAPAL_PUBLIC_BASE_URL \
          BREVO_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN \
@@ -165,10 +165,12 @@ up front and fails by name if any is missing.
 
 | Secret | Value |
 | --- | --- |
-| `GCP_PROJECT_ID` | `afamfresh-c9afb` |
+| `GCP_PROJECT_ID` | `afamfresh-f68c6` |
 | `GCP_CREDENTIALS` | JSON key for a deployer service account |
-| `CLOUD_SQL_INSTANCE` | `afamfresh-c9afb:us-central1:afamfresh-db-instance` |
+| `CLOUD_SQL_INSTANCE` | `afamfresh-f68c6:us-central1:afamfresh-db-instance` |
 | `DB_USER` `DB_PASS` `DB_NAME` | same values as the secrets above |
+| `GCS_BUCKET` | `afamfresh-uploads` |
+| `GOOGLE_WEB_CLIENT_ID` | Web client id from the new project's OAuth credentials |
 | `PESAPAL_*`, `BREVO_API_KEY`, `TWILIO_*` | same values as the secrets above |
 
 The deployer service account needs `roles/run.admin`,
