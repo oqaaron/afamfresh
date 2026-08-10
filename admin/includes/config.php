@@ -133,14 +133,18 @@ function getFirebaseServiceAccount()
         ? FIREBASE_CREDENTIALS_JSON
         : (is_readable(FIREBASE_CREDENTIALS) ? file_get_contents(FIREBASE_CREDENTIALS) : '');
 
+    // Message is deliberately neutral about the caller: this account backs
+    // both push and Cloud Storage now, and a log line claiming push is
+    // disabled while the real casualty was an image upload sends whoever
+    // reads it looking in the wrong place.
     if ($raw === '') {
-        error_log('[FCM] No service account configured — set FIREBASE_CREDENTIALS_JSON, or put the key file at ' . FIREBASE_CREDENTIALS . '. Push notifications are disabled.');
+        error_log('[google-auth] No service account configured — set FIREBASE_CREDENTIALS_JSON, or put the key file at ' . FIREBASE_CREDENTIALS . '. Push notifications and bucket uploads are both disabled.');
         return $cached = null;
     }
 
     $account = json_decode($raw, true);
     if (!is_array($account) || empty($account['private_key']) || empty($account['client_email'])) {
-        error_log('[FCM] Service account JSON is unreadable or missing private_key/client_email. Push notifications are disabled.');
+        error_log('[google-auth] Service account JSON is unreadable or missing private_key/client_email. Push notifications and bucket uploads are both disabled.');
         return $cached = null;
     }
 
@@ -295,59 +299,79 @@ function base64UrlEncode($data) {
 }
 
 /**
- * Send an FCM v1 Push Notification using Google Service Account Credentials.
+ * OAuth access token for the Firebase/GCP service account, for one scope.
+ *
+ * Shared by push (firebase.messaging) and object storage (devstorage), which
+ * differ only in the scope they ask for — the JWT assembly and exchange are
+ * identical, and having two copies of it would mean fixing signing bugs twice.
+ *
+ * Cached per scope for the life of the request. Tokens are valid an hour, but
+ * a single PHP request lasts seconds; this only avoids a second round trip
+ * when one request both stores an image and sends a notification.
+ *
+ * Returns null on any failure, having logged the reason.
  */
-function sendPushNotification($deviceToken, $title, $body, $customData = []) {
-    $serviceAccount = getFirebaseServiceAccount();
-    if ($serviceAccount === null) {
-        // Already logged, with the reason and the fix. Nothing to add here.
-        return false;
+function googleAccessToken($scope) {
+    static $cache = [];
+    if (isset($cache[$scope])) {
+        return $cache[$scope];
     }
 
-    $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
-    $now = time();
-    $payload = json_encode([
-        'iss' => $serviceAccount['client_email'],
-        'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
-        'aud' => 'https://oauth2.googleapis.com/token',
-        'exp' => $now + 3600,
-        'iat' => $now
-    ]);
+    $serviceAccount = getFirebaseServiceAccount();
+    if ($serviceAccount === null) {
+        return null;   // already logged, with the fix
+    }
 
-    $base64UrlHeader = base64UrlEncode($header);
-    $base64UrlPayload = base64UrlEncode($payload);
-    $signatureInput = $base64UrlHeader . "." . $base64UrlPayload;
+    $now = time();
+    $signatureInput = base64UrlEncode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']))
+        . '.'
+        . base64UrlEncode(json_encode([
+            'iss'   => $serviceAccount['client_email'],
+            'scope' => $scope,
+            'aud'   => 'https://oauth2.googleapis.com/token',
+            'exp'   => $now + 3600,
+            'iat'   => $now,
+        ]));
 
     $signature = '';
     if (!openssl_sign($signatureInput, $signature, $serviceAccount['private_key'], 'SHA256')) {
-        error_log("[FCM Error] Failed to generate OpenSSL signature payload asset context.");
-        return false;
+        error_log('[google-auth] openssl_sign failed — is private_key intact?');
+        return null;
     }
-    $base64UrlSignature = base64UrlEncode($signature);
-    $jwtAssertion = $signatureInput . "." . $base64UrlSignature;
+    $assertion = $signatureInput . '.' . base64UrlEncode($signature);
 
-    $tokenUrl = 'https://oauth2.googleapis.com/token';
-    $postFields = 'grant_type=' . urlencode('urn:ietf:params:oauth:grant-type:jwt-bearer') . '&assertion=' . urlencode($jwtAssertion);
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $tokenUrl);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-    
-    $tokenResponse = curl_exec($ch);
-    if (curl_errno($ch)) {
-        error_log("[FCM Error] Access Token Request failed: " . curl_error($ch));
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+        CURLOPT_POSTFIELDS     => 'grant_type=' . urlencode('urn:ietf:params:oauth:grant-type:jwt-bearer')
+            . '&assertion=' . urlencode($assertion),
+    ]);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        error_log('[google-auth] token request failed: ' . curl_error($ch));
         curl_close($ch);
-        return false;
+        return null;
     }
     curl_close($ch);
 
-    $tokenData = json_decode($tokenResponse, true);
-    $accessToken = $tokenData['access_token'] ?? null;
-    if (!$accessToken) {
-        error_log("[FCM Error] Could not parse access_token block output profile: " . $tokenResponse);
+    $token = json_decode($response, true)['access_token'] ?? null;
+    if (!$token) {
+        error_log('[google-auth] no access_token for scope ' . $scope . ': ' . substr($response, 0, 200));
+        return null;
+    }
+
+    return $cache[$scope] = $token;
+}
+
+/**
+ * Send an FCM v1 Push Notification using Google Service Account Credentials.
+ */
+function sendPushNotification($deviceToken, $title, $body, $customData = []) {
+    $accessToken = googleAccessToken('https://www.googleapis.com/auth/firebase.messaging');
+    if ($accessToken === null) {
         return false;
     }
 

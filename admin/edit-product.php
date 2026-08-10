@@ -125,9 +125,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-gray-700 font-bold mb-2">Current Image</label>
-                    <?php $imgPath = productImageRelPath($product['image']); ?>
+                    <?php $imgPath = productImageUrl($product['image']); ?>
                     <?php if ($imgPath): ?>
-                        <img src="..<?= htmlspecialchars($imgPath) ?>" class="w-24 h-24 object-cover rounded mb-2">
+                        <img src="<?= htmlspecialchars($imgPath) ?>" class="w-24 h-24 object-cover rounded mb-2">
                     <?php elseif ($product['image']): ?>
                         <p class="text-amber-600 text-sm">Image file missing on the server (<?= htmlspecialchars($product['image']) ?>) — upload a new one.</p>
                     <?php else: ?>

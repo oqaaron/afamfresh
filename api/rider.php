@@ -29,6 +29,9 @@ session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/user_payload.php';
 require_once __DIR__ . '/../includes/rider_earnings.php';
+// Proof photos are read on the detail action, not just written on upload,
+// so this is needed for the whole file rather than inside upload_proof.
+require_once __DIR__ . '/../includes/storage.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -258,12 +261,14 @@ if ($action === 'delivery_detail') {
         ];
     }, $itemsStmt->fetchAll(PDO::FETCH_ASSOC));
 
+    // storageExists, not is_file: on Cloud Run the photo lives in a bucket
+    // and is_file() would answer false for every one of them, silently
+    // blanking proof photos that are in fact there.
     $proofUrl = null;
-    if (!empty($o['delivery_photo'])
-        && is_file(dirname(__DIR__) . '/uploads/proof/' . $o['delivery_photo'])) {
+    if (!empty($o['delivery_photo']) && storageExists('proof/' . $o['delivery_photo'])) {
         // Absolute, like avatars. A bare filename is unusable to Coil — the
         // mistake that left product images blank for so long.
-        $proofUrl = appBaseUrl() . '/uploads/proof/' . $o['delivery_photo'];
+        $proofUrl = storageUrl('proof/' . $o['delivery_photo']);
     }
 
     echo json_encode([
@@ -455,7 +460,7 @@ if ($action === 'upload_proof') {
 
     $result = saveUploadedImage(
         $_FILES['photo'],
-        dirname(__DIR__) . '/uploads/proof',
+        'proof',
         'proof',
         $prev ?: null
     );
@@ -469,7 +474,7 @@ if ($action === 'upload_proof') {
 
     echo json_encode([
         'success' => true,
-        'proof_photo_url' => appBaseUrl() . '/uploads/proof/' . $result['filename'],
+        'proof_photo_url' => storageUrl('proof/' . $result['filename']),
     ]);
     exit;
 }

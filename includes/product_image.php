@@ -23,9 +23,9 @@
 // right first.
 // =============================================================
 
-/** Absolute path of the directory new product images are written to. */
+/** Storage folder new product images are written to, under the uploads root. */
 function productImageDir() {
-    return dirname(__DIR__) . '/uploads/products';
+    return 'products';
 }
 
 /**
@@ -63,12 +63,16 @@ function productImageRelPath($image) {
         return null;
     }
 
-    $root = dirname(__DIR__);
-    if (is_file($root . '/uploads/products/' . $image)) {
-        return '/uploads/products/' . $image;
+    require_once __DIR__ . '/storage.php';
+
+    // storageExists rather than is_file: on Cloud Run these live in a bucket,
+    // where is_file() is false for every image and the whole catalogue would
+    // fall through to placeholders.
+    if (storageExists('products/' . $image)) {
+        return 'products/' . $image;
     }
-    if (is_file($root . '/uploads/' . $image)) {
-        return '/uploads/' . $image;
+    if (storageExists($image)) {
+        return $image;
     }
     return null;
 }
@@ -85,6 +89,6 @@ function productImageUrl($image) {
     $rel = productImageRelPath($image);
     if ($rel === null) return null;
 
-    require_once __DIR__ . '/user_payload.php';
-    return appBaseUrl() . $rel;
+    require_once __DIR__ . '/storage.php';
+    return storageUrl($rel);
 }

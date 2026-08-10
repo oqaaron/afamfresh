@@ -84,6 +84,42 @@ If you also want the existing live data (orders, users), that is a separate
 `mysqldump` of those tables — decide deliberately, since it moves personal
 data into a new jurisdiction.
 
+## 3b. Create the uploads bucket **[you]**
+
+Cloud Run's filesystem is ephemeral and per instance: an uploaded product
+image lands on one container, is invisible to the others, and is gone on the
+next deploy. Uploads therefore go to a bucket.
+
+```bash
+gcloud storage buckets create gs://afamfresh-uploads \
+  --location=us-central1 --uniform-bucket-level-access
+
+# Objects are served straight to the app, so they must be publicly readable.
+gcloud storage buckets add-iam-policy-binding gs://afamfresh-uploads \
+  --member=allUsers --role=roles/storage.objectViewer
+```
+
+Copy the existing files up once, from a machine that has both `uploads/` and
+the service account:
+
+```bash
+GCS_BUCKET=afamfresh-uploads \
+FIREBASE_CREDENTIALS=/path/to/service-account.json \
+  /opt/lampp/bin/php scripts/migrate-uploads-to-gcs.php --dry-run   # preview
+# then drop --dry-run
+```
+
+It is idempotent, so a partial run can simply be repeated.
+
+> Most image rows have no file to migrate. 70 of 72 products and all 27
+> delivery proof photos reference filenames that no longer exist on disk —
+> lost in an earlier move, long before this migration. The script reports the
+> count at the end. Those products show a placeholder until the images are
+> re-uploaded through the admin console.
+
+Leaving `GCS_BUCKET` empty keeps everything on local disk, which is what
+development should do — no bucket and no service account needed.
+
 ## 4. Put the credentials in Secret Manager **[you]**
 
 The workflow injects these with `--set-secrets`, not `--set-env-vars`,
