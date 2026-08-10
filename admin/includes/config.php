@@ -253,7 +253,23 @@ try {
     $dbh->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $dbh->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 } catch (PDOException $e) {
-    error_log("Database Connection Error: " . $e->getMessage());
+    // Say which target was dialled and how, never just the driver's message.
+    //
+    // "SQLSTATE[HY000] [2002] No such file or directory" on its own reads like
+    // a missing file and sends you hunting for one. It actually means PDO used
+    // a Unix socket — which is what mysql:host=localhost does — so the real
+    // fault is an unset DB_HOST, not anything on disk. Naming the target makes
+    // that obvious, and distinguishes it from a refused or timed-out TCP
+    // connection, which is a firewall or allowlist problem instead.
+    $target = file_exists(DB_SOCKET)
+        ? 'unix socket ' . DB_SOCKET
+        : 'tcp ' . DB_HOST . ':' . (int)env('DB_PORT', 3306)
+            . (DB_HOST === 'localhost' ? '  <-- "localhost" makes PDO use a socket; set DB_HOST to an IP' : '')
+            . (trim((string)env('DB_SSL_CA', '')) === '' ? '  (no TLS: DB_SSL_CA unset)' : '  (TLS on)');
+
+    error_log('Database Connection Error: ' . $e->getMessage()
+        . ' | db=' . DB_NAME . ' user=' . DB_USER . ' via ' . $target);
+
     header('Content-Type: application/json');
     echo json_encode([
         'success' => false,
