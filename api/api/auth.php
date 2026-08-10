@@ -292,7 +292,21 @@ if ($action == 'google_login') {
     $picture = $userInfo['picture'] ?? null;
     
     // --- Security Check: Verify audience (aud) matches our Web Client ID ---
-    $expectedAud = '953128851253-cs9l26qrflpi6rd24ulo0emsplrjf8f7.apps.googleusercontent.com';
+    //
+    // This check is the reason Google Sign-In could not have worked even once
+    // the SHA-1 fingerprints are registered: the literal here was
+    // 953128851253-..., a client from a different Google Cloud project, while
+    // the app requests its token with 736537583604-... from afamfresh-c9afb.
+    // Every token would have been rejected as the wrong audience.
+    //
+    // Env-driven now, so the two sides can be corrected together without a
+    // code change, and defaulted to the app's actual client id. It must stay
+    // the WEB client id — the value passed to requestIdToken in
+    // AuthRepository.kt — not an Android client id.
+    $expectedAud = env(
+        'GOOGLE_WEB_CLIENT_ID',
+        '736537583604-anb6k5tufbkkvbskvg02f4iatl93tuuf.apps.googleusercontent.com'
+    );
     if (isset($userInfo['aud']) && $userInfo['aud'] !== $expectedAud) {
         error_log("Google Sign-In: Invalid audience. Expected: $expectedAud, Got: " . ($userInfo['aud'] ?? 'null'));
         echo json_encode(['success' => false, 'error' => 'Invalid token audience']);
