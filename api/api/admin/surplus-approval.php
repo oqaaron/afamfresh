@@ -1,7 +1,8 @@
 <?php
 header('Content-Type: application/json');
+// config.php already starts the session; calling it again raised a notice
+// that was printed ahead of this file's JSON.
 require_once '../../admin/includes/config.php';
-session_start();
 
 // Simple auth – you can reuse admin check
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
