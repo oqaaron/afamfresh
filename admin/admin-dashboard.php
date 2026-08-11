@@ -1,7 +1,19 @@
 <?php
 // admin/admin-dashboard.php
-require_once 'includes/auth_check.php';
+//
+// The path was 'includes/auth_check.php', but auth_check.php sits in admin/,
+// not admin/includes/ -- so this page was a fatal error every time it was
+// opened, for as long as it has existed. Nothing linked to it until the nav
+// gained a Vendor Verification entry, which is why it went unnoticed.
+//
+// __DIR__ rather than another relative path: relative includes resolve against
+// the calling file's directory OR the working directory depending on how PHP
+// was reached, and this file is opened directly by Apache.
+require_once __DIR__ . '/auth_check.php';
 requireAdminLoginWeb();
+
+// $dbh, for the sidebar's pending-requests badge.
+require_once __DIR__ . '/includes/config.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -10,6 +22,9 @@ requireAdminLoginWeb();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AfamFresh Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- The shared sidebar draws its icons with Font Awesome; this page did not
+         load it, so every nav item rendered as a blank square. -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         .card { transition: all 0.2s; }
         .card:hover { box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
@@ -20,6 +35,9 @@ requireAdminLoginWeb();
     </style>
 </head>
 <body class="bg-gray-50 font-sans antialiased">
+<div class="flex min-h-screen">
+<?php include __DIR__ . '/includes/nav.php'; ?>
+<div class="flex-1 overflow-auto">
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Header -->
@@ -282,5 +300,7 @@ requireAdminLoginWeb();
             loadVendors();
         });
     </script>
+</div><!-- /content -->
+</div><!-- /flex wrapper opened before the sidebar include -->
 </body>
 </html>
