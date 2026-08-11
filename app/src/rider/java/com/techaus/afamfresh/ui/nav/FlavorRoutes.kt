@@ -1,5 +1,7 @@
 package com.techaus.afamfresh.ui.nav
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.techaus.afamfresh.ui.screens.rider.RiderDashboardScreen
@@ -17,8 +19,11 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     val nav = deps.navController
 
     composable("rider_dashboard") {
+        val unread by deps.notificationViewModel.unreadCount.collectAsState()
         RiderDashboardScreen(
             riderViewModel = deps.riderViewModel,
+            onNotificationsClick = { nav.navigate("notifications") },
+            unreadNotifications = unread,
             onDeliveryClick = { orderId -> nav.navigate("rider_delivery/$orderId") },
             onViewAll = { nav.navigate("rider_deliveries") },
             // popBackStack, not navigate("home"): "home" is the customer

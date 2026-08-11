@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +41,8 @@ fun VendorDashboardScreen(
     onViewOrders: () -> Unit,
     onViewProducts: () -> Unit,
     onEditBusinessDetails: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    unreadNotifications: Int,
     onBack: () -> Unit
 ) {
     val listings by vendorViewModel.listings.collectAsState()
@@ -64,6 +67,27 @@ fun VendorDashboardScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text("Vendor Dashboard", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                // The only way into the notifications screen from this app. The
+                // route is registered for every flavor, but the bell that
+                // reached it lived on the customer catalogue, which a vendor
+                // never opens — so vendor notifications were written and never
+                // seen.
+                BadgedBox(
+                    badge = {
+                        if (unreadNotifications > 0) {
+                            Badge { Text("$unreadNotifications") }
+                        }
+                    }
+                ) {
+                    IconButton(onClick = onNotificationsClick) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = Ink
+                        )
+                    }
+                }
             }
         },
         floatingActionButton = {

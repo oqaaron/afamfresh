@@ -21,8 +21,11 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     val vm = deps.vendorViewModel
 
     composable("vendor_dashboard") {
+        val unread by deps.notificationViewModel.unreadCount.collectAsState()
         VendorDashboardScreen(
             vendorViewModel = vm,
+            onNotificationsClick = { nav.navigate("notifications") },
+            unreadNotifications = unread,
             onAddListing = { nav.navigate("add_surplus") },
             onEditListing = { listing -> nav.navigate("edit_surplus/${listing.id}") },
             onViewOrders = { nav.navigate("vendor_orders") },

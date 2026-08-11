@@ -4,6 +4,7 @@ import androidx.navigation.NavHostController
 import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.DeliveryResultViewModel
+import com.techaus.afamfresh.viewmodel.NotificationViewModel
 import com.techaus.afamfresh.viewmodel.RiderViewModel
 import com.techaus.afamfresh.viewmodel.VendorViewModel
 
@@ -32,4 +33,13 @@ data class FlavorRouteDeps(
     val cartViewModel: CartViewModel,
     val deliveryResultViewModel: DeliveryResultViewModel,
     val deliveryRepository: DeliveryRepository,
+    /**
+     * Carried so the Rider and Vendor dashboards can show an unread badge.
+     *
+     * The `notifications` route is registered in `MainScreen` for every flavor,
+     * but the only way in was the bell on `HomeScreen` — the customer
+     * catalogue, which those two apps never open. Both were notification-blind:
+     * messages were written for them and there was no screen to read them on.
+     */
+    val notificationViewModel: NotificationViewModel,
 )

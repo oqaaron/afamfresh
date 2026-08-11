@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material3.*
@@ -39,6 +40,8 @@ fun RiderDashboardScreen(
     riderViewModel: RiderViewModel,
     onDeliveryClick: (Int) -> Unit,
     onViewAll: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    unreadNotifications: Int,
     onBack: () -> Unit
 ) {
     val profile by riderViewModel.profile.collectAsState()
@@ -62,6 +65,25 @@ fun RiderDashboardScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text("Rider", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                // The only way into the notifications screen from this app: the
+                // bell that reached it lived on the customer catalogue, which a
+                // rider never opens.
+                BadgedBox(
+                    badge = {
+                        if (unreadNotifications > 0) {
+                            Badge { Text("$unreadNotifications") }
+                        }
+                    }
+                ) {
+                    IconButton(onClick = onNotificationsClick) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = Ink
+                        )
+                    }
+                }
             }
         }
     ) { padding ->
