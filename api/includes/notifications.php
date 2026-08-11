@@ -2,26 +2,47 @@
 require_once __DIR__ . '/../admin/includes/config.php';
 
 /**
- * Add a notification for a user
+ * Add a notification for a user.
+ *
+ * Writes the in-app record AND queues the other channels. It used to be a bare
+ * INSERT into user_notifications, which is why nothing in this codebase ever
+ * pushed: NotificationManager, the queue, the retry logic and the worker all
+ * existed, and every caller went around them straight to the table.
+ *
+ * Routing it here rather than rewriting each call site means the eight
+ * existing helpers in vendor-notification-helper.php gain push without being
+ * touched, and anything written later gets it by default.
+ *
+ * Delivery is asynchronous: this returns once the job is queued, and the
+ * worker in the container sends it within the minute. A queue failure is not
+ * treated as a failure of this call — the in-app notification is already
+ * stored and readable.
+ *
  * @param int $userId - User ID from users table
  * @param string $title - Notification title
  * @param string $message - Notification message
  * @param string $type - Notification type (order, promo, system, etc.)
  * @param string|null $link - Optional link to relevant page
+ * @param array $channels - Beyond in-app: 'push' and/or 'email'. Email is
+ *                          opt-in per call so routine notifications do not
+ *                          each become a separate message in someone's inbox.
  * @return bool - Success status
  */
-function addNotification($userId, $title, $message, $type = 'system', $link = null) {
-    global $dbh;
+function addNotification($userId, $title, $message, $type = 'system', $link = null, array $channels = ['push']) {
     try {
-        $sql = "INSERT INTO user_notifications (user_id, title, message, type, link) VALUES (:user_id, :title, :message, :type, :link)";
-        $query = $dbh->prepare($sql);
-        $query->bindParam(':user_id', $userId, PDO::PARAM_INT);
-        $query->bindParam(':title', $title, PDO::PARAM_STR);
-        $query->bindParam(':message', $message, PDO::PARAM_STR);
-        $query->bindParam(':type', $type, PDO::PARAM_STR);
-        $query->bindParam(':link', $link, PDO::PARAM_STR);
-        return $query->execute();
-    } catch (PDOException $e) {
+        $event = new NotificationEvent(
+            (int)$userId,
+            $type,
+            $title,
+            $message,
+            $link !== null ? ['link' => $link] : [],
+            $channels
+        );
+
+        $manager = new NotificationManager();
+        // 0 means the user does not exist; the manager has already logged it.
+        return $manager->send($event) > 0;
+    } catch (Throwable $e) {
         error_log("Add notification error: " . $e->getMessage());
         return false;
     }

@@ -254,12 +254,17 @@ function checkAllVendorLowStockAlerts() {
  * @return bool
  */
 function notifyVendorVerified($vendor_user_id) {
+    // Email as well as push: this is the end of an onboarding wait that may
+    // have run for days, and it is the one message a vendor is actively
+    // waiting on. Reaching them without the app being open is the point.
     return addNotification(
         $vendor_user_id,
         '✅ Your vendor account is verified',
         'An administrator has verified your business details. You can now list '
             . 'products on AfamFresh.',
-        'system'
+        'system',
+        null,
+        ['push', 'email']
     );
 }
 
