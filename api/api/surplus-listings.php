@@ -61,9 +61,21 @@ try {
         $listing_type = trim($input['listing_type'] ?? 'goodie_bag');
         $description = trim($input['description'] ?? '');
         $condition_rating = trim($input['condition_rating'] ?? 'good');
-        $pickup_only = isset($input['pickup_only']) ? (bool)$input['pickup_only'] : false;
+        // Cast to int, not bool.
+        //
+        // PDO binds a PHP false as an EMPTY STRING when parameters are passed
+        // as an array to execute(), and MySQL in strict mode refuses '' for a
+        // tinyint: "Incorrect integer value: '' for column 'pickup_only'". So
+        // every listing with pickup_only unticked failed, which is most of
+        // them, while a ticked one bound '1' and went through.
+        //
+        // is_weight_based has the same fault and would have failed for any
+        // unit that is not kilograms.
+        $pickup_only = !empty($input['pickup_only']) ? 1 : 0;
         $weight_per_unit_kg = floatval($input['weight_per_unit_kg'] ?? 1.00);
-        $is_weight_based = isset($input['is_weight_based']) ? (bool)$input['is_weight_based'] : true;
+        $is_weight_based = isset($input['is_weight_based'])
+            ? (!empty($input['is_weight_based']) ? 1 : 0)
+            : 1;
         
         // Validate
         if ($user_id === 0 || $product_id === 0 || $original_price === 0 || $discount_percent === 0 || $surplus_quantity === 0 || empty($expiry_date)) {
