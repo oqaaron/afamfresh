@@ -79,3 +79,14 @@ services:
       # --- Email ---
       - key: BREVO_API_KEY
         sync: false
+
+      # --- SMS (order placed, out for delivery) ---
+      # The alphanumeric sender name, max 11 characters, e.g. AfamFresh.
+      # Unset means no SMS is sent at all, which is deliberate: an
+      # unregistered sender is accepted by the API and then never delivered,
+      # so silence is preferable to messages that vanish.
+      #
+      # Brevo bills SMS from a credit balance separate from email. The same
+      # API key authenticates both, so a zero balance fails with a valid key.
+      - key: BREVO_SMS_SENDER
+        sync: false
