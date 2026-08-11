@@ -392,6 +392,23 @@ switch ($action) {
 
             $dbh->commit();
 
+            // After the commit, never inside the transaction: an SMS cannot be
+            // rolled back, and a provider timeout would hold rows locked on the
+            // way to failing anyway.
+            //
+            // Failure is logged, not surfaced. The order exists and is paid
+            // for; telling the customer it failed because a text message did
+            // would be a lie with consequences.
+            try {
+                require_once __DIR__ . '/../includes/brevo-sms.php';
+                sendSmsWithBrevo(
+                    $mobile,
+                    "AfamFresh: order #{$orderId} received. We'll text you again when it's out for delivery."
+                );
+            } catch (Throwable $e) {
+                error_log("Order $orderId placed but the order-placed SMS failed: " . $e->getMessage());
+            }
+
             echo json_encode([
                 'success' => true,
                 'order_id' => $orderId,

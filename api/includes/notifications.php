@@ -490,4 +490,40 @@ function getNotificationIcon($type) {
             return '📢';
     }
 }
+
+/**
+ * Welcome a newly registered account.
+ *
+ * Email rather than push, because there is no device token yet: the app
+ * registers one after sign-in, so a push queued here would have nothing to
+ * send to.
+ *
+ * The wording depends on the account type, and that difference is the point.
+ * A customer can shop immediately. A rider or vendor cannot -- registration
+ * files a request an admin has to approve, and without being told so they are
+ * left looking at a locked workspace wondering what they did wrong.
+ *
+ * @param int $userId
+ * @param string $firstName
+ * @param string $accountType - customer | rider | vendor | wholesaler
+ * @return bool
+ */
+function notifyWelcome($userId, $firstName, $accountType = 'customer') {
+    $name = trim((string)$firstName);
+    $greeting = $name !== '' ? "Hi {$name}," : 'Hi,';
+
+    if ($accountType === 'customer') {
+        $title = 'Welcome to AfamFresh';
+        $body  = "{$greeting} your account is ready. Browse fresh produce from "
+               . 'vendors near you and get it delivered.';
+    } else {
+        $label = $accountType === 'rider' ? 'rider' : 'vendor';
+        $title = 'Welcome to AfamFresh';
+        $body  = "{$greeting} your {$label} account has been created. An "
+               . 'administrator needs to approve it before you can start — '
+               . "we'll let you know as soon as that happens.";
+    }
+
+    return addNotification($userId, $title, $body, 'system', null, ['email']);
+}
 ?>

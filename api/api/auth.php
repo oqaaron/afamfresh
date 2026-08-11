@@ -129,12 +129,17 @@ if ($action == 'register') {
                      ON DUPLICATE KEY UPDATE status = 'active'"
                 )->execute([$userId]);
             }
+            // Queued, not sent inline: registration must not wait on Brevo, and
+            // must not fail because Brevo is down. The worker delivers it.
+            require_once __DIR__ . '/../includes/notifications.php';
+            notifyWelcome($userId, $fname, $accountType);
+
             $token = generateToken();
             $_SESSION['user_id'] = $userId;
             $_SESSION['user_name'] = $name;
             $_SESSION['user_email'] = $email;
             $_SESSION['auth_token'] = $token;
-            
+
             echo json_encode([
                 'success' => true,
                 'token' => $token,
@@ -401,6 +406,14 @@ if ($action == 'google_login') {
             
             if ($result) {
                 $userId = $dbh->lastInsertId();
+
+                // Same welcome as the password path. This branch creates real
+                // accounts too — a Google sign-in for an unknown address IS a
+                // registration, and it is the route all three of the current
+                // production accounts came in through.
+                require_once __DIR__ . '/../includes/notifications.php';
+                notifyWelcome($userId, $fname, $appType);
+
                 $token = generateToken();
                 $_SESSION['user_id'] = $userId;
                 $_SESSION['user_name'] = $name;
