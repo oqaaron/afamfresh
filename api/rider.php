@@ -370,6 +370,30 @@ if ($action === 'update_status') {
         fail('Could not update the delivery. Please try again.');
     }
 
+    // The second of the two moments a customer is texted: their order has left
+    // for their address. 'picked_up' is that transition -- $STATUS_MAP turns it
+    // into the "Out for Delivery" label.
+    //
+    // Outside the transaction and swallowed on failure, for the same reason as
+    // order placement: the delivery genuinely progressed, and failing the
+    // rider's status update because a text did not send would strand the order.
+    if ($next === 'picked_up') {
+        try {
+            require_once __DIR__ . '/../includes/brevo-sms.php';
+            $cust = $dbh->prepare("SELECT mobile, fname FROM orders WHERE orderid = ?");
+            $cust->execute([$orderId]);
+            $row = $cust->fetch(PDO::FETCH_ASSOC);
+            if ($row && !empty($row['mobile'])) {
+                sendSmsWithBrevo(
+                    $row['mobile'],
+                    "AfamFresh: order #{$orderId} is out for delivery and on its way to you."
+                );
+            }
+        } catch (Throwable $e) {
+            error_log("Order $orderId marked out for delivery but the SMS failed: " . $e->getMessage());
+        }
+    }
+
     echo json_encode([
         'success'        => true,
         'status'         => $next,
