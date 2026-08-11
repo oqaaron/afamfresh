@@ -31,12 +31,22 @@ RUN chown -R www-data:www-data /var/www/html \
 # die once and stop delivering silently. The script itself holds a lock file,
 # so a slow run cannot overlap with the next tick.
 #
-# Output goes to PID 1's stdout, which is where Render collects logs from.
-# Written to a file rather than left in the container's own stream, it would be
-# invisible.
+# Output needs no redirect. This is started from start.sh, so it inherits the
+# container's stdout, which is what the platform collects.
+#
+# It used to redirect to /proc/1/fd/1 to reach PID 1's stream. That file belongs
+# to root, and once the worker correctly dropped to www-data the redirect was
+# denied -- and a failed redirect means the shell never runs the command at all,
+# so the drain silently never executed while the loop kept ticking. The only
+# visible symptom was one "Permission denied" line a minute.
+#
+# Announces itself once at start-up rather than every tick: a per-minute
+# heartbeat would bury the request log, but with no line at all a worker that
+# is running and one that never started look identical.
 RUN printf '#!/bin/sh\n\
+echo "notification worker: started as $(id -un), draining every 60s"\n\
 while true; do\n\
-  php /var/www/html/cron/process_notifications.php >> /proc/1/fd/1 2>&1\n\
+  php /var/www/html/cron/process_notifications.php 2>&1\n\
   sleep 60\n\
 done\n' > /usr/local/bin/notify-worker.sh \
     && chmod +x /usr/local/bin/notify-worker.sh
