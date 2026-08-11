@@ -44,6 +44,20 @@ try {
     error_log('admin nav: pending product count failed: ' . $e->getMessage());
 }
 
+// Surplus listings awaiting review. This queue is time-sensitive in a way the
+// others are not: a listing sits against an expiry date, so one left unreviewed
+// long enough is worthless by the time anyone looks.
+$navPendingSurplus = 0;
+try {
+    if (isset($dbh)) {
+        $navPendingSurplus = (int)$dbh->query(
+            "SELECT COUNT(*) FROM surplus_listings WHERE status = 'pending'"
+        )->fetchColumn();
+    }
+} catch (Throwable $e) {
+    error_log('admin nav: pending surplus count failed: ' . $e->getMessage());
+}
+
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
     ['products.php',         'Products',           'fa-box'],
@@ -54,6 +68,7 @@ $navItems = [
     ['role-requests.php',    'Role Requests',      'fa-user-check'],
     ['admin-dashboard.php',  'Vendor Verification','fa-store'],
     ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
+    ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
 ];
 ?>
 <div class="w-64 bg-green-800 text-white flex flex-col">
@@ -68,6 +83,9 @@ $navItems = [
                 <?php endif; ?>
                 <?php if ($href === 'vendor-catalogue.php' && $navPendingProducts > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingProducts ?></span>
+                <?php endif; ?>
+                <?php if ($href === 'surplus-listings.php' && $navPendingSurplus > 0): ?>
+                    <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingSurplus ?></span>
                 <?php endif; ?>
             </a>
         <?php endforeach; ?>
