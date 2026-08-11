@@ -238,6 +238,32 @@ function checkAllVendorLowStockAlerts() {
 }
 
 /**
+ * Tell a vendor an admin has verified them.
+ *
+ * The end of the onboarding chain, and the only point in it where anything
+ * reaches the vendor. Approval, submitting details and verification all happen
+ * elsewhere; without this the vendor learns they can trade by reopening the app
+ * and noticing that a card has disappeared.
+ *
+ * Writes through addNotification to `user_notifications`, which is what
+ * api/notifications.php serves and the app actually reads. Note the
+ * `vendor_notifications` table and api/vendor-notifications.php are a separate,
+ * parallel system that nothing in the three apps calls.
+ *
+ * @param int $vendor_user_id - the vendor's users.id, NOT vendors.id
+ * @return bool
+ */
+function notifyVendorVerified($vendor_user_id) {
+    return addNotification(
+        $vendor_user_id,
+        '✅ Your vendor account is verified',
+        'An administrator has verified your business details. You can now list '
+            . 'products on AfamFresh.',
+        'system'
+    );
+}
+
+/**
  * Get vendor ID from user ID
  * @param int $user_id - User ID
  * @return int|null - Vendor ID or null
