@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
@@ -53,9 +54,10 @@ fun VendorProductsScreen(
 
     val profile by vendorViewModel.profile.collectAsState()
 
-    // Keyed on the vendor profile so this waits for start() to identify the
-    // vendor — vendor-products.php takes the user id as a query parameter and
-    // does not read the session.
+    // Refetches on every entry to the screen, so returning here after an admin
+    // approves picks the change up. It does NOT refresh while the screen is
+    // already open -- approval happens elsewhere and nothing pushes it here --
+    // which is what the refresh action in the top bar is for.
     LaunchedEffect(profile?.id) {
         if (profile != null) vendorViewModel.loadMyProducts()
     }
@@ -68,6 +70,13 @@ fun VendorProductsScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text("My Products", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    onClick = { vendorViewModel.loadMyProducts() },
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Ink)
+                }
             }
         },
         floatingActionButton = {
@@ -79,7 +88,23 @@ fun VendorProductsScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+
+            // A failed refresh used to be invisible whenever a stale list was
+            // already on screen -- the error branch below only fires when the
+            // list is empty. So a session that had expired looked exactly like
+            // "the admin has not approved it yet".
+            if (error != null && products.isNotEmpty()) {
+                Text(
+                    error ?: "",
+                    color = Tomato,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 6.dp)
+                )
+            }
+
             when {
                 isLoading && products.isEmpty() -> ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 error != null && products.isEmpty() -> ErrorState(
