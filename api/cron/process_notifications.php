@@ -15,6 +15,30 @@ if (file_exists($lockFile) && filemtime($lockFile) > time() - 60) {
 }
 touch($lockFile);
 
+// Recover jobs stranded in 'processing'.
+//
+// A job is marked processing before it is sent. If the container is killed in
+// between -- a deploy, an OOM, a Render restart -- nothing ever moves it on,
+// and because the query below only looks at 'pending' and 'failed', it would
+// sit there permanently and never be delivered or retried.
+//
+// Ten minutes is well past the longest a single send can take, so anything
+// older is a corpse rather than work in progress. Returned to 'pending' with
+// its retry count untouched, since the send was never actually attempted.
+try {
+    $recovered = $dbh->exec(
+        "UPDATE notification_queue
+            SET status = 'pending', updated_at = NOW()
+          WHERE status = 'processing'
+            AND updated_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)"
+    );
+    if ($recovered > 0) {
+        error_log("notification worker: recovered $recovered job(s) stuck in processing");
+    }
+} catch (PDOException $e) {
+    error_log('notification worker: could not recover stuck jobs: ' . $e->getMessage());
+}
+
 // Fetch up to 20 pending jobs
 $stmt = $dbh->prepare("
     SELECT * FROM notification_queue 
