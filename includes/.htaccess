@@ -1,0 +1,12 @@
+# Nothing in includes/ is a web endpoint. These files are included by the scripts in
+# api/ and admin/, or run over the CLI -- they were never meant to be fetched.
+#
+# They were reachable: each returned 200. PHP executed them rather than serving
+# their source, so nothing leaked, but scripts/make-render-env.php writes a
+# file when it runs, and a library that strangers can execute is a liability
+# with no upside.
+#
+# Denying the directory rather than naming files, so anything added here later
+# is closed by default. This does not affect require/include, which go through
+# the filesystem and never touch Apache.
+Require all denied

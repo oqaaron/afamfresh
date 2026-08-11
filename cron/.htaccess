@@ -1,0 +1,11 @@
+# Nothing in cron/ is a web endpoint. These scripts are run by the worker
+# started in the Dockerfile, over the CLI, inside the container.
+#
+# They were reachable: GET /cron/process_notifications.php returned 200 from
+# the open internet, so anyone could trigger a queue drain on demand. The lock
+# file capped that at one run a minute, but a job runner that strangers can
+# start is not something to leave open once it is sending email and SMS.
+#
+# Denying the directory rather than naming files, so a script added here later
+# is closed by default instead of inheriting an exposure nobody remembers.
+Require all denied
