@@ -288,6 +288,35 @@ interface ApiService {
         @Query("user_id") userId: Int
     ): Call<VendorProductsResponse>
 
+    // ============================================================
+    // VENDOR'S OWN PRODUCTS  (api/vendor-catalogue.php)
+    // ============================================================
+    //
+    // Products the vendor creates themselves, which an admin approves before
+    // they can be listed as surplus. Distinct from vendor-products.php, which
+    // is "catalogue items I stock" — this is "products I own".
+    //
+    // No user_id on either call: the server takes the vendor from the session.
+
+    @GET("vendor-catalogue.php")
+    fun getMyVendorProducts(
+        @Query("action") action: String = "mine"
+    ): Call<VendorCatalogueResponse>
+
+    // Multipart because a photo comes with it. The server also accepts the
+    // fields without one, so `image` is optional.
+    @Multipart
+    @POST("vendor-catalogue.php")
+    fun createVendorProduct(
+        @Query("action") action: String = "create",
+        @Part("name") name: okhttp3.RequestBody,
+        @Part("category") category: okhttp3.RequestBody,
+        @Part("price") price: okhttp3.RequestBody,
+        @Part("description") description: okhttp3.RequestBody,
+        @Part("quantitytype") quantityType: okhttp3.RequestBody,
+        @Part image: okhttp3.MultipartBody.Part? = null
+    ): Call<CreateVendorProductResponse>
+
     // Adds a catalogue item to this vendor's inventory, or updates the price
     // and stock if it is already there — the endpoint upserts.
     //

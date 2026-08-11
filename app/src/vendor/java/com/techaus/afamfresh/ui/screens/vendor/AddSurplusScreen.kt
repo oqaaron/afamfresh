@@ -57,7 +57,11 @@ fun AddSurplusScreen(
 ) {
     val isEditing = existingListing != null
     val isLoading by vendorViewModel.isLoading.collectAsState()
-    val vendorProducts by vendorViewModel.vendorProducts.collectAsState()
+    // Only the vendor's OWN approved products can carry a listing: the server
+    // checks ownership and approval, so offering anything else here would just
+    // produce a rejected request.
+    val myProducts by vendorViewModel.myProducts.collectAsState()
+    val vendorProducts = remember(myProducts) { myProducts.filter { it.isApproved } }
 
     // ----- create-mode form state -----
     var selectedProductId by remember(existingListing) {
@@ -111,7 +115,7 @@ fun AddSurplusScreen(
     // identity, which start() supplies asynchronously.
     val profile by vendorViewModel.profile.collectAsState()
     LaunchedEffect(profile?.id) {
-        if (profile != null && vendorProducts.isEmpty()) vendorViewModel.loadVendorProducts()
+        if (profile != null && myProducts.isEmpty()) vendorViewModel.loadMyProducts()
     }
 
     fun submitCreate() {
@@ -127,7 +131,7 @@ fun AddSurplusScreen(
             // when the picker above is empty -- it reads as a broken form
             // rather than a missing prerequisite.
             formError = if (vendorProducts.isEmpty()) {
-                "Add products to your inventory first — there is nothing to list yet."
+                "Add a product and get it approved first — there is nothing to list yet."
             } else {
                 "Choose which product this surplus is for"
             }
@@ -264,16 +268,16 @@ fun AddSurplusScreen(
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Text(
-                                "No products in your inventory yet",
+                                "No approved products yet",
                                 fontWeight = FontWeight.SemiBold,
                                 color = Ink,
                                 fontSize = 14.sp
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                "A surplus listing has to point at one of your products, " +
-                                    "so there is nothing to choose from yet. Add what you " +
-                                    "sell to your inventory first.",
+                                "A surplus listing has to point at one of your approved " +
+                                    "products. Add what you sell and an administrator will " +
+                                    "approve it, then you can list surplus of it here.",
                                 fontSize = 13.sp,
                                 color = InkMuted
                             )
@@ -287,38 +291,43 @@ fun AddSurplusScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = Forest),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Add products", fontWeight = FontWeight.Bold)
+                                Text("Add a product", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         vendorProducts.forEach { vp ->
-                            val selected = selectedProductId == vp.productId
+                            val selected = selectedProductId == vp.id
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (selected) ForestSurface else CardWhite)
                                     .clickable {
-                                        selectedProductId = vp.productId
-                                        // Seed the normal price from the vendor's
-                                        // own price so it rarely needs typing.
-                                        vp.price?.let { p -> originalPrice = p.toInt().toString() }
+                                        selectedProductId = vp.id
+                                        // Seeded from the product's own price so
+                                        // it rarely needs typing. `items.price`
+                                        // is a varchar column, hence the parse.
+                                        vp.price?.toDoubleOrNull()?.let { p ->
+                                            originalPrice = p.toInt().toString()
+                                        }
                                     }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(selected = selected, onClick = {
-                                    selectedProductId = vp.productId
-                                    vp.price?.let { p -> originalPrice = p.toInt().toString() }
+                                    selectedProductId = vp.id
+                                    vp.price?.toDoubleOrNull()?.let { p ->
+                                        originalPrice = p.toInt().toString()
+                                    }
                                 })
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(vp.displayName, color = Ink, fontSize = 14.sp)
+                                    Text(vp.name, color = Ink, fontSize = 14.sp)
                                     Text(
                                         buildString {
-                                            vp.price?.let { append(formatUgx(it)) }
-                                            append("  •  ${vp.stockQuantity} in stock")
+                                            vp.price?.toDoubleOrNull()?.let { append(formatUgx(it)) }
+                                            vp.category?.let { append("  •  ").append(it) }
                                         },
                                         color = InkMuted,
                                         fontSize = 12.sp

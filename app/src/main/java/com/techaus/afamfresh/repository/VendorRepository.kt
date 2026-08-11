@@ -4,6 +4,9 @@ import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.AddVendorProductRequest
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.CreateSurplusListingRequest
+import com.techaus.afamfresh.models.CreateVendorProductResponse
+import com.techaus.afamfresh.models.VendorCatalogueProduct
+import com.techaus.afamfresh.models.VendorCatalogueResponse
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusListingResponse
 import com.techaus.afamfresh.models.SurplusListingsResponse
@@ -16,6 +19,7 @@ import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.models.VendorProfileResponse
 import com.techaus.afamfresh.models.VendorProductsResponse
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.enqueueApi
 
@@ -77,6 +81,52 @@ class VendorRepository(
                     else -> callback(false, null, ApiError.reported(body?.error))
                 }
             }
+    }
+
+    /** The vendor's own products, every status — pending and rejected included. */
+    fun getMyVendorProducts(callback: (List<VendorCatalogueProduct>?, ApiError?) -> Unit) {
+        apiService.getMyVendorProducts()
+            .enqueueApi<VendorCatalogueResponse>("VendorRepo", "getMyVendorProducts") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.products ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Creates a product owned by this vendor, always as pending.
+     *
+     * The photo is optional: the server accepts the fields without one, and a
+     * vendor with no photo to hand should not be blocked from submitting.
+     */
+    fun createVendorProduct(
+        name: String,
+        category: String,
+        price: String,
+        description: String,
+        quantityType: String,
+        image: okhttp3.MultipartBody.Part?,
+        callback: (message: String?, error: ApiError?) -> Unit
+    ) {
+        fun text(value: String) =
+            okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), value)
+
+        apiService.createVendorProduct(
+            name = text(name),
+            category = text(category),
+            price = text(price),
+            description = text(description),
+            quantityType = text(quantityType),
+            image = image
+        ).enqueueApi<CreateVendorProductResponse>("VendorRepo", "createVendorProduct") { body, error ->
+            when {
+                error != null -> callback(null, error)
+                body?.success == true -> callback(body.message, null)
+                else -> callback(null, ApiError.reported(body?.error))
+            }
+        }
     }
 
     /**

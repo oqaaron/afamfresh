@@ -21,9 +21,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.VendorProduct
+import com.techaus.afamfresh.models.VendorCatalogueProduct
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
+import coil.compose.AsyncImage
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
@@ -41,7 +43,10 @@ fun VendorProductsScreen(
     onAddProduct: () -> Unit,
     onBack: () -> Unit
 ) {
-    val products by vendorViewModel.vendorProducts.collectAsState()
+    // The vendor's OWN products now, not catalogue items they stock. Only the
+    // approved ones can carry a surplus listing, and pending/rejected must stay
+    // visible or a rejection is invisible and simply gets resubmitted.
+    val products by vendorViewModel.myProducts.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
     val error by vendorViewModel.error.collectAsState()
     val canRetry by vendorViewModel.canRetry.collectAsState()
@@ -52,7 +57,7 @@ fun VendorProductsScreen(
     // vendor — vendor-products.php takes the user id as a query parameter and
     // does not read the session.
     LaunchedEffect(profile?.id) {
-        if (profile != null) vendorViewModel.loadVendorProducts()
+        if (profile != null) vendorViewModel.loadMyProducts()
     }
 
     Scaffold(
@@ -79,18 +84,19 @@ fun VendorProductsScreen(
                 isLoading && products.isEmpty() -> ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 error != null && products.isEmpty() -> ErrorState(
                     message = error ?: "",
-                    onRetry = if (canRetry) ({ vendorViewModel.loadVendorProducts() }) else null
+                    onRetry = if (canRetry) ({ vendorViewModel.loadMyProducts() }) else null
                 )
                 products.isEmpty() -> EmptyState(
                     icon = Icons.Default.Inventory2,
-                    title = "No products listed yet",
-                    detail = "Products you sell through AfamFresh will appear here."
+                    title = "No products yet",
+                    detail = "Add what you sell. An administrator approves each one " +
+                        "before you can list surplus of it."
                 )
                 else -> LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(products, key = { it.id }) { product -> VendorProductRow(product) }
+                    items(products, key = { it.id }) { product -> MyProductRow(product) }
                 }
             }
         }
@@ -137,5 +143,64 @@ private fun VendorProductRow(product: VendorProduct) {
             fontWeight = FontWeight.Bold,
             color = Forest
         )
+    }
+}
+
+/**
+ * One of the vendor's own products, with the status an admin controls.
+ *
+ * The status is the point of this row. A vendor needs to see what is waiting,
+ * and above all why something was rejected — a rejection with no visible reason
+ * just gets resubmitted unchanged.
+ */
+@Composable
+private fun MyProductRow(product: VendorCatalogueProduct) {
+    val (badgeText, badgeBg, badgeFg) = when {
+        product.isApproved -> Triple("Approved", ForestSurface, Forest)
+        product.isRejected -> Triple("Rejected", Color(0xFFFFEBEE), Tomato)
+        else -> Triple("Awaiting approval", Color(0xFFFFF4E5), Color(0xFF8A6100))
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardWhite),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!product.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = product.imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(
+                    buildString {
+                        product.price?.let { append("UGX ").append(it) }
+                        product.category?.let { append("  •  ").append(it) }
+                    },
+                    color = InkMuted,
+                    fontSize = 12.sp
+                )
+                if (product.isRejected && !product.rejectionReason.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(product.rejectionReason, color = Tomato, fontSize = 12.sp)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(badgeBg)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(badgeText, color = badgeFg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }

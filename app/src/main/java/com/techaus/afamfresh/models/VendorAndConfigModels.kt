@@ -71,6 +71,44 @@ data class UpdateVendorProfileRequest(
 )
 
 /**
+ * A product the vendor created themselves, from api/vendor-catalogue.php.
+ *
+ * These live in `items` alongside the admin catalogue, distinguished by
+ * `vendor_id`, and carry a status an admin controls. They are not sold in the
+ * main shop — a vendor product has no stock or fulfilment path there. It exists
+ * so the vendor can list surplus of it, which is where customers meet it.
+ */
+data class VendorCatalogueProduct(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("name") val name: String = "",
+    @SerializedName("category") val category: String? = null,
+    @SerializedName("description") val description: String? = null,
+    /** `items.price` is a varchar column, so this arrives as a string. */
+    @SerializedName("price") val price: String? = null,
+    @SerializedName("image_url") val imageUrl: String? = null,
+    /** pending | approved | rejected */
+    @SerializedName("status") val status: String = "pending",
+    /** Set only on rejection, and the reason the vendor is shown. */
+    @SerializedName("rejection_reason") val rejectionReason: String? = null
+) {
+    val isApproved: Boolean get() = status.equals("approved", ignoreCase = true)
+    val isRejected: Boolean get() = status.equals("rejected", ignoreCase = true)
+}
+
+data class VendorCatalogueResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("products") val products: List<VendorCatalogueProduct>? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+data class CreateVendorProductResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("product_id") val productId: Int? = null,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+/**
  * Body for POST `vendor-products.php` — "I stock this catalogue item".
  *
  * A vendor cannot invent a product: `product_id` must already exist in `items`,

@@ -4,6 +4,7 @@ import com.techaus.afamfresh.models.CreateSurplusListingRequest
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
+import com.techaus.afamfresh.models.VendorCatalogueProduct
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.repository.VendorRepository
@@ -48,6 +49,10 @@ class VendorViewModel(
 
     private val _vendorProducts = MutableStateFlow<List<VendorProduct>>(emptyList())
     val vendorProducts: StateFlow<List<VendorProduct>> = _vendorProducts.asStateFlow()
+
+    /** Products this vendor created, any status. See [loadMyProducts]. */
+    private val _myProducts = MutableStateFlow<List<VendorCatalogueProduct>>(emptyList())
+    val myProducts: StateFlow<List<VendorCatalogueProduct>> = _myProducts.asStateFlow()
 
     private val _profile = MutableStateFlow<VendorProfile?>(null)
     val profile: StateFlow<VendorProfile?> = _profile.asStateFlow()
@@ -95,6 +100,7 @@ class VendorViewModel(
                 _profile.value = profile
                 loadListings()
                 loadVendorProducts()
+                loadMyProducts()
             } else {
                 _profile.value = null
                 _error.value = error?.userMessage ?: "This account is not registered as a vendor."
@@ -148,6 +154,56 @@ class VendorViewModel(
     /** Lets the form clear a message after it has been shown. */
     fun clearDetailsSaveState() {
         _detailsSaveState.value = VendorDetailsSaveState.Idle
+    }
+
+    /**
+     * The vendor's own products, in every status.
+     *
+     * Distinct from [vendorProducts], which is catalogue items the vendor
+     * stocks. These are products the vendor created, and only the approved ones
+     * can carry a surplus listing.
+     */
+    fun loadMyProducts() {
+        _isLoading.value = true
+        vendorRepository.getMyVendorProducts { products, error ->
+            _isLoading.value = false
+            _hasLoaded.value = true
+            if (products != null) {
+                _myProducts.value = products
+            } else {
+                _error.value = error?.userMessage ?: "Unable to load your products"
+                _canRetry.value = error?.isRetryable ?: true
+            }
+        }
+    }
+
+    /**
+     * Submits a new product for approval.
+     *
+     * Reloads afterwards so the pending row appears immediately — otherwise a
+     * vendor submits, sees nothing change, and submits again.
+     */
+    fun createProduct(
+        name: String,
+        category: String,
+        price: String,
+        description: String,
+        quantityType: String,
+        image: okhttp3.MultipartBody.Part?,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        _isLoading.value = true
+        vendorRepository.createVendorProduct(
+            name, category, price, description, quantityType, image
+        ) { message, error ->
+            _isLoading.value = false
+            if (error == null) {
+                loadMyProducts()
+                onResult(true, message)
+            } else {
+                onResult(false, error.userMessage)
+            }
+        }
     }
 
     /**
