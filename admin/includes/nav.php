@@ -58,6 +58,19 @@ try {
     error_log('admin nav: pending surplus count failed: ' . $e->getMessage());
 }
 
+// Withdrawal requests waiting on a decision. Money someone is waiting for, so
+// it earns a badge more than any other queue here.
+$navPendingPayouts = 0;
+try {
+    if (isset($dbh)) {
+        $navPendingPayouts = (int)$dbh->query(
+            "SELECT COUNT(*) FROM vendor_payout_requests WHERE status = 'pending'"
+        )->fetchColumn();
+    }
+} catch (Throwable $e) {
+    error_log('admin nav: pending payout count failed: ' . $e->getMessage());
+}
+
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
     ['products.php',         'Products',           'fa-box'],
@@ -69,6 +82,7 @@ $navItems = [
     ['admin-dashboard.php',  'Vendor Verification','fa-store'],
     ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
     ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
+    ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
 ];
 ?>
 <div class="w-64 bg-green-800 text-white flex flex-col">
@@ -86,6 +100,9 @@ $navItems = [
                 <?php endif; ?>
                 <?php if ($href === 'surplus-listings.php' && $navPendingSurplus > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingSurplus ?></span>
+                <?php endif; ?>
+                <?php if ($href === 'vendor-payouts.php' && $navPendingPayouts > 0): ?>
+                    <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingPayouts ?></span>
                 <?php endif; ?>
             </a>
         <?php endforeach; ?>
