@@ -204,8 +204,19 @@ function getFirebaseServiceAccount()
 // EMAIL CONFIGURATION (Brevo / Sendinblue API v3)
 // =============================================================
 define('BREVO_API_KEY', env_required('BREVO_API_KEY', 'transactional email'));
-define('BREVO_FROM_EMAIL', 'afamenterprisez@gmail.com');
-define('BREVO_FROM_NAME', 'Afam Enterprises');
+
+// Sends from the verified domain sender, not the old Gmail address.
+//
+// noreply@techaus.online is verified on the Brevo account with DKIM and DMARC
+// configured, which matters more than it looks: mail sent as an @gmail.com
+// address by a third party fails DMARC alignment, and Gmail publishes a
+// policy telling receivers to treat that harshly. It works in testing and
+// then quietly lands in spam at volume — the worst kind of failure, because
+// the send reports success.
+//
+// Overridable by environment so a sender change does not need a code deploy.
+define('BREVO_FROM_EMAIL', env('BREVO_FROM_EMAIL', 'noreply@techaus.online'));
+define('BREVO_FROM_NAME', env('BREVO_FROM_NAME', 'AfamFresh'));
 
 // Fallback SMTP (if Brevo fails)
 define('SMTP_HOST', 'smtp.gmail.com');
