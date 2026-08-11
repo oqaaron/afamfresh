@@ -1,5 +1,7 @@
 package com.techaus.afamfresh.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.R
 import com.techaus.afamfresh.models.LoginUiState
 import com.techaus.afamfresh.ui.theme.Forest
+import com.techaus.afamfresh.ui.theme.Ink
 import com.techaus.afamfresh.ui.theme.InkMuted
 import com.techaus.afamfresh.ui.theme.Tomato
 import com.techaus.afamfresh.viewmodel.AuthViewModel
@@ -42,6 +45,15 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
     val loginState by authViewModel.loginState.collectAsState()
     val isLoading by authViewModel.isLoading.collectAsState()
     val error by authViewModel.error.collectAsState()
+
+    // Feeds the result back to the ViewModel, which verifies the id token with
+    // the backend. The existing LaunchedEffect on loginState below then routes
+    // onward, so Google and password sign-in land in exactly the same place.
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        authViewModel.handleGoogleSignInResult(result.data)
+    }
 
     // ✅ FIX: Call resetLoginState() after handling to prevent re-triggers
     LaunchedEffect(loginState) {
@@ -199,6 +211,28 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                         color = Color.White
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Google sign-in was only ever offered on the Create Account
+            // screen, so anyone who signed up with Google had no way back in:
+            // they have no password to type here, and "forgot password" cannot
+            // help an account that never had one. All three of the accounts in
+            // production were created this way.
+            //
+            // Same call as RegisterScreen. The server treats a Google sign-in
+            // for a known address as a login and an unknown one as a
+            // registration, so one button correctly serves both.
+            OutlinedButton(
+                onClick = { authViewModel.signInWithGoogle(googleSignInLauncher) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                enabled = !isLoading
+            ) {
+                Text("Continue with Google", color = Ink, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
