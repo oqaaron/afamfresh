@@ -25,7 +25,18 @@ if ($action == 'list') {
     $category = $_GET['category'] ?? '';
     $search = $_GET['search'] ?? '';
     
-    $sql = "SELECT * FROM items WHERE 1=1";
+    // The shop shows admin catalogue products only.
+    //
+    // Vendors can now create their own products, which exist in this same
+    // table. They are deliberately NOT sold here: a vendor product has no
+    // stock or fulfilment behind it in the main shop -- it exists so the
+    // vendor can put surplus of it up for sale, and that is where customers
+    // meet it. Without this filter an approved vendor product would appear in
+    // the catalogue as something nobody can actually deliver.
+    //
+    // The status check matters independently: a vendor product awaiting
+    // approval must never be publicly visible.
+    $sql = "SELECT * FROM items WHERE vendor_id IS NULL AND status = 'approved'";
     $params = [];
     
     if (!empty($category)) {
@@ -52,7 +63,13 @@ if ($action == 'list') {
     echo json_encode(['success' => true, 'products' => array_map('withImageUrl', $products)]);
     
 } elseif ($action == 'categories') {
-    $stmt = $dbh->prepare("SELECT DISTINCT category FROM items ORDER BY category");
+    // Same filter as the listing, or a vendor's own category could appear in
+    // the shop's filter bar and then return nothing.
+    $stmt = $dbh->prepare(
+        "SELECT DISTINCT category FROM items
+          WHERE vendor_id IS NULL AND status = 'approved'
+          ORDER BY category"
+    );
     $stmt->execute();
     $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
@@ -61,7 +78,12 @@ if ($action == 'list') {
 } elseif ($action == 'detail') {
     $id = intval($_GET['id'] ?? 0);
     
-    $stmt = $dbh->prepare("SELECT * FROM items WHERE id = ?");
+    // Detail is reachable by guessing an id, so it needs the same rule as the
+    // listing -- otherwise an unapproved product is readable by anyone who
+    // types its number.
+    $stmt = $dbh->prepare(
+        "SELECT * FROM items WHERE id = ? AND vendor_id IS NULL AND status = 'approved'"
+    );
     $stmt->execute([$id]);
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
     

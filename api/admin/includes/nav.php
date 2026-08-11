@@ -31,6 +31,19 @@ try {
     error_log('admin nav: pending count failed: ' . $e->getMessage());
 }
 
+// Vendor-created products waiting on approval. Same reasoning as the role
+// request badge: a queue nobody can see is a queue nobody works.
+$navPendingProducts = 0;
+try {
+    if (isset($dbh)) {
+        $navPendingProducts = (int)$dbh->query(
+            "SELECT COUNT(*) FROM items WHERE vendor_id IS NOT NULL AND status = 'pending'"
+        )->fetchColumn();
+    }
+} catch (Throwable $e) {
+    error_log('admin nav: pending product count failed: ' . $e->getMessage());
+}
+
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
     ['products.php',         'Products',           'fa-box'],
@@ -40,6 +53,7 @@ $navItems = [
     ['rider-payouts.php',    'Rider Payouts',      'fa-money-bill-wave'],
     ['role-requests.php',    'Role Requests',      'fa-user-check'],
     ['admin-dashboard.php',  'Vendor Verification','fa-store'],
+    ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
 ];
 ?>
 <div class="w-64 bg-green-800 text-white flex flex-col">
@@ -51,6 +65,9 @@ $navItems = [
                 <span><i class="fas <?= $icon ?> mr-2"></i> <?= $label ?></span>
                 <?php if ($href === 'role-requests.php' && $navPending > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPending ?></span>
+                <?php endif; ?>
+                <?php if ($href === 'vendor-catalogue.php' && $navPendingProducts > 0): ?>
+                    <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingProducts ?></span>
                 <?php endif; ?>
             </a>
         <?php endforeach; ?>

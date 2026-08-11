@@ -84,7 +84,31 @@ try {
             exit;
         }
         $vendor_id = $vendor['id'];
-        
+
+        // The product must be this vendor's own, and approved.
+        //
+        // product_id was previously taken on trust and only the foreign key
+        // checked it — so any id in `items` was listable, including another
+        // vendor's product and one still awaiting approval. That would have
+        // let a vendor sell surplus "of" a product they do not own, and let
+        // anyone bypass the approval this whole flow exists to enforce.
+        $ownProduct = $dbh->prepare(
+            "SELECT status FROM items WHERE id = ? AND vendor_id = ?"
+        );
+        $ownProduct->execute([$product_id, $vendor_id]);
+        $productStatus = $ownProduct->fetchColumn();
+
+        if ($productStatus === false) {
+            echo json_encode(['error' => 'That product is not one of yours.']);
+            exit;
+        }
+        if ($productStatus !== 'approved') {
+            echo json_encode([
+                'error' => 'That product is still waiting for approval, so it cannot be listed yet.',
+            ]);
+            exit;
+        }
+
         $discounted_price = $original_price * (1 - ($discount_percent / 100));
         
         $stmt = $dbh->prepare("
