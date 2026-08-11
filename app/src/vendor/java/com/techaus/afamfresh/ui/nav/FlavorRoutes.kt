@@ -4,6 +4,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import com.techaus.afamfresh.ui.screens.vendor.AddInventoryScreen
 import com.techaus.afamfresh.ui.screens.vendor.AddSurplusScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorBusinessDetailsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorDashboardScreen
@@ -75,6 +76,19 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     }
 
     composable("vendor_products") {
-        VendorProductsScreen(vendorViewModel = vm, onBack = { nav.navigate("vendor_dashboard") })
+        VendorProductsScreen(
+            vendorViewModel = vm,
+            onAddProduct = { nav.navigate("vendor_add_inventory") },
+            onBack = { nav.navigate("vendor_dashboard") }
+        )
+    }
+
+    composable("vendor_add_inventory") {
+        AddInventoryScreen(
+            vendorViewModel = vm,
+            productViewModel = deps.productViewModel,
+            onDone = { nav.popBackStack() },
+            onBack = { nav.popBackStack() }
+        )
     }
 }

@@ -70,6 +70,23 @@ data class UpdateVendorProfileRequest(
     @SerializedName("market_stall") val marketStall: String? = null
 )
 
+/**
+ * Body for POST `vendor-products.php` — "I stock this catalogue item".
+ *
+ * A vendor cannot invent a product: `product_id` must already exist in `items`,
+ * the shared catalogue an admin owns. What the vendor sets is their own price
+ * and stock for it. The endpoint upserts, so re-sending an existing product_id
+ * updates the price and quantity rather than failing.
+ *
+ * No user_id — the server takes the vendor from the session.
+ */
+data class AddVendorProductRequest(
+    @SerializedName("product_id") val productId: Int,
+    @SerializedName("stock_quantity") val stockQuantity: Int,
+    /** Null means "use the catalogue price". */
+    @SerializedName("price") val price: Double? = null
+)
+
 data class UpdateVendorProfileResponse(
     @SerializedName("success") val success: Boolean = false,
     /** False until an admin verifies, which is what gates listing products. */

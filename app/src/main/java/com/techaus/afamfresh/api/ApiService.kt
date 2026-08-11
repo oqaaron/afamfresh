@@ -288,6 +288,22 @@ interface ApiService {
         @Query("user_id") userId: Int
     ): Call<VendorProductsResponse>
 
+    // Adds a catalogue item to this vendor's inventory, or updates the price
+    // and stock if it is already there — the endpoint upserts.
+    //
+    // Both of these existed server-side from the start and the app never called
+    // either, which is why a vendor's inventory could only be filled by an
+    // admin, and why the surplus form had nothing to offer in its picker.
+    @POST("vendor-products.php")
+    fun addVendorProduct(
+        @Body body: AddVendorProductRequest
+    ): Call<BaseResponse>
+
+    @DELETE("vendor-products.php")
+    fun removeVendorProduct(
+        @Query("product_id") productId: Int
+    ): Call<BaseResponse>
+
     // ============================================================
     // VENDOR PROFILE
     // ============================================================

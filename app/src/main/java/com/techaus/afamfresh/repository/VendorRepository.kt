@@ -1,6 +1,7 @@
 package com.techaus.afamfresh.repository
 
 import com.techaus.afamfresh.api.ApiService
+import com.techaus.afamfresh.models.AddVendorProductRequest
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.CreateSurplusListingRequest
 import com.techaus.afamfresh.models.SurplusListing
@@ -74,6 +75,44 @@ class VendorRepository(
                     error != null -> callback(false, null, error)
                     body?.success == true -> callback(body.isVerified, body.message, null)
                     else -> callback(false, null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Adds a catalogue item to the vendor's inventory, or updates its price and
+     * stock if already present — the endpoint upserts, so callers need not
+     * check first.
+     */
+    fun addVendorProduct(
+        productId: Int,
+        stockQuantity: Int,
+        price: Double?,
+        callback: (Boolean, ApiError?) -> Unit
+    ) {
+        apiService.addVendorProduct(
+            AddVendorProductRequest(
+                productId = productId,
+                stockQuantity = stockQuantity,
+                price = price
+            )
+        ).enqueueApi<BaseResponse>("VendorRepo", "addVendorProduct") { body, error ->
+            when {
+                error != null -> callback(false, error)
+                body?.success == true -> callback(true, null)
+                else -> callback(false, ApiError.reported(body?.error))
+            }
+        }
+    }
+
+    /** Removes a product from the vendor's inventory. */
+    fun removeVendorProduct(productId: Int, callback: (Boolean, ApiError?) -> Unit) {
+        apiService.removeVendorProduct(productId = productId)
+            .enqueueApi<BaseResponse>("VendorRepo", "removeVendorProduct") { body, error ->
+                when {
+                    error != null -> callback(false, error)
+                    body?.success == true -> callback(true, null)
+                    else -> callback(false, ApiError.reported(body?.error))
                 }
             }
     }

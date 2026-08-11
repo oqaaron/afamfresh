@@ -5,6 +5,7 @@ import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.DeliveryResultViewModel
 import com.techaus.afamfresh.viewmodel.NotificationViewModel
+import com.techaus.afamfresh.viewmodel.ProductViewModel
 import com.techaus.afamfresh.viewmodel.RiderViewModel
 import com.techaus.afamfresh.viewmodel.VendorViewModel
 
@@ -42,4 +43,9 @@ data class FlavorRouteDeps(
      * messages were written for them and there was no screen to read them on.
      */
     val notificationViewModel: NotificationViewModel,
+    /**
+     * The shared `items` catalogue. A vendor stocks catalogue products rather
+     * than inventing them, so the Add-to-inventory screen picks from here.
+     */
+    val productViewModel: ProductViewModel,
 )

@@ -150,6 +150,49 @@ class VendorViewModel(
         _detailsSaveState.value = VendorDetailsSaveState.Idle
     }
 
+    /**
+     * Adds a catalogue item to the vendor's inventory, or updates its price and
+     * stock — the endpoint upserts.
+     *
+     * A vendor stocks catalogue items; they cannot create new ones. `items` is
+     * shared and admin-owned, which is what stops five vendors inventing five
+     * spellings of the same tomato.
+     *
+     * Reloads the inventory afterwards so the surplus form's product picker
+     * sees the addition without the screen being reopened.
+     */
+    fun addProductToInventory(
+        productId: Int,
+        stockQuantity: Int,
+        price: Double?,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        _isLoading.value = true
+        vendorRepository.addVendorProduct(productId, stockQuantity, price) { ok, error ->
+            _isLoading.value = false
+            if (ok) {
+                loadVendorProducts()
+                onResult(true, null)
+            } else {
+                onResult(false, error?.userMessage ?: "Could not add that product.")
+            }
+        }
+    }
+
+    /** Removes a product from the vendor's inventory. */
+    fun removeProductFromInventory(productId: Int, onResult: (Boolean, String?) -> Unit) {
+        _isLoading.value = true
+        vendorRepository.removeVendorProduct(productId) { ok, error ->
+            _isLoading.value = false
+            if (ok) {
+                loadVendorProducts()
+                onResult(true, null)
+            } else {
+                onResult(false, error?.userMessage ?: "Could not remove that product.")
+            }
+        }
+    }
+
     fun loadListings(status: String = "approved") {
         val id = vendorId ?: return reportNotAVendor()
         _isLoading.value = true

@@ -325,6 +325,7 @@ fun MainScreen(
                     deliveryResultViewModel = deliveryResultViewModel,
                     deliveryRepository = deliveryRepository,
                     notificationViewModel = notificationViewModel,
+                    productViewModel = productViewModel,
                 )
             )
 
