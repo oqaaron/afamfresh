@@ -183,6 +183,14 @@ class VendorViewModel(
         description: String = "",
         conditionRating: String = "good",
         pickupOnly: Boolean = false,
+        /**
+         * How much one unit weighs. The delivery fee is calculated by weight,
+         * so a listing sold by the tray or sack has to say what a tray weighs
+         * or the customer is quoted for 1 kg regardless.
+         */
+        weightPerUnitKg: Double = 1.0,
+        /** True when the unit IS a weight (kilograms), false for pieces, trays, sacks. */
+        isWeightBased: Boolean = true,
         onResult: (Boolean, String?) -> Unit
     ) {
         val uid = userId
@@ -203,7 +211,9 @@ class VendorViewModel(
                 listingType = listingType,
                 description = description,
                 conditionRating = conditionRating,
-                pickupOnly = pickupOnly
+                pickupOnly = pickupOnly,
+                weightPerUnitKg = weightPerUnitKg,
+                isWeightBased = isWeightBased
             )
         ) { _, error ->
             _isLoading.value = false

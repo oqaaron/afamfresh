@@ -3,11 +3,13 @@ package com.techaus.afamfresh.ui.screens.vendor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  * endpoint can only change status, remaining_quantity and admin_notes, so
  * offering price or expiry fields here would silently discard them.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSurplusScreen(
     vendorViewModel: VendorViewModel,
@@ -82,6 +85,17 @@ fun AddSurplusScreen(
     var pickupOnly by remember(existingListing) {
         mutableStateOf(existingListing?.pickupOnly ?: false)
     }
+
+    // How a unit is measured. The endpoint has always accepted
+    // weight_per_unit_kg and is_weight_based -- the table, the API and the
+    // request model all carry them -- but the form never asked, so every
+    // listing went out as 1 kg per unit. Delivery is priced by weight, so a
+    // sack of potatoes was quoted to the customer as if it weighed a kilo.
+    var unitIndex by remember(existingListing) { mutableStateOf(0) }
+    val unit = SURPLUS_UNITS[unitIndex]
+    var weightPerUnit by remember(existingListing) { mutableStateOf("1") }
+
+    var showDatePicker by remember { mutableStateOf(false) }
 
     // ----- edit-mode state -----
     var remainingQuantity by remember(existingListing) {
@@ -142,7 +156,12 @@ fun AddSurplusScreen(
             listingType = listingType,
             description = description.trim(),
             conditionRating = conditionRating,
-            pickupOnly = pickupOnly
+            pickupOnly = pickupOnly,
+            // Kilograms are their own weight; anything else needs the vendor to
+            // say what one of them weighs, or delivery is priced for 1 kg.
+            weightPerUnitKg = if (unit.isWeight) 1.0
+                              else (weightPerUnit.toDoubleOrNull() ?: unit.defaultKg),
+            isWeightBased = unit.isWeight
         ) { success, reason ->
             if (success) onSave() else formError = reason ?: "Unable to create listing"
         }
@@ -221,17 +240,36 @@ fun AddSurplusScreen(
                     singleLine = true
                 )
             } else {
-                Text("Which product?", fontWeight = FontWeight.SemiBold, color = Ink)
-                Spacer(modifier = Modifier.height(8.dp))
+                StepHeader(1, "Which product?")
 
                 if (vendorProducts.isEmpty()) {
-                    Text(
-                        "You have no products yet. Add products to your inventory " +
-                            "before listing surplus.",
-                        fontSize = 13.sp,
-                        color = InkMuted,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                    // This is the state that reads as "the option is missing".
+                    // A listing must reference a product already in the
+                    // vendor's inventory -- the server joins product_id onto
+                    // `items` -- and vendors cannot add inventory themselves,
+                    // so the message has to say who can.
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E5)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(
+                                "No products in your inventory yet",
+                                fontWeight = FontWeight.SemiBold,
+                                color = Ink,
+                                fontSize = 14.sp
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "A surplus listing has to point at one of your products, " +
+                                    "so there is nothing to choose from yet. Ask an " +
+                                    "administrator to add your products, then come back here.",
+                                fontSize = 13.sp,
+                                color = InkMuted
+                            )
+                        }
+                    }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         vendorProducts.forEach { vp ->
@@ -270,7 +308,59 @@ fun AddSurplusScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+                StepHeader(2, "How is it sold?")
+
+                // Chips rather than a dropdown: six options is few enough to
+                // show at once, and the choice changes the field below it.
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SURPLUS_UNITS.forEachIndexed { i, u ->
+                        val selected = i == unitIndex
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selected) Forest else PillGray)
+                                .clickable {
+                                    unitIndex = i
+                                    weightPerUnit = u.defaultKg.toString().removeSuffix(".0")
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                u.label,
+                                color = if (selected) Color.White else Ink,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+
+                if (!unit.isWeight) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = weightPerUnit,
+                        onValueChange = { weightPerUnit = it.filter { c -> c.isDigit() || c == '.' } },
+                        label = { Text("Approx. weight of one ${unit.label.lowercase()} (kg)") },
+                        // Delivery is charged by weight. Without this a sack is
+                        // quoted to the customer as if it weighed one kilo.
+                        supportingText = {
+                            Text("Used to work out the delivery fee", fontSize = 11.sp)
+                        },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                StepHeader(3, "Price and quantity")
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -322,7 +412,8 @@ fun AddSurplusScreen(
                 OutlinedTextField(
                     value = surplusQuantity,
                     onValueChange = { surplusQuantity = it.filter { c -> c.isDigit() } },
-                    label = { Text("Quantity available") },
+                    // Names the unit chosen above, so "12" is unambiguous.
+                    label = { Text("How many ${unit.plural} available") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = KeyboardType.Number
                     ),
@@ -331,18 +422,43 @@ fun AddSurplusScreen(
                     singleLine = true
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+                StepHeader(4, "When does it expire?")
+
+                // Was a free-text box wanting "YYYY-MM-DD HH:MM:SS" typed by
+                // hand. The column is DATETIME and the server inserts the
+                // string verbatim, so one wrong character was a failed listing
+                // — and nobody types a timestamp format correctly on a phone.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 10.dp)
+                ) {
+                    QuickDateChip("Today", 0) { expiryDate = endOfDayAfter(it) }
+                    QuickDateChip("Tomorrow", 1) { expiryDate = endOfDayAfter(it) }
+                    QuickDateChip("In 3 days", 3) { expiryDate = endOfDayAfter(it) }
+                }
+
                 OutlinedTextField(
-                    value = expiryDate,
-                    onValueChange = { expiryDate = it },
+                    value = if (expiryDate.isBlank()) "" else prettyExpiry(expiryDate),
+                    onValueChange = { },
+                    readOnly = true,
                     label = { Text("Expires") },
-                    placeholder = { Text("2026-08-04 18:00:00") },
-                    // The column is DATETIME and the server inserts the string
-                    // verbatim, so the time part matters.
-                    supportingText = { Text("YYYY-MM-DD HH:MM:SS", fontSize = 11.sp) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    placeholder = { Text("Pick a date") },
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick a date")
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .clickable { showDatePicker = true },
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                StepHeader(5, "Details")
 
                 OutlinedTextField(
                     value = description,
@@ -416,6 +532,106 @@ fun AddSurplusScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (showDatePicker) {
+        // Bounded to today onwards: surplus that expired yesterday is not a
+        // listing, and the server does no such check.
+        val today = remember { System.currentTimeMillis() }
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = today,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) =
+                    utcTimeMillis >= today - ONE_DAY_MS
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { expiryDate = endOfDayFor(it) }
+                    showDatePicker = false
+                }) { Text("Set date") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = state)
+        }
+    }
+}
+
+/** One unit of sale, and what it means for weight-based delivery pricing. */
+private data class SurplusUnit(
+    val label: String,
+    val plural: String,
+    /** True only for kilograms, where the unit IS the weight. */
+    val isWeight: Boolean,
+    val defaultKg: Double
+)
+
+// Ordinary Ugandan market units. Kilogram first because it is both the most
+// common and the only one that needs no weight estimate.
+private val SURPLUS_UNITS = listOf(
+    SurplusUnit("Kilogram", "kilograms", true, 1.0),
+    SurplusUnit("Piece", "pieces", false, 0.2),
+    SurplusUnit("Bunch", "bunches", false, 1.0),
+    SurplusUnit("Tray", "trays", false, 2.0),
+    SurplusUnit("Basket", "baskets", false, 10.0),
+    SurplusUnit("Crate", "crates", false, 12.0),
+    SurplusUnit("Sack", "sacks", false, 50.0)
+)
+
+private const val ONE_DAY_MS = 24L * 60 * 60 * 1000
+
+/** "YYYY-MM-DD 23:59:59" — the format the DATETIME column is given verbatim. */
+private fun endOfDayFor(millis: Long): String {
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    // The picker reports UTC midnight for the chosen day, so the date has to be
+    // read in UTC as well — formatting it locally lands on the previous day for
+    // anywhere behind UTC, and Kampala is ahead, which hides the bug here.
+    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+    return fmt.format(java.util.Date(millis)) + " 23:59:59"
+}
+
+private fun endOfDayAfter(daysFromNow: Int): String =
+    endOfDayFor(System.currentTimeMillis() + daysFromNow * ONE_DAY_MS)
+
+/** Shows the stored timestamp as something a person would read. */
+private fun prettyExpiry(stored: String): String = stored.substringBefore(' ').ifBlank { stored }
+
+@Composable
+private fun QuickDateChip(label: String, days: Int, onPick: (Int) -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(ForestSurface)
+            .clickable { onPick(days) }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text(label, color = Forest, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** Numbered section heading, so a long form reads as a sequence of steps. */
+@Composable
+private fun StepHeader(number: Int, title: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Forest),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("$number", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(title, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp)
     }
 }
 
