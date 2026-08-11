@@ -162,7 +162,7 @@ require_once __DIR__ . '/includes/config.php';
 
         // ---- CONFIG ----
         async function loadConfig() {
-            const res = await apiRequest('api/config.php');
+            const res = await apiRequest('../api/config.php');
             if (res.success && res.config) {
                 const data = res.config;
                 document.getElementById('min_version_required').value = data.min_version_required || '';
@@ -183,7 +183,7 @@ require_once __DIR__ . '/includes/config.php';
                 maintenance_message: document.getElementById('maintenance_message').value.trim(),
                 surplus_approval_required: document.getElementById('surplus_approval_required').checked ? '1' : '0'
             };
-            const res = await apiRequest('api/config.php', {
+            const res = await apiRequest('../api/config.php', {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
@@ -198,7 +198,7 @@ require_once __DIR__ . '/includes/config.php';
         async function loadPendingSurplus() {
             const tbody = document.getElementById('pendingTableBody');
             tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
-            const res = await apiRequest('api/admin/surplus-approval.php?action=pending');
+            const res = await apiRequest('../api/admin/surplus-approval.php?action=pending');
             if (res.success && res.listings) {
                 if (res.listings.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">✅ No pending approvals.</td></tr>';
@@ -225,7 +225,7 @@ require_once __DIR__ . '/includes/config.php';
 
         async function processSurplus(id, action) {
             if (!confirm(`Are you sure you want to ${action} this listing?`)) return;
-            const res = await apiRequest(`api/admin/surplus-approval.php?action=${action}`, {
+            const res = await apiRequest(`../api/admin/surplus-approval.php?action=${action}`, {
                 method: 'POST',
                 body: JSON.stringify({ id })
             });
@@ -241,7 +241,7 @@ require_once __DIR__ . '/includes/config.php';
         async function loadVendors() {
             const tbody = document.getElementById('vendorsTableBody');
             tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
-            const res = await apiRequest('api/admin/vendors.php?action=list');
+            const res = await apiRequest('../api/admin/vendors.php?action=list');
             if (res.success && res.vendors) {
                 if (res.vendors.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">No vendors registered.</td></tr>';
@@ -273,7 +273,7 @@ require_once __DIR__ . '/includes/config.php';
 
         async function toggleVendor(id, nextState) {
             if (!confirm(`Set verification to ${nextState ? 'VERIFIED' : 'UNVERIFIED'}?`)) return;
-            const res = await apiRequest('api/admin/vendors.php?action=toggle_verification', {
+            const res = await apiRequest('../api/admin/vendors.php?action=toggle_verification', {
                 method: 'POST',
                 body: JSON.stringify({ id, verified: nextState })
             });
