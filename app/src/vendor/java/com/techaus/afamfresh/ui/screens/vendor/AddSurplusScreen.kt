@@ -51,6 +51,8 @@ fun AddSurplusScreen(
     vendorViewModel: VendorViewModel,
     existingListing: SurplusListing? = null,
     onSave: () -> Unit,
+    /** Route to the inventory screen, offered when there is nothing to list. */
+    onAddInventory: () -> Unit,
     onCancel: () -> Unit
 ) {
     val isEditing = existingListing != null
@@ -121,7 +123,14 @@ fun AddSurplusScreen(
         val quantityVal = surplusQuantity.toIntOrNull()
 
         if (productId == null) {
-            formError = "Choose which product this surplus is for"
+            // Told apart deliberately. "Choose which product" is useless advice
+            // when the picker above is empty -- it reads as a broken form
+            // rather than a missing prerequisite.
+            formError = if (vendorProducts.isEmpty()) {
+                "Add products to your inventory first — there is nothing to list yet."
+            } else {
+                "Choose which product this surplus is for"
+            }
             return
         }
         if (originalPriceVal == null || originalPriceVal <= 0) {
@@ -263,11 +272,23 @@ fun AddSurplusScreen(
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "A surplus listing has to point at one of your products, " +
-                                    "so there is nothing to choose from yet. Ask an " +
-                                    "administrator to add your products, then come back here.",
+                                    "so there is nothing to choose from yet. Add what you " +
+                                    "sell to your inventory first.",
                                 fontSize = 13.sp,
                                 color = InkMuted
                             )
+                            Spacer(Modifier.height(12.dp))
+                            // Was a dead end: the card explained the problem and
+                            // left the vendor to find the fix on another screen,
+                            // so tapping Submit produced "choose which product"
+                            // with nothing on the page to choose.
+                            Button(
+                                onClick = onAddInventory,
+                                colors = ButtonDefaults.buttonColors(containerColor = Forest),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Add products", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 } else {

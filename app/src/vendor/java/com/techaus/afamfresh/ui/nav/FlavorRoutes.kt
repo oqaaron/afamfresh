@@ -51,6 +51,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         AddSurplusScreen(
             vendorViewModel = vm,
             onSave = { nav.navigate("vendor_dashboard") },
+            onAddInventory = { nav.navigate("vendor_add_inventory") },
             onCancel = { nav.navigate("vendor_dashboard") }
         )
     }
@@ -67,6 +68,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
             vendorViewModel = vm,
             existingListing = existingListing,
             onSave = { nav.navigate("vendor_dashboard") },
+            onAddInventory = { nav.navigate("vendor_add_inventory") },
             onCancel = { nav.navigate("vendor_dashboard") }
         )
     }
