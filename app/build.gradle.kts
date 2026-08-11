@@ -45,8 +45,19 @@ android {
         applicationId = "com.techaus.afamfresh"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // MUST increase for every build handed to anyone. Android treats a
+        // lower versionCode as a downgrade and refuses to install it, and Play
+        // rejects a re-used one outright.
+        //
+        // It has no bearing on whether app data survives an install — that is
+        // decided by the signing certificate. Same key means an update, and
+        // accounts, sessions and cached state are kept; a different key is a
+        // different app and cannot install over this one at all. Which is why
+        // ~/afamfresh-release.jks is irreplaceable: lose it and these three
+        // apps can never be updated again, only republished under new package
+        // names, with every existing install stranded.
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
