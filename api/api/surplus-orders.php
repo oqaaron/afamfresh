@@ -282,19 +282,62 @@ try {
             exit;
         }
         
+        // Who may move this order.
+        //
+        // This branch had no authorisation of any kind: order_id and status came
+        // from the body and were written straight through, so anyone at all
+        // could mark any order delivered. That was already wrong; with earnings
+        // credited on delivery below it becomes "anyone can pay a vendor".
+        //
+        // The vendor who owns the listing may move their own orders; an admin
+        // may move any.
+        $owner = $dbh->prepare(
+            "SELECT sl.vendor_id, v.user_id
+               FROM surplus_orders so
+               JOIN surplus_listings sl ON sl.id = so.listing_id
+               JOIN vendors v ON v.id = sl.vendor_id
+              WHERE so.id = ?"
+        );
+        $owner->execute([$order_id]);
+        $ownerRow = $owner->fetch(PDO::FETCH_ASSOC);
+
+        if (!$ownerRow) {
+            echo json_encode(['error' => 'No such order']);
+            exit;
+        }
+        if (!$isAdminSession && (int)$ownerRow['user_id'] !== $sessionUserId) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'That order is not yours.']);
+            exit;
+        }
+
         $updateFields = ["status = ?", "updated_at = NOW()"];
         $params = [$status, $order_id];
-        
+
         if ($status === 'confirmed') {
             $updateFields[] = "confirmed_at = NOW()";
         } elseif ($status === 'delivered') {
             $updateFields[] = "delivered_at = NOW()";
         }
-        
+
         $sql = "UPDATE surplus_orders SET " . implode(', ', $updateFields) . " WHERE id = ?";
         $stmt = $dbh->prepare($sql);
         $stmt->execute($params);
-        
+
+        // Credit the vendor on delivery. Idempotent, so a status set to
+        // delivered twice does not pay twice.
+        //
+        // A crediting failure is logged, not surfaced: the delivery genuinely
+        // happened, and refusing the status change because the ledger write
+        // failed would leave the order stuck instead.
+        if ($status === 'delivered') {
+            require_once __DIR__ . '/../includes/vendor_earnings.php';
+            $credit = creditVendorEarnings($dbh, $order_id);
+            if (!$credit['ok']) {
+                error_log("Surplus order $order_id delivered but vendor not credited: " . $credit['error']);
+            }
+        }
+
         echo json_encode(['success' => true, 'message' => 'Order status updated successfully']);
         
     } else {

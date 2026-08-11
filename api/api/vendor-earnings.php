@@ -73,12 +73,64 @@ try {
             'summary' => $summary
         ]);
         
+    } elseif ($method === 'POST' && ($_GET['action'] ?? '') === 'request_payout') {
+        // =============================================================
+        // The vendor asks to withdraw. An admin approves and dispatches.
+        // =============================================================
+        // The amount is the unpaid total read server-side right now and is
+        // never taken from the request — the same rule as the rider payout in
+        // api/rider.php, and for the same reason: a client-supplied amount is
+        // a client-supplied withdrawal.
+        $availableStmt = $dbh->prepare(
+            "SELECT COALESCE(SUM(net_earnings), 0) FROM vendor_earnings
+              WHERE vendor_id = ? AND is_paid = 0"
+        );
+        $availableStmt->execute([$vendor_id]);
+        $available = round((float)$availableStmt->fetchColumn(), 2);
+
+        if ($available <= 0) {
+            echo json_encode(['success' => false, 'error' => 'You have nothing available to withdraw right now.']);
+            exit;
+        }
+
+        // One at a time. Two open requests would each claim the same balance,
+        // and approving both pays it out twice.
+        $pendingStmt = $dbh->prepare(
+            "SELECT id FROM vendor_payout_requests WHERE vendor_id = ? AND status IN ('pending','approved')"
+        );
+        $pendingStmt->execute([$vendor_id]);
+        if ($pendingStmt->fetchColumn()) {
+            echo json_encode(['success' => false, 'error' => 'You already have a withdrawal request being processed.']);
+            exit;
+        }
+
+        $dbh->prepare(
+            "INSERT INTO vendor_payout_requests (vendor_id, amount, status) VALUES (?, ?, 'pending')"
+        )->execute([$vendor_id, $available]);
+
+        echo json_encode([
+            'success' => true,
+            'amount'  => $available,
+            'message' => 'Withdrawal requested. An administrator will review it.',
+        ]);
+
     } elseif ($method === 'POST') {
-        // Request payout (mark pending earnings as paid)
+        // Marking earnings paid is an ADMIN action.
+        //
+        // This branch was reachable by the vendor whose earnings they are:
+        // vendor_id came from their own session, so a vendor could flip their
+        // own ledger to paid without any money moving. Payment is dispatched
+        // by an admin, so only an admin may record it.
+        if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'Only an administrator can mark earnings as paid.']);
+            exit;
+        }
+
         $input = json_decode(file_get_contents('php://input'), true);
-        
+
         $earning_ids = $input['earning_ids'] ?? [];
-        
+
         if (empty($earning_ids) || !is_array($earning_ids)) {
             echo json_encode(['error' => 'earning_ids array is required']);
             exit;
