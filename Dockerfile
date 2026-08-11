@@ -49,12 +49,18 @@ done\n' > /usr/local/bin/notify-worker.sh \
 # The worker is backgrounded and apache2-foreground stays PID 1: the platform
 # watches PID 1 to decide whether the container is healthy, so the web server
 # must remain the process that defines the container's life, not the worker.
+#
+# It runs as www-data, not root. As root it wrote /tmp/cloudsql-server-ca.pem
+# — the database's TLS trust anchor, mode 0600 — before Apache did, and
+# www-data could then neither read nor replace it. Every API response came back
+# with "Permission denied" warnings and no usable CA. A background job has no
+# business holding privileges the web server does not.
 RUN printf '#!/bin/sh\n\
 set -e\n\
 PORT="${PORT:-80}"\n\
 sed -i "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf\n\
 sed -i "s/<VirtualHost \\*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf\n\
-/usr/local/bin/notify-worker.sh &\n\
+su -s /bin/sh -c /usr/local/bin/notify-worker.sh www-data &\n\
 exec apache2-foreground\n' > /usr/local/bin/start.sh \
     && chmod +x /usr/local/bin/start.sh
 
