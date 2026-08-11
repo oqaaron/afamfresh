@@ -42,8 +42,13 @@ $vendorId = (int)$vendor['id'];
 if ($action === 'mine' || ($action === '' && $_SERVER['REQUEST_METHOD'] === 'GET')) {
     // Every status, unlike the shop: a vendor needs to see what is pending and
     // what was rejected, or a rejection is invisible and they simply resubmit.
+    // No created_at: `items` has no such column. Selecting it made this
+    // endpoint a 500 on every call, which the app rendered as "no products
+    // yet" -- indistinguishable from an admin not having approved anything.
+    // id DESC is the ordering that is actually available, and on an
+    // auto-increment key it means newest first anyway.
     $stmt = $dbh->prepare(
-        "SELECT id, name, category, description, price, image, status, rejection_reason, created_at
+        "SELECT id, name, category, description, price, image, status, rejection_reason
            FROM items
           WHERE vendor_id = ?
           ORDER BY FIELD(status, 'rejected', 'pending', 'approved'), id DESC"
