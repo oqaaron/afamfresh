@@ -539,9 +539,27 @@ function sendEmailWithBrevo($toEmail, $toName, $subject, $htmlBody, $textBody = 
 // =============================================================
 // ERROR HANDLING
 // =============================================================
-if (defined('APP_ENV') && APP_ENV === 'production') {
-    error_reporting(0);
+// APP_ENV was read here but defined nowhere, in this file or any other. So
+// defined() was always false, the else branch always ran, and production served
+// with display_errors on. Not theoretical: GET /api/admin/vendors.php returned
+// a PHP notice naming /var/www/html/... ahead of its JSON, which both corrupted
+// the response and defeated http_response_code() -- the 401 went out as a 200,
+// because output had already been flushed.
+//
+// Defaults to production. Guessing wrong that way sends errors to the log
+// instead of the screen; guessing the other way puts file paths and SQL
+// messages in front of whoever asked.
+if (!defined('APP_ENV')) {
+    define('APP_ENV', env('APP_ENV', 'production') === 'development' ? 'development' : 'production');
+}
+
+if (APP_ENV === 'production') {
+    // E_ALL, not 0: these errors still matter, they just belong in the log
+    // rather than the response body. error_reporting(0) silenced them
+    // everywhere, which makes a fault invisible rather than quiet.
+    error_reporting(E_ALL);
     ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
 } else {
     error_reporting(E_ALL);
     ini_set('display_errors', 1);
