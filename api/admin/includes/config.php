@@ -13,6 +13,40 @@
 
 require_once __DIR__ . '/../../includes/env.php';
 
+// Set BEFORE anything else can emit a diagnostic. This block used to sit at the
+// bottom of the file, roughly 300 lines after the database connection -- so any
+// warning raised while connecting was printed with display_errors still at its
+// default, which is exactly how /tmp CA-file permission errors ended up in the
+// body of an API response. Nothing above this line may fail loudly.
+// =============================================================
+// ERROR HANDLING
+// =============================================================
+// APP_ENV was read here but defined nowhere, in this file or any other. So
+// defined() was always false, the else branch always ran, and production served
+// with display_errors on. Not theoretical: GET /api/admin/vendors.php returned
+// a PHP notice naming /var/www/html/... ahead of its JSON, which both corrupted
+// the response and defeated http_response_code() -- the 401 went out as a 200,
+// because output had already been flushed.
+//
+// Defaults to production. Guessing wrong that way sends errors to the log
+// instead of the screen; guessing the other way puts file paths and SQL
+// messages in front of whoever asked.
+if (!defined('APP_ENV')) {
+    define('APP_ENV', env('APP_ENV', 'production') === 'development' ? 'development' : 'production');
+}
+
+if (APP_ENV === 'production') {
+    // E_ALL, not 0: these errors still matter, they just belong in the log
+    // rather than the response body. error_reporting(0) silenced them
+    // everywhere, which makes a fault invisible rather than quiet.
+    error_reporting(E_ALL);
+    ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
+} else {
+    error_reporting(E_ALL);
+    ini_set('display_errors', 1);
+}
+
 // =============================================================
 // DATABASE CONFIGURATION (Cloud SQL + Local Fallback)
 // =============================================================
@@ -236,8 +270,19 @@ try {
     $pdoOptions = [];
     $sslCa = trim((string)env('DB_SSL_CA', ''));
     if ($sslCa !== '' && !file_exists(DB_SOCKET)) {
-        $caPath = sys_get_temp_dir() . '/cloudsql-server-ca.pem';
-        if (!is_file($caPath) || md5_file($caPath) !== md5($sslCa)) {
+        // The filename carries the effective uid. Two processes share this
+        // container -- Apache as www-data and the notification worker -- and
+        // with a single shared path whichever wrote first owned a 0600 file
+        // the other could not read or replace. That took the API down with
+        // "Permission denied" on md5_file() and a database connection with no
+        // usable CA.
+        //
+        // A path per uid rather than a relaxed mode: the file is a private key
+        // trust anchor, and widening it to fix a permissions clash would be
+        // solving the wrong half of the problem.
+        $uid = function_exists('posix_geteuid') ? posix_geteuid() : 'shared';
+        $caPath = sys_get_temp_dir() . '/cloudsql-server-ca-' . $uid . '.pem';
+        if (!is_file($caPath) || !is_readable($caPath) || md5_file($caPath) !== md5($sslCa)) {
             file_put_contents($caPath, $sslCa);
             chmod($caPath, 0600);
         }
@@ -536,34 +581,6 @@ function sendEmailWithBrevo($toEmail, $toName, $subject, $htmlBody, $textBody = 
     }
 }
 
-// =============================================================
-// ERROR HANDLING
-// =============================================================
-// APP_ENV was read here but defined nowhere, in this file or any other. So
-// defined() was always false, the else branch always ran, and production served
-// with display_errors on. Not theoretical: GET /api/admin/vendors.php returned
-// a PHP notice naming /var/www/html/... ahead of its JSON, which both corrupted
-// the response and defeated http_response_code() -- the 401 went out as a 200,
-// because output had already been flushed.
-//
-// Defaults to production. Guessing wrong that way sends errors to the log
-// instead of the screen; guessing the other way puts file paths and SQL
-// messages in front of whoever asked.
-if (!defined('APP_ENV')) {
-    define('APP_ENV', env('APP_ENV', 'production') === 'development' ? 'development' : 'production');
-}
-
-if (APP_ENV === 'production') {
-    // E_ALL, not 0: these errors still matter, they just belong in the log
-    // rather than the response body. error_reporting(0) silenced them
-    // everywhere, which makes a fault invisible rather than quiet.
-    error_reporting(E_ALL);
-    ini_set('display_errors', 0);
-    ini_set('log_errors', 1);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-}
 
 // =============================================================
 // TIMEZONE
