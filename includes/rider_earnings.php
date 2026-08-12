@@ -47,10 +47,20 @@ function mileageFeeFor($dbh, $orderId) {
         return null;
     }
 
+    // Road distance, not the straight line. This is a RIDER'S PAY: Haversine
+    // understates a real journey by 20-40%, so every legacy order reconciled
+    // this way was paying the rider for a trip shorter than the one they made.
+    // Still flagged estimated — the fee was never quoted at order time, and
+    // this is a reconstruction whatever the routing.
+    require_once __DIR__ . '/google_routes.php';
     $officeLat = defined('OFFICE_LAT') ? OFFICE_LAT : 0.38082497218633615;
     $officeLng = defined('OFFICE_LNG') ? OFFICE_LNG : 32.65071116168179;
-    $distance = calculateDistance($officeLat, $officeLng, (float)$order['dest_lat'], (float)$order['dest_lng']);
-    $breakdown = calculateDeliveryFee((float)$order['total_amount'], $distance);
+
+    $route = roadDistanceBetween(
+        $officeLat, $officeLng,
+        (float)$order['dest_lat'], (float)$order['dest_lng']
+    );
+    $breakdown = calculateDeliveryFee((float)$order['total_amount'], $route['km']);
 
     return ['amount' => (float)$breakdown['distance_fee'], 'estimated' => true];
 }

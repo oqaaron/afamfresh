@@ -105,6 +105,7 @@ $navItems = [
     ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
     ['surplus-orders.php',   'Surplus Orders',     'fa-truck-fast'],
     ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
+    ['routing-check.php',    'Routing check',      'fa-route'],
 ];
 ?>
 <div class="w-64 bg-green-800 text-white flex flex-col">

@@ -3,6 +3,8 @@ header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/api_auth.php';
 require_once __DIR__ . '/../includes/surplus_payment.php';
+require_once __DIR__ . '/../includes/surplus_delivery_fee.php';
+require_once __DIR__ . '/../includes/service_area.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -111,6 +113,15 @@ try {
             echo json_encode(['error' => 'Missing required fields']);
             exit;
         }
+
+        // Checked before the transaction opens: refusing an out-of-area pin is
+        // the one validation that does not need a row lock, and doing it here
+        // means an impossible order never touches the listing's stock.
+        if ($delivery_lat !== null && $delivery_lng !== null
+            && !isInServiceArea($delivery_lat, $delivery_lng)) {
+            echo json_encode(['error' => serviceAreaMessage()]);
+            exit;
+        }
         
         // Hand back stock held by checkouts that were abandoned on the payment
         // page. Done here because this is the moment the numbers have to be
@@ -144,7 +155,8 @@ try {
         // existed and every order would have been refused as "not active".
         $listingStmt = $dbh->prepare("
             SELECT sl.*, i.category, i.name AS product_name,
-                   v.user_id AS vendor_user_id, v.business_name
+                   v.user_id AS vendor_user_id, v.business_name,
+                   v.lat AS vendor_lat, v.lng AS vendor_lng
             FROM surplus_listings sl
             JOIN items i ON sl.product_id = i.id
             JOIN vendors v ON v.id = sl.vendor_id
@@ -193,44 +205,38 @@ try {
             exit;
         }
         
-        // Calculate delivery fee based on weight
-        $delivery_fee = 0;
-        $delivery_fee_breakdown = [];
-        
+        // The delivery fee, itemised.
+        //
+        // Was weight-only: base + kg, blind to how far the load actually
+        // travelled, and carrying none of the service, insurance or processing
+        // charges the shop side has always applied. A tonne moved 3km and the
+        // same tonne moved 40km cost the customer exactly the same.
+        //
+        // Computed by the same function the quote endpoint uses, so what the
+        // customer was shown at checkout and what they are charged here cannot
+        // drift apart. See includes/surplus_delivery_fee.php.
+        $distance = null;
         if (!$listing['pickup_only'] && !empty($delivery_address)) {
-            // Get delivery settings
-            $settingsStmt = $dbh->query("SELECT * FROM surplus_delivery_settings LIMIT 1");
-            $settings = $settingsStmt->fetch(PDO::FETCH_ASSOC);
-            
-            $base_fee = $settings['base_fee'] ?? 5000;
-            $fee_per_kg = $settings['fee_per_kg'] ?? 500;
-            $free_delivery_threshold = $settings['free_delivery_threshold'] ?? 500000;
-            
-            // Calculate delivery fee based on weight
-            if ($total_price >= $free_delivery_threshold) {
-                $delivery_fee = 0;
-                $delivery_fee_breakdown = ['type' => 'free', 'reason' => 'Order exceeds free delivery threshold'];
-            } else {
-                // Weight-based calculation: base fee + (weight in kg × fee per kg)
-                $delivery_fee = $base_fee + ($totalWeightKg * $fee_per_kg);
-                
-                // Cap maximum delivery fee (optional)
-                $max_delivery_fee = 50000;
-                if ($delivery_fee > $max_delivery_fee) {
-                    $delivery_fee = $max_delivery_fee;
-                }
-                
-                $delivery_fee_breakdown = [
-                    'type' => 'weight_based',
-                    'base_fee' => $base_fee,
-                    'weight_kg' => $totalWeightKg,
-                    'fee_per_kg' => $fee_per_kg,
-                    'weight_charge' => $totalWeightKg * $fee_per_kg,
-                    'total_fee' => $delivery_fee
-                ];
-            }
+            $distance = surplusDeliveryDistance(
+                isset($listing['vendor_lat']) ? (float)$listing['vendor_lat'] : null,
+                isset($listing['vendor_lng']) ? (float)$listing['vendor_lng'] : null,
+                $delivery_lat,
+                $delivery_lng
+            );
         }
-        
+
+        $feeBreakdown = calculateSurplusDeliveryFee(
+            $dbh,
+            (float)$total_price,
+            (float)$totalWeightKg,
+            $distance,
+            (bool)$listing['pickup_only'] || empty($delivery_address)
+        );
+
+        $delivery_fee = (float)$feeBreakdown['total_fee'];
+        $delivery_fee_breakdown = $feeBreakdown;
+        $delivery_distance_km = $feeBreakdown['distance'];
+
         // Generate pickup code if pickup-only
         $pickup_code = null;
         if ($listing['pickup_only']) {
@@ -242,9 +248,9 @@ try {
             INSERT INTO surplus_orders 
             (listing_id, user_id, quantity, total_price, total_weight_kg, status, 
              delivery_address, delivery_area, delivery_lat, delivery_lng, 
-             delivery_fee, delivery_fee_breakdown, pickup_code, 
+             delivery_fee, delivery_fee_breakdown, delivery_distance_km, pickup_code,
              scheduled_delivery_date, scheduled_delivery_slot, order_notes)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $result = $stmt->execute([
@@ -259,6 +265,7 @@ try {
             $delivery_lng,
             $delivery_fee,
             json_encode($delivery_fee_breakdown),
+            $delivery_distance_km,
             $pickup_code,
             $scheduled_delivery_date ?: null,
             $scheduled_delivery_slot ?: null,

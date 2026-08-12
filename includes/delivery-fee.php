@@ -334,13 +334,16 @@ function calculateDeliveryFeeFromAddress($address, $area, $orderValue, $userLat 
     $distance = null;
     
     if ($useRoadDistance) {
-        $roadDistance = getRoadDistance($officeLat, $officeLng, $destLat, $destLng);
-        if ($roadDistance !== null) {
-            $distance = $roadDistance;
-            error_log("Using OSRM road distance: $distance km");
-        } else {
-            $distance = calculateDistance($officeLat, $officeLng, $destLat, $destLng);
-            error_log("OSRM failed, using Haversine distance: $distance km");
+        // Google Routes first, then OSRM, then straight-line — see
+        // includes/google_routes.php. Was OSRM-then-Haversine, which meant a
+        // public unauthenticated router with no SLA decided what customers were
+        // charged, and silently fell back to a straight line that under-charges
+        // by 20-40% whenever it was unavailable.
+        require_once __DIR__ . '/google_routes.php';
+        $route = roadDistanceBetween($officeLat, $officeLng, $destLat, $destLng);
+        $distance = $route['km'];
+        if ($route['source'] !== 'google') {
+            error_log("Delivery distance from {$route['source']} fallback: {$distance} km");
         }
     } else {
         $distance = calculateDistance($officeLat, $officeLng, $destLat, $destLng);
