@@ -25,6 +25,7 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once '../includes/pesapal.php';
+require_once __DIR__ . '/../includes/surplus_payment.php';
 header('Content-Type: application/json');
 
 error_reporting(E_ALL);
@@ -66,6 +67,22 @@ if (!$action) fail('Missing action parameter');
 // Every action below concerns one customer's own order.
 $userId = $_SESSION['user_id'] ?? null;
 if (!$userId) fail('Not logged in', 401, 'UNAUTHENTICATED');
+
+/**
+ * Which table the order id refers to.
+ *
+ * 'shop' is the `orders` table and is the default, so every existing caller —
+ * the customer checkout, the web front end — keeps working untouched.
+ * 'surplus' is `surplus_orders`, a different table with different column names
+ * and a payable total split across two columns. See includes/surplus_payment.php.
+ *
+ * The two id spaces overlap: shop order 7 and surplus order 7 both exist. That
+ * is exactly why this is explicit rather than guessed from the id.
+ */
+$orderType = strtolower(trim((string)param('order_type', 'shop')));
+if (!in_array($orderType, ['shop', 'surplus'], true)) {
+    fail('Unknown order_type', 400, 'BAD_REQUEST');
+}
 
 /**
  * Loads an order belonging to the signed-in user.
@@ -140,6 +157,104 @@ switch ($action) {
     // -----------------------------------------------------------------------
         $orderId = (int)param('order_id', 0);
         if ($orderId <= 0) fail('order_id is required', 400, 'BAD_REQUEST');
+
+        if ($orderType === 'surplus') {
+            $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+            if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+
+            if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
+                reply([
+                    'success'  => true,
+                    'status'   => 'paid',
+                    'paid'     => true,
+                    'order_id' => (string)$orderId,
+                    'message'  => 'This order is already paid.',
+                ]);
+            }
+
+            // A cancelled order still has a row, and without this check an
+            // abandoned reservation that releaseStaleSurplusReservations() has
+            // already given back to stock could still be paid for.
+            if (in_array(strtolower((string)$order['status']), ['cancelled', 'refunded'], true)) {
+                fail('This order has been cancelled. Please order again.', 409, 'ORDER_CANCELLED');
+            }
+
+            // RULE 1 again: goods plus delivery, both read from the row.
+            $amount = surplusPayableTotal($order);
+            if ($amount <= 0) fail('This order has no payable total.', 409, 'INVALID_AMOUNT');
+
+            $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
+
+            if ($paymentMethod === 'cash') {
+                $stmt = $dbh->prepare("
+                    UPDATE surplus_orders
+                       SET payment_status = 'pending_cash',
+                           status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
+                           confirmed_at = COALESCE(confirmed_at, NOW()),
+                           updated_at = NOW()
+                     WHERE id = ? AND user_id = ?
+                ");
+                $stmt->execute([$orderId, $userId]);
+
+                reply([
+                    'success'  => true,
+                    'status'   => 'pending_cash',
+                    'paid'     => false,
+                    'order_id' => (string)$orderId,
+                    'amount'   => $amount,
+                    'currency' => CURRENCY,
+                    'message'  => 'Pay with cash when your order arrives.',
+                ]);
+            }
+
+            // Prefixed so pesapal-ipn.php can tell which table to look in when
+            // it has to fall back to the merchant reference. A bare id would be
+            // ambiguous: shop order 41 and surplus order 41 both exist.
+            $merchantReference = 'SUR-' . $orderId . '-' . time();
+
+            try {
+                $result = $pesapal->submitOrder(
+                    $merchantReference,
+                    $amount,
+                    'AfamFresh surplus order #' . $orderId,
+                    [
+                        'email'      => (string)param('email', '') ?: (string)$order['email'],
+                        'phone'      => (string)param('phone', '') ?: (string)$order['mobile'],
+                        'first_name' => (string)$order['fname'],
+                        'last_name'  => (string)$order['lname'],
+                        'address'    => (string)$order['delivery_address'],
+                        'city'       => (string)$order['delivery_area'],
+                    ]
+                );
+            } catch (PesapalException $e) {
+                error_log("Pesapal initiate failed for surplus order $orderId: " . $e->getMessage());
+                fail('We could not start the payment. Please try again in a moment.',
+                     502, 'PESAPAL_UNAVAILABLE');
+            }
+
+            // Before replying, so an IPN that beats the response can be matched.
+            $stmt = $dbh->prepare("
+                UPDATE surplus_orders
+                   SET pesapal_tracking_id = ?,
+                       payment_status = 'authorization_pending',
+                       updated_at = NOW()
+                 WHERE id = ? AND user_id = ?
+            ");
+            $stmt->execute([$result['order_tracking_id'], $orderId, $userId]);
+
+            reply([
+                'success'        => true,
+                'status'         => 'pending',
+                'paid'           => false,
+                'order_id'       => (string)$orderId,
+                'amount'         => $amount,
+                'currency'       => CURRENCY,
+                'redirect_url'   => $result['redirect_url'],
+                'payment_url'    => $result['redirect_url'],
+                'transaction_id' => $result['order_tracking_id'],
+                'environment'    => PESAPAL_ENV,
+            ]);
+        }
 
         $order = loadOwnedOrder($dbh, $orderId, (int)$userId);
 
@@ -250,6 +365,78 @@ switch ($action) {
 
         if ($trackingId === '' && $orderId <= 0) {
             fail('transaction_id or order_id is required', 400, 'BAD_REQUEST');
+        }
+
+        if ($orderType === 'surplus') {
+            if ($orderId > 0) {
+                $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+                if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+                if ($trackingId === '') $trackingId = (string)$order['pesapal_tracking_id'];
+            } else {
+                $stmt = $dbh->prepare(
+                    "SELECT id FROM surplus_orders WHERE pesapal_tracking_id = ? AND user_id = ?"
+                );
+                $stmt->execute([$trackingId, $userId]);
+                $orderId = (int)($stmt->fetchColumn() ?: 0);
+                if ($orderId === 0) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+                $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+                if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
+            }
+
+            if (strcasecmp((string)$order['payment_status'], 'pending_cash') === 0) {
+                reply([
+                    'success'  => true,
+                    'status'   => 'pending_cash',
+                    'paid'     => false,
+                    'order_id' => (string)$orderId,
+                    'message'  => 'This order will be paid in cash on delivery.',
+                ]);
+            }
+
+            if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
+                reply([
+                    'success'        => true,
+                    'status'         => 'paid',
+                    'paid'           => true,
+                    'order_id'       => (string)$orderId,
+                    'transaction_id' => $trackingId ?: null,
+                ]);
+            }
+
+            if ($trackingId === '') {
+                reply([
+                    'success'  => true,
+                    'status'   => 'pending',
+                    'paid'     => false,
+                    'order_id' => (string)$orderId,
+                    'message'  => 'No payment has been started for this order yet.',
+                ]);
+            }
+
+            try {
+                $status = $pesapal->getTransactionStatus($trackingId);
+            } catch (PesapalException $e) {
+                error_log("Pesapal verify failed for surplus order $orderId: " . $e->getMessage());
+                fail('We could not confirm the payment yet. Please try again shortly.',
+                     502, 'VERIFY_UNAVAILABLE');
+            }
+
+            $mapped = $pesapal->mapStatus($status);
+            applySurplusPaymentStatus($dbh, $orderId, $mapped, $trackingId);
+
+            reply([
+                'success'        => true,
+                'status'         => $mapped,
+                'paid'           => $mapped === 'paid',
+                'order_id'       => (string)$orderId,
+                'transaction_id' => $trackingId,
+                'amount'         => isset($status['amount'])
+                                        ? (float)$status['amount']
+                                        : surplusPayableTotal($order),
+                'currency'       => $status['currency'] ?? CURRENCY,
+                'method'         => $status['payment_method'] ?? null,
+                'description'    => $status['payment_status_description'] ?? null,
+            ]);
         }
 
         if ($orderId > 0) {
