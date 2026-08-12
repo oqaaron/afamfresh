@@ -2,6 +2,7 @@ package com.techaus.afamfresh.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.PaymentRequest
 import com.techaus.afamfresh.models.PaymentResponse
 import com.techaus.afamfresh.repository.PaymentRepository
@@ -69,6 +70,9 @@ class PaymentViewModel(
         paymentMethod: String = PaymentRequest.METHOD_MOBILE_MONEY,
         email: String? = null,
         phone: String? = null,
+        // Which table orderId refers to. Surplus orders are a separate table
+        // whose ids overlap with the shop's, so this cannot be inferred.
+        orderType: String = ApiService.ORDER_TYPE_SHOP,
         onCashAccepted: () -> Unit = {},
         onRedirect: (paymentUrl: String, transactionId: String) -> Unit
     ) {
@@ -82,7 +86,7 @@ class PaymentViewModel(
             phone = phone
         )
 
-        paymentRepository.initiatePayment(request) { response, error ->
+        paymentRepository.initiatePayment(request, orderType) { response, error ->
             _isLoading.value = false
             _paymentResult.value = response
 
@@ -116,12 +120,17 @@ class PaymentViewModel(
     fun verifyPayment(
         transactionId: String? = null,
         orderId: String? = null,
+        orderType: String = ApiService.ORDER_TYPE_SHOP,
         onResult: (Outcome) -> Unit
     ) {
         _isLoading.value = true
         _error.value = null
 
-        paymentRepository.verifyPayment(transactionId = transactionId, orderId = orderId) { response, error ->
+        paymentRepository.verifyPayment(
+            transactionId = transactionId,
+            orderId = orderId,
+            orderType = orderType
+        ) { response, error ->
             _isLoading.value = false
             _paymentResult.value = response
             onResult(classify(response, error != null))
@@ -142,6 +151,7 @@ class PaymentViewModel(
     fun awaitPaymentOutcome(
         transactionId: String? = null,
         orderId: String? = null,
+        orderType: String = ApiService.ORDER_TYPE_SHOP,
         attempts: Int = 10,
         intervalMs: Long = 3000,
         onOutcome: (Outcome) -> Unit
@@ -158,7 +168,7 @@ class PaymentViewModel(
                 // have settled in the instant the WebView closed.
                 delay(intervalMs)
 
-                val outcome = verifyOnce(transactionId, orderId)
+                val outcome = verifyOnce(transactionId, orderId, orderType)
                 last = outcome
 
                 // Settled either way — stop polling.
@@ -191,11 +201,16 @@ class PaymentViewModel(
     }
 
     /** One verify call, bridged from the callback API into the coroutine. */
-    private suspend fun verifyOnce(transactionId: String?, orderId: String?): Outcome =
+    private suspend fun verifyOnce(
+        transactionId: String?,
+        orderId: String?,
+        orderType: String
+    ): Outcome =
         kotlinx.coroutines.suspendCancellableCoroutine { cont ->
             paymentRepository.verifyPayment(
                 transactionId = transactionId,
-                orderId = orderId
+                orderId = orderId,
+                orderType = orderType
             ) { response, error ->
                 _paymentResult.value = response
                 if (cont.isActive) cont.resume(classify(response, error != null)) {}

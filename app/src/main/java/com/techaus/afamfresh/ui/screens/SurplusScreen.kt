@@ -35,7 +35,11 @@ import com.techaus.afamfresh.viewmodel.SurplusViewModel
 fun SurplusScreen(
     surplusViewModel: SurplusViewModel,
     onBack: () -> Unit,
-    onListingClick: (SurplusListing) -> Unit
+    onListingClick: (SurplusListing) -> Unit,
+    // Surplus orders are not in the ordinary order list — different table,
+    // different lifecycle — so without this the only route to them is having
+    // just paid for one.
+    onMyOrdersClick: () -> Unit = {}
 ) {
     val listings by surplusViewModel.listings.collectAsState()
     val isLoading by surplusViewModel.isLoading.collectAsState()
@@ -49,9 +53,12 @@ fun SurplusScreen(
                 IconButton(onClick = onBack) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Surplus Deals", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                     Text("Rescue fresh produce at a discount", fontSize = 12.sp, color = InkMuted)
+                }
+                TextButton(onClick = onMyOrdersClick) {
+                    Text("My orders", color = Forest, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

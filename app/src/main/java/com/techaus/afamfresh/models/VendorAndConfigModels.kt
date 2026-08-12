@@ -140,16 +140,37 @@ data class UpdateVendorProfileResponse(
  * order endpoint is surplus-orders.php, whose rows come from `surplus_orders` —
  * a different table with a different shape from `orders`. Catalogue orders are
  * not exposed per-vendor at all.
+ *
+ * Used by BOTH sides. The vendor reads their incoming orders and the customer
+ * reads their own from the same endpoint and the same rows; the only difference
+ * is which query parameter scopes them. Splitting this into a customer model and
+ * a vendor model would give two views of one table that quietly drift apart.
  */
 data class SurplusOrder(
     @SerializedName("id") val id: Int = 0,
     @SerializedName("listing_id") val listingId: Int = 0,
     @SerializedName("user_id") val userId: Int = 0,
-    @SerializedName("quantity") val quantity: Int = 0,
+
+    /**
+     * Decimal, not whole units. Weight-based listings are ordered in kilograms
+     * and the column is a DECIMAL, so an order of 20.5 kg arrives as 20.5. This
+     * was typed Int, which Gson truncates — the vendor was shown a quantity
+     * that did not match what the customer bought or what they were charged for.
+     */
+    @SerializedName("quantity") val quantity: Double = 0.0,
     @SerializedName("total_price") val totalPrice: Double = 0.0,
 
     /** pending | confirmed | processing | ready | delivered | cancelled | refunded */
     @SerializedName("status") val status: String = "pending",
+
+    /**
+     * pending | authorization_pending | paid | failed | pending_cash | cancelled
+     *
+     * Separate from [status] on purpose: a placed-but-unpaid order is only a
+     * reservation, and a vendor picking against one is doing unpaid work. The
+     * server releases it after 30 minutes.
+     */
+    @SerializedName("payment_status") val paymentStatus: String = "pending",
 
     @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("delivery_area") val deliveryArea: String? = null,
@@ -184,9 +205,35 @@ data class SurplusOrder(
     /** True once the order has reached a state the vendor can no longer change. */
     val isTerminal: Boolean
         get() = status in setOf("delivered", "cancelled", "refunded")
+
+    /**
+     * Goods plus delivery — what is actually charged.
+     *
+     * `orders` folds delivery into one total_amount; surplus_orders keeps them
+     * apart, so total_price alone is the goods only. Mirrors
+     * surplusPayableTotal() in includes/surplus_payment.php, which is the figure
+     * sent to Pesapal.
+     */
+    val grandTotal: Double get() = totalPrice + deliveryFee
+
+    val isPaid: Boolean get() = paymentStatus == "paid"
+
+    /** Placed but not yet paid for, and therefore still releasable. */
+    val isAwaitingPayment: Boolean
+        get() = paymentStatus == "pending" || paymentStatus == "authorization_pending"
+
+    /** Whole numbers without a trailing ".0"; decimals to one place. */
+    val quantityLabel: String
+        get() = if (quantity % 1.0 == 0.0) "${quantity.toLong()}" else String.format("%.1f", quantity)
 }
 
-data class VendorOrdersResponse(
+/**
+ * The response from surplus-orders.php GET.
+ *
+ * Was `VendorOrdersResponse`, which named the caller rather than the content —
+ * the same endpoint and the same rows serve the customer's own order list.
+ */
+data class SurplusOrdersResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("orders") val orders: List<SurplusOrder>? = null,
     @SerializedName("error") val error: String? = null

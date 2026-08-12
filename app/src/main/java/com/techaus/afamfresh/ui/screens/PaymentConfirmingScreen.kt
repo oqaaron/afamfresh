@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.ui.theme.Cream
 import com.techaus.afamfresh.ui.theme.Forest
 import com.techaus.afamfresh.ui.theme.Ink
@@ -49,6 +50,10 @@ import com.techaus.afamfresh.viewmodel.PaymentViewModel
 fun PaymentConfirmingScreen(
     trackingId: String,
     paymentViewModel: PaymentViewModel,
+    // Which table the tracking id belongs to. Surplus orders are a separate
+    // table; verifying one as a shop order finds nothing and the customer is
+    // told their payment could not be confirmed when it went through fine.
+    orderType: String = ApiService.ORDER_TYPE_SHOP,
     onPaid: () -> Unit,
     onFailed: () -> Unit,
     onUnconfirmed: () -> Unit
@@ -57,8 +62,11 @@ fun PaymentConfirmingScreen(
 
     // Keyed on the tracking id so a recomposition does not restart polling, and a
     // genuinely new payment does.
-    LaunchedEffect(trackingId) {
-        paymentViewModel.awaitPaymentOutcome(transactionId = trackingId) { outcome ->
+    LaunchedEffect(trackingId, orderType) {
+        paymentViewModel.awaitPaymentOutcome(
+            transactionId = trackingId,
+            orderType = orderType
+        ) { outcome ->
             when (outcome) {
                 PaymentViewModel.Outcome.PAID -> onPaid()
                 PaymentViewModel.Outcome.CASH_ON_DELIVERY -> onPaid()

@@ -556,7 +556,7 @@ class BackendContractTest {
             }
         """.trimIndent()
 
-        val order = gson.fromJson(json, VendorOrdersResponse::class.java).orders!!.single()
+        val order = gson.fromJson(json, SurplusOrdersResponse::class.java).orders!!.single()
 
         assertEquals(5, order.id)
         assertEquals(11400.0, order.totalPrice, 0.001)

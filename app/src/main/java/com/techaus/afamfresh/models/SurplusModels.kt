@@ -133,3 +133,68 @@ data class UpdateSurplusListingRequest(
     @SerializedName("status") val status: String? = null,
     @SerializedName("admin_notes") val adminNotes: String? = null
 )
+
+// ===========================================================================
+// SURPLUS ORDERS — the customer side
+// ===========================================================================
+
+/**
+ * Body for POST `surplus-orders.php`. Read field-for-field from the PHP.
+ *
+ * `user_id` is sent but NOT trusted: the endpoint runs it through
+ * requireOwnUserId(), so a mismatched id is rejected rather than obeyed. It
+ * stays in the payload because the endpoint still reads it for admin callers.
+ *
+ * No price of any kind is sent. The server multiplies the listing's stored
+ * discounted_price by the quantity and computes delivery from weight, so an
+ * amount here would be ignored — see api/surplus-orders.php.
+ *
+ * The server enforces three limits the UI should check first, so the customer
+ * finds out before they fill in an address:
+ *
+ *   - minimum order value UGX 250,000
+ *   - minimum 20 kg for weight-based listings
+ *   - maximum 1000 kg total weight
+ */
+data class CreateSurplusOrderRequest(
+    @SerializedName("listing_id") val listingId: Int,
+    @SerializedName("user_id") val userId: Int,
+    /** Decimal: weight-based listings are ordered in kg, not whole units. */
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("delivery_address") val deliveryAddress: String? = null,
+    @SerializedName("delivery_area") val deliveryArea: String? = null,
+    @SerializedName("delivery_lat") val deliveryLat: Double? = null,
+    @SerializedName("delivery_lng") val deliveryLng: Double? = null,
+    @SerializedName("order_notes") val orderNotes: String? = null
+) {
+    companion object {
+        const val MIN_ORDER_VALUE = 250_000.0
+        const val MIN_WEIGHT_BASED_QUANTITY = 20.0
+        const val MAX_WEIGHT_KG = 1000.0
+    }
+}
+
+// The order row itself is `SurplusOrder` in VendorAndConfigModels.kt. It is
+// deliberately not redeclared here: customer and vendor read the same rows from
+// the same endpoint, and a second model would drift from the first.
+
+/**
+ * Response to POST `surplus-orders.php`.
+ *
+ * [grandTotal] is the figure to show and the figure that will be charged; it is
+ * computed server-side and is not necessarily quantity × price, because the
+ * delivery fee is weight-based and waived above a threshold.
+ */
+data class CreateSurplusOrderResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("order") val order: SurplusOrder? = null,
+    @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
+    @SerializedName("total_weight_kg") val totalWeightKg: Double = 0.0,
+    @SerializedName("grand_total") val grandTotal: Double = 0.0,
+    // Failures come back as {"error": "..."} with no success flag.
+    @SerializedName("error") val error: String? = null
+)
+
+// The list response is `SurplusOrdersResponse` in VendorAndConfigModels.kt,
+// alongside the row model. Same endpoint, same rows, one type.

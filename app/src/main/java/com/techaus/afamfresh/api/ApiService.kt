@@ -220,6 +220,39 @@ interface ApiService {
         @Query("offset") offset: Int = 0
     ): Call<SurplusListingsResponse>
 
+    /**
+     * Places a surplus order.
+     *
+     * The order is created UNPAID and the listing's stock is decremented
+     * immediately, so this call is a reservation as much as an order. Pay for it
+     * with [initiatePayment] passing `order_type = "surplus"`; an order left
+     * unpaid for 30 minutes is cancelled server-side and its stock returned.
+     *
+     * The server rejects orders under UGX 250,000, under 20 kg on weight-based
+     * listings, and over 1000 kg. Those come back as {"error": "..."} with a
+     * message written for the customer, so show it rather than replacing it.
+     */
+    @POST("surplus-orders.php")
+    @Headers("Content-Type: application/json")
+    fun createSurplusOrder(
+        @Body request: CreateSurplusOrderRequest
+    ): Call<CreateSurplusOrderResponse>
+
+    /**
+     * A customer's own surplus orders.
+     *
+     * user_id must be sent, but the server ignores what it says and uses the
+     * session — asking for someone else's id returns yours, not theirs. Omitting
+     * it entirely used to return every surplus order on the platform.
+     */
+    @GET("surplus-orders.php")
+    fun getMySurplusOrders(
+        @Query("user_id") userId: Int,
+        @Query("status") status: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Call<SurplusOrdersResponse>
+
     // ============================================================
     // VENDOR SURPLUS ENDPOINTS
     // ============================================================
@@ -273,7 +306,7 @@ interface ApiService {
         @Query("status") status: String? = null,
         @Query("limit") limit: Int = 50,
         @Query("offset") offset: Int = 0
-    ): Call<VendorOrdersResponse>
+    ): Call<SurplusOrdersResponse>
 
     // ============================================================
     // VENDOR PRODUCTS ENDPOINTS
@@ -369,10 +402,16 @@ interface ApiService {
     //
     // The request carries no amount: the server takes the payable total from the
     // orders row and ignores anything the client sends. See PaymentRequest.
+    //
+    // `order_type` says which table order_id refers to: "shop" is the `orders`
+    // table, "surplus" is `surplus_orders`. It defaults to "shop" server-side,
+    // so it is only ever sent explicitly. The two id spaces overlap — shop order
+    // 41 and surplus order 41 both exist — which is why this cannot be inferred.
     @POST("payment.php")
     @Headers("Content-Type: application/json")
     fun initiatePayment(
         @Query("action") action: String = "initiate",
+        @Query("order_type") orderType: String = ORDER_TYPE_SHOP,
         @Body request: PaymentRequest
     ): Call<PaymentResponse>
 
@@ -388,6 +427,7 @@ interface ApiService {
     @FormUrlEncoded
     fun verifyPayment(
         @Query("action") action: String = "verify",
+        @Query("order_type") orderType: String = ORDER_TYPE_SHOP,
         @Field("transaction_id") transactionId: String? = null,
         @Field("order_id") orderId: String? = null
     ): Call<PaymentResponse>
@@ -661,4 +701,12 @@ interface ApiService {
 
     @GET("config.php")
     fun getAppConfig(): Call<AppConfigResponse>
+
+    companion object {
+        /** payment.php `order_type`: the `orders` table. The server's default. */
+        const val ORDER_TYPE_SHOP = "shop"
+
+        /** payment.php `order_type`: the `surplus_orders` table. */
+        const val ORDER_TYPE_SURPLUS = "surplus"
+    }
 }

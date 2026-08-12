@@ -16,15 +16,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.ui.nav.FlavorRouteDeps
 import com.techaus.afamfresh.ui.nav.flavorRoutes
 import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.ui.screens.SettingsScreen
 import com.techaus.afamfresh.viewmodel.*
 
@@ -260,8 +264,124 @@ fun MainScreen(
                     surplusViewModel = surplusViewModel,
                     onBack = { navController.navigate("home") },
                     onListingClick = { listing ->
-                        // Navigate to product detail
+                        navController.navigate("surplus_checkout/${listing.id}")
+                    },
+                    onMyOrdersClick = { navController.navigate("surplus_orders") }
+                )
+            }
+
+            // ===== SURPLUS CHECKOUT =====
+            //
+            // Only the listing ID travels in the route. The listing itself is
+            // looked up from the ViewModel, because a route argument survives
+            // process death while an object reference does not — and passing a
+            // whole listing through a URL means encoding a price the customer
+            // could then edit.
+            if (isCustomerApp) composable("surplus_checkout/{listingId}") { backStackEntry ->
+                val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
+                val listings by surplusViewModel.listings.collectAsState()
+                val addresses by addressViewModel.addresses.collectAsState()
+
+                // Held once resolved, rather than re-derived from the list on
+                // every recomposition. Placing an order reloads the listings,
+                // and buying the last of a listing removes it from that list —
+                // which would replace the screen with "no longer available" in
+                // the instant between placing the order and opening the payment
+                // page.
+                val listing = remember(listingId) { mutableStateOf<SurplusListing?>(null) }
+                if (listing.value == null && listingId != null) {
+                    listing.value = listings.find { it.id == listingId }
+                }
+
+                SurplusCheckoutScreen(
+                    listing = listing.value,
+                    userId = user?.id?.toIntOrNull(),
+                    userEmail = user?.email,
+                    userPhone = user?.mobile,
+                    defaultAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull(),
+                    surplusViewModel = surplusViewModel,
+                    paymentViewModel = paymentViewModel,
+                    onBack = { navController.popBackStack() },
+                    onPaymentRedirect = { paymentUrl, transactionId ->
+                        navController.navigate(
+                            "surplus_payment_webview/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
+                        )
+                    },
+                    // Cash on delivery: there is no payment page, and the order
+                    // is already placed. Their order list is the only honest
+                    // place to land — going back to checkout would look like it
+                    // had not worked.
+                    onOrderPlacedUnpaid = {
+                        navController.navigate("surplus_orders") {
+                            popUpTo("surplus") { inclusive = false }
+                        }
                     }
+                )
+            }
+
+            // ===== SURPLUS PAYMENT =====
+            //
+            // Separate routes from the shop's rather than a shared one with a
+            // parameter: these differ in where they send the customer afterwards,
+            // and in the order_type the verify call must carry. The screens
+            // themselves are the same two composables.
+            if (isCustomerApp) composable("surplus_payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
+                val paymentUrl = Uri.decode(backStackEntry.arguments?.getString("paymentUrl") ?: "")
+                val transactionId = backStackEntry.arguments?.getString("transactionId") ?: ""
+
+                PaymentWebViewScreen(
+                    paymentUrl = paymentUrl,
+                    transactionId = transactionId,
+                    // Backing out of the payment page leaves a real, unpaid
+                    // order behind. It is released server-side after 30 minutes,
+                    // so the customer is returned to the marketplace rather than
+                    // to a checkout form that would place a second one.
+                    onBack = {
+                        navController.navigate("surplus") {
+                            popUpTo("surplus") { inclusive = true }
+                        }
+                    },
+                    onCheckoutFinished = { trackingId ->
+                        navController.navigate("surplus_payment_confirming/$trackingId") {
+                            popUpTo("surplus") { inclusive = false }
+                        }
+                    }
+                )
+            }
+
+            if (isCustomerApp) composable("surplus_payment_confirming/{trackingId}") { backStackEntry ->
+                val trackingId = backStackEntry.arguments?.getString("trackingId") ?: ""
+                PaymentConfirmingScreen(
+                    trackingId = trackingId,
+                    paymentViewModel = paymentViewModel,
+                    orderType = ApiService.ORDER_TYPE_SURPLUS,
+                    onPaid = {
+                        navController.navigate("surplus_orders") {
+                            popUpTo("surplus") { inclusive = false }
+                        }
+                    },
+                    onFailed = {
+                        navController.navigate("surplus") {
+                            popUpTo("surplus") { inclusive = true }
+                        }
+                    },
+                    // Unknown outcome sends them to their orders, never back to
+                    // checkout: telling someone who HAS paid that it failed is
+                    // how you get paid twice.
+                    onUnconfirmed = {
+                        navController.navigate("surplus_orders") {
+                            popUpTo("surplus") { inclusive = false }
+                        }
+                    }
+                )
+            }
+
+            // ===== SURPLUS ORDERS =====
+            if (isCustomerApp) composable("surplus_orders") {
+                SurplusOrdersScreen(
+                    surplusViewModel = surplusViewModel,
+                    userId = user?.id?.toIntOrNull(),
+                    onBack = { navController.navigate("surplus") }
                 )
             }
 

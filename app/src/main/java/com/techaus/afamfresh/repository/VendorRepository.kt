@@ -14,7 +14,7 @@ import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.UpdateSurplusListingRequest
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.UpdateVendorProfileResponse
-import com.techaus.afamfresh.models.VendorOrdersResponse
+import com.techaus.afamfresh.models.SurplusOrdersResponse
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.models.VendorProfileResponse
@@ -262,7 +262,7 @@ class VendorRepository(
      */
     fun getVendorOrders(vendorId: Int, callback: (List<SurplusOrder>?, ApiError?) -> Unit) {
         apiService.getVendorOrders(vendorId = vendorId)
-            .enqueueApi<VendorOrdersResponse>("VendorRepo", "getVendorOrders") { body, error ->
+            .enqueueApi<SurplusOrdersResponse>("VendorRepo", "getVendorOrders") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.orders ?: emptyList(), null)

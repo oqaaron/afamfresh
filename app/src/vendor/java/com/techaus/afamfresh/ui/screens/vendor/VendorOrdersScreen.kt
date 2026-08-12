@@ -94,7 +94,10 @@ private fun VendorOrderRow(order: SurplusOrder) {
             Text(
                 buildString {
                     append(order.status.replaceFirstChar { it.uppercase() })
-                    append("  •  ${order.quantity} unit(s)")
+                    // quantityLabel, not quantity: bulk orders are decimal
+                    // kilograms, so the raw value renders as "20.0 unit(s)".
+                    append("  •  ${order.quantityLabel} unit(s)")
+                    if (order.isAwaitingPayment) append("  •  NOT PAID")
                     order.customerName.takeIf { it.isNotBlank() }?.let { append("  •  $it") }
                 },
                 fontSize = 12.sp,

@@ -19,9 +19,13 @@ class PaymentRepository(
      * cannot tell whether money left their account. Every failure here carries a
      * specific reason.
      */
-    fun initiatePayment(request: PaymentRequest, callback: (PaymentResponse?, ApiError?) -> Unit) {
+    fun initiatePayment(
+        request: PaymentRequest,
+        orderType: String = ApiService.ORDER_TYPE_SHOP,
+        callback: (PaymentResponse?, ApiError?) -> Unit
+    ) {
         try {
-            apiService.initiatePayment(request = request)
+            apiService.initiatePayment(orderType = orderType, request = request)
                 .enqueueApi<PaymentResponse>("PaymentRepo", "initiatePayment") { body, error ->
                     when {
                         error != null -> callback(null, error)
@@ -51,13 +55,18 @@ class PaymentRepository(
     fun verifyPayment(
         transactionId: String? = null,
         orderId: String? = null,
+        orderType: String = ApiService.ORDER_TYPE_SHOP,
         callback: (PaymentResponse?, ApiError?) -> Unit
     ) {
         require(!transactionId.isNullOrBlank() || !orderId.isNullOrBlank()) {
             "verifyPayment needs either a transactionId or an orderId"
         }
 
-        apiService.verifyPayment(transactionId = transactionId, orderId = orderId)
+        apiService.verifyPayment(
+            orderType = orderType,
+            transactionId = transactionId,
+            orderId = orderId
+        )
             .enqueueApi<PaymentResponse>("PaymentRepo", "verifyPayment") { body, error ->
                 callback(body, error)
             }
