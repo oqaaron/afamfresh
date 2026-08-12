@@ -128,7 +128,7 @@ function notifyVendorLowStockBulk($vendor_user_id, $low_stock_products) {
  * @return bool - Success status
  */
 function notifyVendorPaymentConfirmed($vendor_user_id, $order_id, $amount) {
-    $title = "💰 Payment Confirmed - Order #{$order_id}";
+    $title = "Payment confirmed - order #{$order_id}";
     $message = "Payment of UGX " . number_format($amount) . " has been confirmed for order #{$order_id}.";
     $link = "vendor-orders.php?view=order&id={$order_id}";
     
@@ -143,7 +143,7 @@ function notifyVendorPaymentConfirmed($vendor_user_id, $order_id, $amount) {
  * @return bool - Success status
  */
 function notifyVendorProductApproved($vendor_user_id, $product_id, $product_name) {
-    $title = "✅ Product Approved: {$product_name}";
+    $title = "Product approved: {$product_name}";
     $message = "Your product \"{$product_name}\" has been approved and is now live on AfamFresh!";
     $link = "vendor-products.php?action=edit&id={$product_id}";
     
@@ -159,7 +159,7 @@ function notifyVendorProductApproved($vendor_user_id, $product_id, $product_name
  * @return bool - Success status
  */
 function notifyVendorProductRejected($vendor_user_id, $product_id, $product_name, $reason) {
-    $title = "❌ Product Rejected: {$product_name}";
+    $title = "Product not approved: {$product_name}";
     $message = "Your product \"{$product_name}\" was not approved. Reason: {$reason}. Please edit and resubmit.";
     $link = "vendor-products.php?action=edit&id={$product_id}";
     
@@ -259,7 +259,7 @@ function notifyVendorVerified($vendor_user_id) {
     // waiting on. Reaching them without the app being open is the point.
     return addNotification(
         $vendor_user_id,
-        '✅ Your vendor account is verified',
+        'Your vendor account is verified',
         'An administrator has verified your business details. You can now list '
             . 'products on AfamFresh.',
         'system',

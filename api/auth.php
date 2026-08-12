@@ -489,8 +489,17 @@ if ($action == 'forgot_password') {
                 ? $requestedScheme
                 : 'afamfresh';   // installs predating this send nothing
 
-            $resetLink = "$scheme://reset-password?token=$rawToken";
-            $subject = 'AfamFresh Password Reset';
+            // An https link to our own bridge page, which then hands off to the
+            // app — not the raw afamfresh:// scheme.
+            //
+            // The custom scheme was both a spam signal (these emails were
+            // landing in spam) and frequently dead: many mail clients will not
+            // linkify a non-HTTP href, and some strip it. reset-password.php
+            // does the handoff and explains itself when the app is missing.
+            require_once __DIR__ . '/../includes/user_payload.php';
+            $resetLink = appBaseUrl() . '/reset-password.php?token=' . rawurlencode($rawToken)
+                       . '&scheme=' . rawurlencode($scheme);
+            $subject = 'Reset your AfamFresh password';
 
             // Sent through Brevo, not mail(). PHP's mail() needs a local MTA,
             // and the php:8.2-apache image this runs in on Cloud Run has none —
