@@ -19,6 +19,41 @@ import com.techaus.afamfresh.utils.OrderCalc
 fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     val nav = deps.navController
 
+    // The same map, returning to surplus checkout instead of the cart's.
+    //
+    // A separate route rather than a parameter on the shop one: they differ in
+    // where they go back to, and the surplus fee is computed server-side at
+    // quote time, so the shop's cart-subtotal quote is meaningless here.
+    composable("surplus_delivery_map/{listingId}") { backStackEntry ->
+        val listingId = backStackEntry.arguments?.getString("listingId").orEmpty()
+        DeliveryMapScreen(
+            onBack = { nav.popBackStack() },
+            // Zero: the map's own fee quote is for shop orders and is ignored
+            // here. Surplus is priced by api/surplus-quote.php, which the
+            // checkout screen calls with the coordinates this returns.
+            cartSubtotal = 0.0,
+            deliveryRepository = deps.deliveryRepository,
+            onLocationSelected = { pickupAddress, dropoffAddress, pickupLat, pickupLng,
+                                   dropoffLat, dropoffLng, distanceKm, totalCost ->
+                deps.deliveryResultViewModel.setDeliveryResult(
+                    DeliveryResult(
+                        pickupAddress = pickupAddress,
+                        dropoffAddress = dropoffAddress,
+                        pickupLat = pickupLat,
+                        pickupLng = pickupLng,
+                        dropoffLat = dropoffLat,
+                        dropoffLng = dropoffLng,
+                        distanceKm = distanceKm,
+                        cost = totalCost
+                    )
+                )
+                nav.navigate("surplus_checkout/$listingId") {
+                    popUpTo("surplus_delivery_map/$listingId") { inclusive = true }
+                }
+            }
+        )
+    }
+
     composable("delivery_map") {
         val cartItems by deps.cartViewModel.cartItems.collectAsState()
         DeliveryMapScreen(

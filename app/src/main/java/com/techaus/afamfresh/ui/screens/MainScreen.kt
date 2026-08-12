@@ -297,15 +297,27 @@ fun MainScreen(
                     listing.value = listings.find { it.id == listingId }
                 }
 
+                // The pin comes back through DeliveryResultViewModel, the same
+                // channel the shop checkout uses. Only the drop-off half is
+                // read: the pickup point for surplus is the vendor's premises,
+                // which the server knows and the map does not.
+                val pinned by deliveryResultViewModel.deliveryResult.collectAsState()
+
                 SurplusCheckoutScreen(
                     listing = listing.value,
                     userId = user?.id?.toIntOrNull(),
                     userEmail = user?.email,
                     userPhone = user?.mobile,
                     defaultAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull(),
+                    pinnedLat = pinned?.dropoffLat,
+                    pinnedLng = pinned?.dropoffLng,
+                    pinnedAddress = pinned?.dropoffAddress,
                     surplusViewModel = surplusViewModel,
                     paymentViewModel = paymentViewModel,
                     onBack = { navController.popBackStack() },
+                    onPickLocation = {
+                        navController.navigate("surplus_delivery_map/${listingId ?: 0}")
+                    },
                     onPaymentRedirect = { paymentUrl, transactionId ->
                         navController.navigate(
                             "surplus_payment_webview/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"

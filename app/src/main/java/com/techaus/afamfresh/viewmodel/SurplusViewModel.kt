@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import com.techaus.afamfresh.models.CreateSurplusOrderRequest
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.SurplusQuoteRequest
+import com.techaus.afamfresh.models.SurplusQuoteResponse
 import com.techaus.afamfresh.repository.SurplusRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,58 @@ class SurplusViewModel(
                 _canRetry.value = error?.isRetryable ?: true
             }
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Pricing an order before it exists
+    // ---------------------------------------------------------------
+
+    private val _quote = MutableStateFlow<SurplusQuoteResponse?>(null)
+    val quote: StateFlow<SurplusQuoteResponse?> = _quote.asStateFlow()
+
+    private val _quoteLoading = MutableStateFlow(false)
+    val quoteLoading: StateFlow<Boolean> = _quoteLoading.asStateFlow()
+
+    private val _quoteError = MutableStateFlow<String?>(null)
+    val quoteError: StateFlow<String?> = _quoteError.asStateFlow()
+
+    /**
+     * Asks the server what an order would cost.
+     *
+     * Called whenever the quantity or the pinned location changes, because both
+     * feed the delivery fee. The app cannot compute this itself: the fee mixes
+     * weight, distance, a service charge and percentages of the goods value,
+     * all of which live in admin-editable tables.
+     *
+     * A failed quote clears the previous one rather than leaving it on screen.
+     * A stale total next to a changed quantity is worse than no total, because
+     * it looks authoritative.
+     */
+    fun requestQuote(listingId: Int, quantity: Double, lat: Double?, lng: Double?) {
+        _quoteLoading.value = true
+        _quoteError.value = null
+
+        surplusRepository.getQuote(
+            SurplusQuoteRequest(
+                listingId = listingId,
+                quantity = quantity,
+                deliveryLat = lat,
+                deliveryLng = lng
+            )
+        ) { response, error ->
+            _quoteLoading.value = false
+            if (response != null) {
+                _quote.value = response
+            } else {
+                _quote.value = null
+                _quoteError.value = error?.userMessage ?: "Could not price that order."
+            }
+        }
+    }
+
+    fun clearQuote() {
+        _quote.value = null
+        _quoteError.value = null
     }
 
     // ---------------------------------------------------------------

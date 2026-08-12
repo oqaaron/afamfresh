@@ -7,6 +7,8 @@ import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusListingsResponse
 import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.SurplusOrdersResponse
+import com.techaus.afamfresh.models.SurplusQuoteRequest
+import com.techaus.afamfresh.models.SurplusQuoteResponse
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.enqueueApi
 
@@ -49,6 +51,27 @@ class SurplusRepository(
                 when {
                     error != null -> callback(null, error)
                     body?.success == true && body.order != null -> callback(body, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Prices an order without placing it.
+     *
+     * The whole response is returned, not just the total: the screen shows the
+     * itemised breakdown, and the server's `reason` explains a fee better than
+     * anything this layer could reconstruct from the numbers.
+     */
+    fun getQuote(
+        request: SurplusQuoteRequest,
+        callback: (SurplusQuoteResponse?, ApiError?) -> Unit
+    ) {
+        apiService.getSurplusQuote(request)
+            .enqueueApi<SurplusQuoteResponse>("SurplusRepo", "getQuote") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body, null)
                     else -> callback(null, ApiError.reported(body?.error))
                 }
             }

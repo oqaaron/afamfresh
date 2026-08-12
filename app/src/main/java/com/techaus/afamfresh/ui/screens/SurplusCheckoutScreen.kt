@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import com.techaus.afamfresh.models.Address
 import com.techaus.afamfresh.models.CreateSurplusOrderRequest
 import com.techaus.afamfresh.models.PaymentRequest
 import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.SurplusQuoteResponse
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
@@ -58,12 +60,16 @@ import kotlin.math.roundToInt
  * for 30 minutes is cancelled server-side and its stock returned to the listing.
  * See releaseStaleSurplusReservations() in includes/surplus_payment.php.
  *
- * THE TOTALS SHOWN HERE ARE AN ESTIMATE, AND SAY SO
+ * THE TOTAL IS THE SERVER'S, NOT THE APP'S
  *
- * Everything before the order is placed is computed client-side from the
- * listing's price. Delivery is not included because it cannot be known yet.
- * The screen never presents an estimate as the amount to be charged; the real
- * figure arrives with the order and is what goes to Pesapal.
+ * The delivery fee mixes a base charge, a per-kg rate, a per-km rate, a service
+ * fee and percentages of the goods value -- all from admin-editable tables. The
+ * app cannot compute any of that, so it asks: api/surplus-quote.php runs the
+ * identical function order creation will, and the figure shown here is the
+ * figure charged.
+ *
+ * Distance needs a pinned location. Without one the fee is real but incomplete,
+ * and the screen says so rather than implying the total is final.
  */
 @Composable
 fun SurplusCheckoutScreen(
@@ -72,9 +78,16 @@ fun SurplusCheckoutScreen(
     userEmail: String?,
     userPhone: String?,
     defaultAddress: Address?,
+    // Set once the customer pins a delivery point on the map. Without it the
+    // server cannot measure a distance, and that component is simply absent
+    // from the fee rather than guessed.
+    pinnedLat: Double?,
+    pinnedLng: Double?,
+    pinnedAddress: String?,
     surplusViewModel: SurplusViewModel,
     paymentViewModel: PaymentViewModel,
     onBack: () -> Unit,
+    onPickLocation: () -> Unit,
     onPaymentRedirect: (paymentUrl: String, transactionId: String) -> Unit,
     onOrderPlacedUnpaid: () -> Unit
 ) {
@@ -85,6 +98,9 @@ fun SurplusCheckoutScreen(
         return
     }
 
+    val quote by surplusViewModel.quote.collectAsState()
+    val quoteLoading by surplusViewModel.quoteLoading.collectAsState()
+    val quoteError by surplusViewModel.quoteError.collectAsState()
     val isPlacing by surplusViewModel.isPlacingOrder.collectAsState()
     val orderError by surplusViewModel.orderError.collectAsState()
     val paymentError by paymentViewModel.error.collectAsState()
@@ -105,7 +121,9 @@ fun SurplusCheckoutScreen(
     var quantity by remember(listing.id) {
         mutableStateOf(minQuantity.coerceAtMost(listing.remainingQuantity.toDouble()))
     }
-    var address by remember { mutableStateOf(defaultAddress?.addressLine.orEmpty()) }
+    var address by remember(pinnedAddress) {
+        mutableStateOf(pinnedAddress ?: defaultAddress?.addressLine.orEmpty())
+    }
     var area by remember { mutableStateOf(defaultAddress?.area.orEmpty()) }
     var notes by remember { mutableStateOf("") }
     var payWithCash by remember { mutableStateOf(false) }
@@ -132,6 +150,16 @@ fun SurplusCheckoutScreen(
             "Add a delivery address, or nobody knows where this is going."
         userId == null -> "Sign in to place this order."
         else -> null
+    }
+
+    // Re-priced whenever anything that feeds the fee changes. Debounced, because
+    // the quantity field fires on every keystroke and each one would otherwise
+    // be a round trip.
+    LaunchedEffect(listing.id, quantity, pinnedLat, pinnedLng) {
+        if (blockingReason == null || blockingReason.startsWith("Add a delivery")) {
+            kotlinx.coroutines.delay(400)
+            surplusViewModel.requestQuote(listing.id, quantity, pinnedLat, pinnedLng)
+        }
     }
 
     Scaffold(
@@ -196,6 +224,31 @@ fun SurplusCheckoutScreen(
                 }
             } else {
                 SectionCard(title = "Where to deliver") {
+                    // Pinning is what makes the distance leg of the fee
+                    // computable. Typed text cannot be measured from, so
+                    // without a pin the quote is missing that component and
+                    // says so rather than quietly under-charging.
+                    OutlinedButton(
+                        onClick = onPickLocation,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Place, contentDescription = null, tint = Forest)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (pinnedLat != null) "Change location on map" else "Pin the delivery point",
+                            color = Forest
+                        )
+                    }
+                    if (pinnedLat == null) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Delivery is charged partly by distance. Pin the point and we can " +
+                                "show you the full price before you order.",
+                            fontSize = 11.sp,
+                            color = InkMuted
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
@@ -243,8 +296,15 @@ fun SurplusCheckoutScreen(
 
             TotalsCard(
                 goodsTotal = goodsTotal,
-                pickupOnly = listing.pickupOnly
+                quote = quote,
+                loading = quoteLoading,
+                pickupOnly = listing.pickupOnly,
+                hasPin = pinnedLat != null
             )
+
+            quoteError?.let { e ->
+                Text(e, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            }
 
             val message = orderError ?: paymentError
             if (message != null) {
@@ -272,11 +332,12 @@ fun SurplusCheckoutScreen(
                         quantity = quantity,
                         deliveryAddress = address.takeIf { it.isNotBlank() },
                         deliveryArea = area.takeIf { it.isNotBlank() },
-                        // Present only if the address was pinned on the map. A
-                        // typed address has none, and inventing coordinates
-                        // would produce a wrong delivery quote.
-                        deliveryLat = defaultAddress?.lat,
-                        deliveryLng = defaultAddress?.lng,
+                        // The pin the customer just dropped, falling back to a
+                        // saved address that was itself pinned. A typed address
+                        // has no coordinates, and inventing them would produce a
+                        // charge for a journey that was never measured.
+                        deliveryLat = pinnedLat ?: defaultAddress?.lat,
+                        deliveryLng = pinnedLng ?: defaultAddress?.lng,
                         orderNotes = notes.takeIf { it.isNotBlank() }
                     )
 
@@ -319,8 +380,7 @@ fun SurplusCheckoutScreen(
             }
 
             Text(
-                "Delivery is added by the vendor based on weight and distance, so the " +
-                    "amount you pay may be a little higher than the estimate above.",
+                "We only deliver within Greater Kampala — Kampala, Wakiso, Mpigi and Mukono.",
                 fontSize = 11.sp,
                 color = InkMuted
             )
@@ -454,8 +514,24 @@ private fun PaymentChoice(
     }
 }
 
+/**
+ * The price, itemised.
+ *
+ * Every line is the server's figure. Showing the components rather than one
+ * delivery number is the point: a customer told "delivery: 47,000" on a bag of
+ * matooke assumes they are being fleeced, whereas the same figure split into
+ * distance, weight, service and insurance is a bill they can check.
+ */
 @Composable
-private fun TotalsCard(goodsTotal: Double, pickupOnly: Boolean) {
+private fun TotalsCard(
+    goodsTotal: Double,
+    quote: SurplusQuoteResponse?,
+    loading: Boolean,
+    pickupOnly: Boolean,
+    hasPin: Boolean
+) {
+    val b = quote?.breakdown
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -463,28 +539,104 @@ private fun TotalsCard(goodsTotal: Double, pickupOnly: Boolean) {
             .background(CardWhite)
             .padding(16.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Goods", color = InkMuted, fontSize = 14.sp)
-            Text(formatUgx(goodsTotal), color = Ink, fontSize = 14.sp)
+        FeeLine("Goods", formatUgx(quote?.goodsTotal ?: goodsTotal), bold = false)
+
+        if (pickupOnly) {
+            Spacer(Modifier.height(6.dp))
+            FeeLine("Delivery", "Collection", bold = false)
+        } else if (b != null) {
+            // Zero lines are omitted rather than shown as "UGX 0". A waived
+            // carriage charge is explained by `reason` below; a list of zeroes
+            // just makes the bill harder to read.
+            if (b.baseFee > 0) { Spacer(Modifier.height(6.dp)); FeeLine("Base delivery", formatUgx(b.baseFee)) }
+            if (b.weightFee > 0) {
+                Spacer(Modifier.height(6.dp))
+                FeeLine("Weight (${b.weightKg.roundToInt()} kg)", formatUgx(b.weightFee))
+            }
+            if (b.distanceFee > 0) {
+                Spacer(Modifier.height(6.dp))
+                // "by road" because it is: the server routes the journey rather
+                // than measuring the straight line, and the difference on a
+                // Kampala trip is 20-40% of the charge.
+                val km = b.distanceKm?.let { " (${String.format("%.1f", it)} km by road)" } ?: ""
+                FeeLine("Distance$km", formatUgx(b.distanceFee))
+            }
+            if (b.serviceFee > 0) { Spacer(Modifier.height(6.dp)); FeeLine("Service fee", formatUgx(b.serviceFee)) }
+            if (b.insuranceFee > 0) {
+                Spacer(Modifier.height(6.dp))
+                FeeLine("Insurance (${trimPercent(b.insurancePercent)}%)", formatUgx(b.insuranceFee))
+            }
+            if (b.processingFee > 0) {
+                Spacer(Modifier.height(6.dp))
+                FeeLine("Processing (${trimPercent(b.processingPercent)}%)", formatUgx(b.processingFee))
+            }
+        } else {
+            Spacer(Modifier.height(6.dp))
+            FeeLine("Delivery", if (loading) "Working it out…" else "—", bold = false)
         }
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Delivery", color = InkMuted, fontSize = 14.sp)
-            Text(
-                if (pickupOnly) "Collection" else "Added at checkout",
-                color = InkMuted,
-                fontSize = 14.sp
-            )
-        }
+
         Spacer(Modifier.height(10.dp))
         HorizontalDivider()
         Spacer(Modifier.height(10.dp))
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Estimated total", fontWeight = FontWeight.Bold, color = Ink)
-            Text(formatUgx(goodsTotal), fontWeight = FontWeight.Bold, color = Forest)
+            Text(
+                if (quote != null) "Total to pay" else "Goods only",
+                fontWeight = FontWeight.Bold,
+                color = Ink
+            )
+            Text(
+                formatUgx(quote?.grandTotal ?: goodsTotal),
+                fontWeight = FontWeight.Bold,
+                color = Forest
+            )
+        }
+
+        // The server's own explanation. It names the per-km and per-kg rates,
+        // says when carriage was waived, and admits when the distance was
+        // measured from the depot because the vendor has not pinned their
+        // premises — which is a real charge computed from an approximation and
+        // should never be presented as exact.
+        // Rough driving time, when the router supplied one. Framed as "about"
+        // and never as a promise — it is traffic-unaware by design, so that the
+        // same order quoted twice cannot produce two different prices.
+        b?.durationMinutes?.takeIf { it > 0 }?.let { mins ->
+            Spacer(Modifier.height(6.dp))
+            Text("About $mins min drive from the vendor", fontSize = 11.sp, color = InkMuted)
+        }
+
+        b?.reason?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, fontSize = 11.sp, color = InkMuted)
+        }
+
+        if (!pickupOnly && !hasPin) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Pin the delivery point to include distance — the total will go up.",
+                fontSize = 11.sp,
+                color = InkMuted
+            )
         }
     }
 }
+
+@Composable
+private fun FeeLine(label: String, value: String, bold: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = InkMuted, fontSize = 13.sp)
+        Text(
+            value,
+            color = Ink,
+            fontSize = 13.sp,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal
+        )
+    }
+}
+
+/** "0.9%" not "0.90%", and "1.8%" not "1.80%". */
+private fun trimPercent(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else String.format("%.1f", value)
 
 @Composable
 private fun MissingListing(onBack: () -> Unit) {

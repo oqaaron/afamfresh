@@ -40,6 +40,11 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
 @Composable
 fun VendorBusinessDetailsScreen(
     vendorViewModel: VendorViewModel,
+    // The pin returned by the picker, if the vendor just set one. Null means
+    // untouched, and the saved value is kept.
+    pickedLat: Double? = null,
+    pickedLng: Double? = null,
+    onPickLocation: (currentLat: Double?, currentLng: Double?) -> Unit = { _, _ -> },
     onDone: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -53,6 +58,10 @@ fun VendorBusinessDetailsScreen(
     var phone by remember(profile?.id) { mutableStateOf(profile?.phone ?: "") }
     var location by remember(profile?.id) { mutableStateOf(profile?.location ?: "") }
     var marketStall by remember(profile?.id) { mutableStateOf(profile?.marketStall ?: "") }
+
+    // A pin just chosen wins over the stored one; otherwise show what is saved.
+    val lat = pickedLat ?: profile?.lat
+    val lng = pickedLng ?: profile?.lng
     var businessType by remember(profile?.id) {
         mutableStateOf(profile?.businessType ?: "market_vendor")
     }
@@ -201,6 +210,31 @@ fun VendorBusinessDetailsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // The pickup pin.
+            //
+            // Typed text cannot be measured from, and a surplus delivery is
+            // charged partly by the distance from here to the customer. Without
+            // a pin, quotes on this vendor's listings are computed from the
+            // depot and flagged as estimated — sellable, but approximate.
+            OutlinedButton(
+                onClick = { onPickLocation(lat, lng) },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (lat != null) "Change pickup point" else "Set pickup point on map")
+            }
+            Text(
+                if (lat != null) {
+                    "Pinned at ${String.format("%.5f", lat)}, ${String.format("%.5f", lng)}. " +
+                        "Riders are sent here to collect."
+                } else {
+                    "Not set. Delivery on your listings will be priced from our depot " +
+                        "until you pin where riders should collect."
+                },
+                fontSize = 11.sp,
+                color = InkMuted
+            )
+
             (saveState as? VendorDetailsSaveState.Error)?.let { state ->
                 Text(state.message, color = Tomato, fontSize = 13.sp)
             }
@@ -212,7 +246,12 @@ fun VendorBusinessDetailsScreen(
                         phone = phone,
                         businessType = businessType,
                         location = location,
-                        marketStall = marketStall
+                        marketStall = marketStall,
+                        // Only sent when the vendor picked one this session.
+                        // The endpoint COALESCEs, so null leaves the stored pin
+                        // alone rather than clearing it.
+                        lat = pickedLat,
+                        lng = pickedLng
                     )
                 },
                 enabled = canSubmit,

@@ -9,6 +9,7 @@ import com.techaus.afamfresh.ui.screens.vendor.AddSurplusScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorBusinessDetailsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorDashboardScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorEarningsScreen
+import com.techaus.afamfresh.ui.screens.vendor.VendorLocationPickerScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorOrdersScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorProductsScreen
 
@@ -40,9 +41,46 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         )
     }
 
+    // The pin travels back through the nav back-stack rather than a shared
+    // ViewModel: it is one pair of numbers used by exactly one screen, and a
+    // ViewModel for it would outlive the form it belongs to.
+    composable("vendor_location_picker?lat={lat}&lng={lng}") { backStackEntry ->
+        VendorLocationPickerScreen(
+            initialLat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull(),
+            initialLng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull(),
+            onBack = { nav.popBackStack() },
+            onPicked = { lat, lng ->
+                nav.navigate("vendor_business_details?lat=$lat&lng=$lng") {
+                    popUpTo("vendor_business_details") { inclusive = true }
+                }
+            }
+        )
+    }
+
+    composable("vendor_business_details?lat={lat}&lng={lng}") { backStackEntry ->
+        val lat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull()
+        val lng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull()
+        VendorBusinessDetailsScreen(
+            vendorViewModel = vm,
+            pickedLat = lat,
+            pickedLng = lng,
+            onPickLocation = { curLat, curLng ->
+                nav.navigate("vendor_location_picker?lat=${curLat ?: ""}&lng=${curLng ?: ""}")
+            },
+            onDone = { nav.navigate("vendor_dashboard") },
+            onBack = { nav.popBackStack() }
+        )
+    }
+
+    // The no-argument entry point, used everywhere the form is opened fresh.
+    // The ?lat=&lng= variant above is only reached on the way back from the
+    // picker.
     composable("vendor_business_details") {
         VendorBusinessDetailsScreen(
             vendorViewModel = vm,
+            onPickLocation = { curLat, curLng ->
+                nav.navigate("vendor_location_picker?lat=${curLat ?: ""}&lng=${curLng ?: ""}")
+            },
             onDone = { nav.popBackStack() },
             onBack = { nav.popBackStack() }
         )

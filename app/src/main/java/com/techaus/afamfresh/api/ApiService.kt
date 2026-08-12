@@ -239,6 +239,22 @@ interface ApiService {
     ): Call<CreateSurplusOrderResponse>
 
     /**
+     * Prices a surplus order without placing it.
+     *
+     * Runs the identical calculation order creation will, so the total shown at
+     * checkout and the amount charged cannot drift apart. The delivery fee
+     * depends on weight AND distance, neither of which the app can work out, so
+     * this is the only honest way to show a total before committing.
+     *
+     * Answers OUT_OF_SERVICE_AREA when the pin falls outside Greater Kampala.
+     */
+    @POST("surplus-quote.php")
+    @Headers("Content-Type: application/json")
+    fun getSurplusQuote(
+        @Body request: SurplusQuoteRequest
+    ): Call<SurplusQuoteResponse>
+
+    /**
      * A customer's own surplus orders.
      *
      * user_id must be sent, but the server ignores what it says and uses the

@@ -125,7 +125,12 @@ class VendorViewModel(
         phone: String,
         businessType: String,
         location: String?,
-        marketStall: String?
+        marketStall: String?,
+        // Null means "unchanged". The endpoint COALESCEs, so a vendor who edits
+        // their phone number without reopening the map keeps their existing pin
+        // instead of clearing it.
+        lat: Double? = null,
+        lng: Double? = null
     ) {
         _detailsSaveState.value = VendorDetailsSaveState.Saving
         vendorRepository.updateVendorProfile(
@@ -134,7 +139,9 @@ class VendorViewModel(
                 phone = phone.trim(),
                 businessType = businessType,
                 location = location?.trim()?.ifEmpty { null },
-                marketStall = marketStall?.trim()?.ifEmpty { null }
+                marketStall = marketStall?.trim()?.ifEmpty { null },
+                lat = lat,
+                lng = lng
             )
         ) { isVerified, message, error ->
             if (error != null) {

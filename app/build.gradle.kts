@@ -335,6 +335,13 @@ dependencies {
     "customerImplementation"("com.google.maps.android:maps-compose:4.3.0")
     "customerImplementation"("com.google.android.gms:play-services-maps:18.2.0")
 
+    // The vendor app draws one map: the pin marking where a rider collects a
+    // surplus load. Scoped rather than promoted to `implementation` so the
+    // rider APK does not carry a Maps SDK it never opens — the rider is given
+    // addresses and hands off to whatever navigation app is installed.
+    "vendorImplementation"("com.google.maps.android:maps-compose:4.3.0")
+    "vendorImplementation"("com.google.android.gms:play-services-maps:18.2.0")
+
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")

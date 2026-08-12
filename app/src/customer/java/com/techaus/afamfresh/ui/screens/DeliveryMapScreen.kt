@@ -23,6 +23,8 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.android.gms.maps.model.LatLngBounds
+import com.techaus.afamfresh.utils.GkmaBounds
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.config.DeliveryConfig
 import com.techaus.afamfresh.repository.DeliveryRepository
@@ -82,6 +84,10 @@ fun DeliveryMapScreen(
     // Null until a successful quote. Confirm stays disabled while it is null,
     // so a failed quote can never be submitted as a zero fee.
     var quotedFee by remember { mutableStateOf<Double?>(null) }
+
+    // Set when a tap lands outside the service area, so the refusal is
+    // explained on the map rather than silently ignored.
+    var outOfArea by remember { mutableStateOf(false) }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(pickupLatLng, 12f)
@@ -159,8 +165,24 @@ fun DeliveryMapScreen(
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
-                    properties = MapProperties(isMyLocationEnabled = false),
-                    onMapClick = { latLng -> selectPoint(latLng) }
+                    // Panned and pinned only inside Greater Kampala. The same
+                    // box is enforced server-side in includes/service_area.php,
+                    // because coordinates travel in a request body and this
+                    // restriction is a convenience rather than a control.
+                    properties = MapProperties(
+                        isMyLocationEnabled = false,
+                        latLngBoundsForCameraTarget = GKMA_CAMERA_BOUNDS
+                    ),
+                    onMapClick = { latLng ->
+                        if (GkmaBounds.contains(latLng.latitude, latLng.longitude)) {
+                            outOfArea = false
+                            selectPoint(latLng)
+                        } else {
+                            // The camera bounds keep the map over the area, but
+                            // a tap near the edge can still land outside it.
+                            outOfArea = true
+                        }
+                    }
                 ) {
                     Marker(
                         state = MarkerState(position = pickupLatLng),
@@ -172,7 +194,20 @@ fun DeliveryMapScreen(
                     }
                 }
 
-                if (dropoff == null) {
+                if (outOfArea) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFFB3261E).copy(alpha = 0.92f)
+                    ) {
+                        Text(
+                            GkmaBounds.OUT_OF_AREA_MESSAGE,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                } else if (dropoff == null) {
                     Surface(
                         modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
                         shape = RoundedCornerShape(20.dp),
@@ -306,3 +341,14 @@ private suspend fun reverseGeocode(point: LatLng): String = withContext(Dispatch
 
     "%.5f, %.5f".format(point.latitude, point.longitude)
 }
+
+/**
+ * The camera cannot leave Greater Kampala.
+ *
+ * Built from [GkmaBounds] so the map and the server agree; if they drifted, a
+ * customer could pin a point the map allowed and then be refused at checkout.
+ */
+private val GKMA_CAMERA_BOUNDS = LatLngBounds(
+    LatLng(GkmaBounds.SOUTH, GkmaBounds.WEST),
+    LatLng(GkmaBounds.NORTH, GkmaBounds.EAST)
+)

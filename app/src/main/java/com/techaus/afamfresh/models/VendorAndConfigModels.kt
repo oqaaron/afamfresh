@@ -22,6 +22,15 @@ data class VendorProfile(
     @SerializedName("phone") val phone: String? = null,
     @SerializedName("email") val email: String? = null,
     @SerializedName("location") val location: String? = null,
+
+    /**
+     * Where riders collect surplus from. Null until the vendor pins it, in
+     * which case the delivery fee measures from the depot instead and every
+     * quote on their listings is flagged as estimated.
+     */
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lng") val lng: Double? = null,
+
     @SerializedName("market_stall") val marketStall: String? = null,
     @SerializedName("logo") val logo: String? = null,
     @SerializedName("is_verified") val isVerified: Boolean = false,
@@ -67,7 +76,15 @@ data class UpdateVendorProfileRequest(
     /** One of the `vendors.business_type` ENUM values; the server whitelists it. */
     @SerializedName("business_type") val businessType: String,
     @SerializedName("location") val location: String? = null,
-    @SerializedName("market_stall") val marketStall: String? = null
+    @SerializedName("market_stall") val marketStall: String? = null,
+
+    /**
+     * The pickup pin. Omitted rather than sent as null when unchanged — the
+     * endpoint COALESCEs, so absent means "leave what is there" and an older
+     * build that never sends these cannot wipe an existing pin.
+     */
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lng") val lng: Double? = null
 )
 
 /**

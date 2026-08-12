@@ -241,3 +241,86 @@ data class UpdateSurplusOrderStatusRequest(
         }
     }
 }
+
+/**
+ * Body for POST `surplus-quote.php` — what will this cost, before ordering?
+ *
+ * Coordinates are optional. Without them the server cannot compute a distance
+ * and that component is simply absent from the fee, rather than guessed.
+ */
+data class SurplusQuoteRequest(
+    @SerializedName("listing_id") val listingId: Int,
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("delivery_lat") val deliveryLat: Double? = null,
+    @SerializedName("delivery_lng") val deliveryLng: Double? = null
+)
+
+/**
+ * The itemised delivery fee.
+ *
+ * Mirrors the shape `calculateDeliveryFee()` returns for shop orders, so both
+ * channels can be rendered by the same code. Every field is the server's
+ * figure; nothing here is computed in the app.
+ */
+data class SurplusFeeBreakdown(
+    @SerializedName("base_fee") val baseFee: Double = 0.0,
+    @SerializedName("weight_fee") val weightFee: Double = 0.0,
+    @SerializedName("distance_fee") val distanceFee: Double = 0.0,
+    @SerializedName("service_fee") val serviceFee: Double = 0.0,
+    @SerializedName("insurance_fee") val insuranceFee: Double = 0.0,
+    @SerializedName("processing_fee") val processingFee: Double = 0.0,
+    @SerializedName("total_fee") val totalFee: Double = 0.0,
+
+    /** Carriage waived above the free threshold; the flat fees still apply. */
+    @SerializedName("is_free") val isFree: Boolean = false,
+    @SerializedName("is_capped") val isCapped: Boolean = false,
+
+    @SerializedName("weight_kg") val weightKg: Double = 0.0,
+
+    /** Null when no location was pinned, so no distance could be measured. */
+    @SerializedName("distance") val distanceKm: Double? = null,
+
+    /**
+     * True when the vendor has not pinned their premises and the distance was
+     * measured from the depot instead. Shown, never hidden — it is a real
+     * charge computed from an approximation.
+     */
+    @SerializedName("distance_estimated") val distanceEstimated: Boolean = false,
+
+    /**
+     * "google" | "osrm" | "haversine" — how the distance was measured.
+     *
+     * Anything but "google" means a fallback answered, and haversine in
+     * particular is a straight line that under-states a real journey. Shown
+     * rather than hidden: the customer is being charged per kilometre.
+     */
+    @SerializedName("distance_source") val distanceSource: String? = null,
+
+    /** Driving time from the router. Null or 0 means it did not supply one. */
+    @SerializedName("duration_minutes") val durationMinutes: Int? = null,
+
+    @SerializedName("insurance_percent") val insurancePercent: Double = 0.0,
+    @SerializedName("processing_percent") val processingPercent: Double = 0.0,
+
+    /** Plain-language explanation of how this fee was arrived at. */
+    @SerializedName("reason") val reason: String? = null
+)
+
+data class SurplusQuoteResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("goods_total") val goodsTotal: Double = 0.0,
+    @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
+
+    /** What will actually be charged. Goods plus delivery, server-computed. */
+    @SerializedName("grand_total") val grandTotal: Double = 0.0,
+
+    @SerializedName("total_weight_kg") val totalWeightKg: Double = 0.0,
+    @SerializedName("breakdown") val breakdown: SurplusFeeBreakdown? = null,
+
+    /** Warns before committing, rather than letting order creation refuse it. */
+    @SerializedName("exceeds_stock") val exceedsStock: Boolean = false,
+
+    @SerializedName("error") val error: String? = null,
+    /** OUT_OF_SERVICE_AREA when the pin falls outside Greater Kampala. */
+    @SerializedName("error_code") val errorCode: String? = null
+)
