@@ -130,13 +130,25 @@ try {
         // it reads the quantity that actually remains.
         $dbh->beginTransaction();
 
+        // is_weight_based comes from sl.*, not from items.
+        //
+        // This selected `i.is_weight_based` and there is no such column on
+        // `items` — it lives on surplus_listings, set when the vendor creates
+        // the listing. Every order creation therefore died with SQLSTATE 42S22
+        // before touching a row. It went unnoticed because nothing in any app
+        // could reach this endpoint until surplus checkout was built.
+        //
+        // 'approved', not 'active'. The status enum is
+        // ('pending','approved','rejected','cancelled') and an admin approval
+        // writes 'approved', so this condition matched nothing that had ever
+        // existed and every order would have been refused as "not active".
         $listingStmt = $dbh->prepare("
-            SELECT sl.*, i.is_weight_based, i.category, i.name AS product_name,
+            SELECT sl.*, i.category, i.name AS product_name,
                    v.user_id AS vendor_user_id, v.business_name
             FROM surplus_listings sl
             JOIN items i ON sl.product_id = i.id
             JOIN vendors v ON v.id = sl.vendor_id
-            WHERE sl.id = ? AND sl.status = 'active'
+            WHERE sl.id = ? AND sl.status = 'approved'
             FOR UPDATE
         ");
         $listingStmt->execute([$listing_id]);
@@ -144,7 +156,7 @@ try {
 
         if (!$listing) {
             $dbh->rollBack();
-            echo json_encode(['error' => 'Listing not found or not active']);
+            echo json_encode(['error' => 'That deal is no longer available.']);
             exit;
         }
 
@@ -269,15 +281,17 @@ try {
         ");
         $updateStmt->execute([$quantity, $listing_id]);
 
-        // Check if listing is now sold out
-        $checkStmt = $dbh->prepare("SELECT remaining_quantity FROM surplus_listings WHERE id = ?");
-        $checkStmt->execute([$listing_id]);
-        $remaining = $checkStmt->fetch(PDO::FETCH_ASSOC)['remaining_quantity'];
-
-        if ($remaining <= 0) {
-            $soldStmt = $dbh->prepare("UPDATE surplus_listings SET status = 'sold' WHERE id = ?");
-            $soldStmt->execute([$listing_id]);
-        }
+        // Sold out needs no status change.
+        //
+        // This used to write status = 'sold', which is not one of the enum's
+        // values ('pending','approved','rejected','cancelled'). MySQL coerces
+        // an unknown ENUM value to the empty string, so a sold-out listing
+        // ended up with NO status at all — invisible to every query that
+        // filters on one, and unrecoverable by an admin looking at the page.
+        //
+        // Nothing is needed instead: api/surplus-listings.php already hides
+        // sold-out listings with `remaining_quantity > 0`, so the quantity is
+        // the single source of truth and the status stays meaningful.
 
         // Fetch created order
         $fetchStmt = $dbh->prepare("SELECT * FROM surplus_orders WHERE id = ?");
