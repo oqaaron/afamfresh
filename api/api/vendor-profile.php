@@ -52,17 +52,53 @@ if (($_GET['action'] ?? '') === 'update') {
         $businessType = 'market_vendor';
     }
 
+    // Where the vendor's premises are, for pricing a surplus delivery.
+    //
+    // A surplus load is collected here and driven to the customer, so this is
+    // one end of the journey being charged for. Optional: a vendor who has not
+    // pinned yet keeps trading, and surplusDeliveryDistance() falls back to the
+    // depot and flags the quote as estimated.
+    //
+    // Range-checked rather than trusted. A swapped pair or a stray zero puts
+    // the pickup point in the sea, and the fee that follows is a real charge —
+    // so an out-of-range value is dropped instead of being stored.
+    $coord = function (string $key, float $limit) use ($input): ?float {
+        $raw = $input[$key] ?? $_POST[$key] ?? null;
+        if ($raw === null || $raw === '' || !is_numeric($raw)) return null;
+        $value = (float)$raw;
+        if ($value < -$limit || $value > $limit) return null;
+        // Exactly 0,0 is Null Island — far more often an uninitialised variable
+        // than a real pin, and Uganda is nowhere near it.
+        return $value;
+    };
+    $lat = $coord('lat', 90);
+    $lng = $coord('lng', 180);
+
+    // The pickup point has to be somewhere we deliver from. A vendor pinned
+    // outside Greater Kampala would price every one of their listings off a
+    // journey no rider makes.
+    require_once __DIR__ . '/../includes/service_area.php';
+    if ($lat !== null && $lng !== null && !isInServiceArea($lat, $lng)) {
+        echo json_encode(['success' => false, 'error' => serviceAreaMessage()]);
+        exit;
+    }
+
     try {
+        // COALESCE, so a client that does not send coordinates — an older build,
+        // or the form saved without touching the map — leaves an existing pin
+        // alone rather than wiping it.
         $upd = $dbh->prepare(
             "UPDATE vendors
                 SET business_name = ?, business_type = ?, phone = ?,
-                    location = ?, market_stall = ?
+                    location = ?, market_stall = ?,
+                    lat = COALESCE(?, lat), lng = COALESCE(?, lng)
               WHERE user_id = ?"
         );
         $upd->execute([
             $businessName, $businessType, $phone,
             $location !== '' ? $location : null,
             $marketStall !== '' ? $marketStall : null,
+            $lat, $lng,
             $me,
         ]);
 
