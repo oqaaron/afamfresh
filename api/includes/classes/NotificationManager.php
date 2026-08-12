@@ -45,6 +45,11 @@ class NotificationManager {
         $wants = fn(string $c) => in_array($c, $event->channels, true);
         $emailEnabled = $wants('email') && ($prefs['email'] ?? true);
         $pushEnabled  = $wants('push')  && ($prefs['push']  ?? true);
+        // SMS defaults to ON where it is asked for, like the other two. It is
+        // asked for rarely and deliberately -- it costs money per message and
+        // arrives whether or not the app is installed -- so the caller opting
+        // in is already the meaningful decision.
+        $smsEnabled   = $wants('sms')   && ($prefs['sms']   ?? true);
 
         // 2. Store in DB (always)
         $notificationId = $this->dbNotifier->store($event);
@@ -72,6 +77,18 @@ class NotificationManager {
             $this->dispatchJob($notificationId, 'push', $pushPayload);
         }
 
+        if ($smsEnabled && !empty($user['mobile'])) {
+            $smsPayload = $payload;
+            $smsPayload['to'] = $user['mobile'];
+            // Title and body joined into one line. An SMS has no subject, and a
+            // 160-character budget: the title alone is often too terse to act on
+            // ("Order placed") and the body alone lacks the context the title
+            // carries. Trimmed to fit two segments rather than being sent long
+            // and silently split into three billable parts.
+            $smsPayload['text'] = $this->buildSmsText($event);
+            $this->dispatchJob($notificationId, 'sms', $smsPayload);
+        }
+
         return $notificationId;
     }
 
@@ -94,10 +111,36 @@ class NotificationManager {
      * Fetch user data from the database.
      */
     private function getUser(int $userId): ?array {
-        $stmt = $this->dbh->prepare("SELECT email, fcm_token, notification_preferences FROM users WHERE id = ?");
+        $stmt = $this->dbh->prepare(
+            "SELECT email, mobile, fcm_token, notification_preferences FROM users WHERE id = ?"
+        );
         $stmt->execute([$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         return $user ?: null;
+    }
+
+    /**
+     * One line of SMS text from an event's title and body.
+     *
+     * Capped at 306 characters — two GSM-7 segments. Brevo bills per segment,
+     * so an untrimmed message quietly costs double or triple. Cut on a word
+     * boundary where one is near the limit, so it does not end mid-word.
+     */
+    private function buildSmsText(NotificationEvent $event): string {
+        $text = trim($event->title . ': ' . $event->body);
+        $text = preg_replace('/\s+/u', ' ', $text);
+
+        $limit = 306;
+        if (mb_strlen($text) <= $limit) {
+            return $text;
+        }
+
+        $cut = mb_substr($text, 0, $limit - 1);
+        $lastSpace = mb_strrpos($cut, ' ');
+        if ($lastSpace !== false && $lastSpace > $limit - 40) {
+            $cut = mb_substr($cut, 0, $lastSpace);
+        }
+        return rtrim($cut, " ,.;:") . '…';
     }
 
     /**

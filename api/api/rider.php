@@ -29,6 +29,9 @@ session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/user_payload.php';
 require_once __DIR__ . '/../includes/rider_earnings.php';
+// Surplus orders are dispatched to riders too. They live in a different table
+// with different column names, normalised to one shape here.
+require_once __DIR__ . '/../includes/rider_dispatch.php';
 // Proof photos are read on the detail action, not just written on upload,
 // so this is needed for the whole file rather than inside upload_proof.
 require_once __DIR__ . '/../includes/storage.php';
@@ -115,16 +118,29 @@ $STATUS_MAP = [
     'delivered' => ['current' => 'delivered', 'label' => 'Delivered'],
 ];
 
-/** The assignment row for one order, scoped to this rider. */
-function assignmentFor($dbh, $riderId, $orderId) {
+/**
+ * The assignment row for one order, scoped to this rider.
+ *
+ * `source` is part of the key, not an extra filter: shop order 41 and surplus
+ * order 41 both exist, so an id alone can match the wrong job and hand a rider
+ * a different customer's address.
+ */
+function assignmentFor($dbh, $riderId, $orderId, $source = 'order') {
     $stmt = $dbh->prepare(
-        "SELECT * FROM rider_assignments WHERE rider_id = ? AND order_id = ? LIMIT 1"
+        "SELECT * FROM rider_assignments
+          WHERE rider_id = ? AND order_id = ? AND source = ? LIMIT 1"
     );
-    $stmt->execute([$riderId, $orderId]);
+    $stmt->execute([$riderId, $orderId, $source]);
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
-/** Appends one entry to orders.status_history, which holds a JSON array. */
+/**
+ * Appends one entry to orders.status_history, which holds a JSON array.
+ *
+ * Shop orders only — surplus_orders has no status_history column. The surplus
+ * side keeps its audit trail through the customer notifications that
+ * api/surplus-orders.php sends on each transition.
+ */
 function appendStatusHistory($dbh, $orderId, $status, $note) {
     $stmt = $dbh->prepare("SELECT status_history FROM orders WHERE orderid = ?");
     $stmt->execute([$orderId]);
@@ -181,47 +197,64 @@ if ($action === 'me') {
 if ($action === 'deliveries') {
     $rider = requireRider($dbh, $user_id);
 
+    // The assignments are read first and each order resolved afterwards,
+    // rather than joined.
+    //
+    // A join cannot work here any more: `orders` and `surplus_orders` share no
+    // column names, and a UNION would have to invent NULL columns for whichever
+    // table lacks each one — at which point the query is doing the normalising
+    // that loadDeliverable() does in one place, and doing it invisibly.
+    //
+    // The cost is one query per assignment, bounded at 100. Worth it for a
+    // rider's own list; it would not be for an admin-wide view.
     $stmt = $dbh->prepare(
-        "SELECT ra.id AS assignment_id, ra.status AS assignment_status,
-                ra.assigned_at, ra.delivered_at AS assignment_delivered_at,
-                o.orderid, o.fname, o.lname, o.mobile, o.area, o.address,
-                o.delivery_address, o.status, o.current_status, o.payment_status,
-                o.total_amount, o.delivery_fee, o.ordertime,
-                o.dest_lat, o.dest_lng, o.delivery_photo,
-                o.scheduled_delivery_date, o.scheduled_delivery_slot
-           FROM rider_assignments ra
-           JOIN orders o ON o.orderid = ra.order_id
-          WHERE ra.rider_id = ?
-          ORDER BY ra.assigned_at DESC
+        "SELECT id AS assignment_id, order_id, source, status AS assignment_status,
+                assigned_at, delivered_at AS assignment_delivered_at
+           FROM rider_assignments
+          WHERE rider_id = ?
+          ORDER BY assigned_at DESC
           LIMIT 100"
     );
     $stmt->execute([$rider['id']]);
 
     $active = [];
     $history = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $row = loadDeliverable($dbh, $a['source'], (int)$a['order_id']);
+        if (!$row) {
+            // The order was deleted out from under the assignment. Skipping it
+            // keeps the rider's list usable instead of failing the whole call.
+            error_log("rider deliveries: assignment {$a['assignment_id']} points at a missing {$a['source']} order {$a['order_id']}");
+            continue;
+        }
+
         $d = [
-            'assignment_id'   => (int)$row['assignment_id'],
-            'order_id'        => (int)$row['orderid'],
-            'status'          => $row['assignment_status'],
+            'assignment_id'   => (int)$a['assignment_id'],
+            'order_id'        => (int)$row['order_id'],
+            'source'          => $row['source'],
+            'status'          => $a['assignment_status'],
             'order_status'    => $row['status'],
             'payment_status'  => $row['payment_status'],
             'customer_name'   => trim($row['fname'] . ' ' . $row['lname']),
             'customer_phone'  => $row['mobile'],
             'area'            => $row['area'],
             'address'         => $row['delivery_address'] ?: $row['address'],
+            // Where the rider COLLECTS. Null for shop orders, which all leave
+            // from the warehouse; a surplus job starts at the vendor instead,
+            // and a rider sent to the warehouse for one would find nothing.
+            'pickup_address'  => $row['pickup_address'],
             'dest_lat'        => $row['dest_lat'] !== null ? (float)$row['dest_lat'] : null,
             'dest_lng'        => $row['dest_lng'] !== null ? (float)$row['dest_lng'] : null,
             'total_amount'    => (float)$row['total_amount'],
             'delivery_fee'    => (float)$row['delivery_fee'],
-            'assigned_at'     => $row['assigned_at'],
-            'delivered_at'    => $row['assignment_delivered_at'],
+            'assigned_at'     => $a['assigned_at'],
+            'delivered_at'    => $a['assignment_delivered_at'],
             'ordertime'       => $row['ordertime'],
             'scheduled_date'  => $row['scheduled_delivery_date'],
             'scheduled_slot'  => $row['scheduled_delivery_slot'],
             'has_proof_photo' => !empty($row['delivery_photo']),
         ];
-        if ($row['assignment_status'] === 'delivered') {
+        if ($a['assignment_status'] === 'delivered') {
             $history[] = $d;
         } else {
             $active[] = $d;
@@ -238,28 +271,21 @@ if ($action === 'deliveries') {
 if ($action === 'delivery_detail') {
     $rider = requireRider($dbh, $user_id);
     $orderId = (int)param('order_id', 0);
+    // Older rider builds send no source. Defaulting to 'order' keeps them
+    // working against shop deliveries, which is all they can be assigned in a
+    // version that does not know surplus exists.
+    $source  = (string)param('source', 'order');
     if (!$orderId) fail('No order was specified.');
+    if (!isDispatchSource($source)) fail('That is not a kind of delivery.');
 
     // Scoped by rider_id: a rider cannot read an order they are not on.
-    $assignment = assignmentFor($dbh, $rider['id'], $orderId);
+    $assignment = assignmentFor($dbh, $rider['id'], $orderId, $source);
     if (!$assignment) fail('That delivery is not assigned to you.');
 
-    $stmt = $dbh->prepare("SELECT * FROM orders WHERE orderid = ?");
-    $stmt->execute([$orderId]);
-    $o = $stmt->fetch(PDO::FETCH_ASSOC);
+    $o = loadDeliverable($dbh, $source, $orderId);
     if (!$o) fail('Order not found.');
 
-    $itemsStmt = $dbh->prepare(
-        "SELECT product_name, quantity, price FROM order_items WHERE order_id = ?"
-    );
-    $itemsStmt->execute([$orderId]);
-    $items = array_map(function ($i) {
-        return [
-            'name'     => $i['product_name'],
-            'quantity' => (int)$i['quantity'],
-            'price'    => (float)$i['price'],
-        ];
-    }, $itemsStmt->fetchAll(PDO::FETCH_ASSOC));
+    $items = deliverableItems($dbh, $source, $orderId);
 
     // storageExists, not is_file: on Cloud Run the photo lives in a bucket
     // and is_file() would answer false for every one of them, silently
@@ -275,7 +301,8 @@ if ($action === 'delivery_detail') {
         'success' => true,
         'delivery' => [
             'assignment_id'  => (int)$assignment['id'],
-            'order_id'       => (int)$o['orderid'],
+            'order_id'       => (int)$o['order_id'],
+            'source'         => $o['source'],
             'status'         => $assignment['status'],
             'order_status'   => $o['status'],
             'payment_status' => $o['payment_status'],
@@ -283,6 +310,8 @@ if ($action === 'delivery_detail') {
             'customer_phone' => $o['mobile'],
             'area'           => $o['area'],
             'address'        => $o['delivery_address'] ?: $o['address'],
+            'pickup_address' => $o['pickup_address'],
+            'pickup_code'    => $o['pickup_code'],
             'dest_lat'       => $o['dest_lat'] !== null ? (float)$o['dest_lat'] : null,
             'dest_lng'       => $o['dest_lng'] !== null ? (float)$o['dest_lng'] : null,
             'total_amount'   => (float)$o['total_amount'],
@@ -304,11 +333,13 @@ if ($action === 'update_status') {
     $rider   = requireRider($dbh, $user_id);
     $orderId = (int)param('order_id', 0);
     $next    = trim((string)param('status', ''));
+    $source  = (string)param('source', 'order');
 
     if (!$orderId) fail('No order was specified.');
     if (!isset($STATUS_MAP[$next])) fail('That is not a valid delivery status.');
+    if (!isDispatchSource($source)) fail('That is not a kind of delivery.');
 
-    $assignment = assignmentFor($dbh, $rider['id'], $orderId);
+    $assignment = assignmentFor($dbh, $rider['id'], $orderId, $source);
     if (!$assignment) fail('That delivery is not assigned to you.');
 
     $current = $assignment['status'];
@@ -339,26 +370,38 @@ if ($action === 'update_status') {
                 "UPDATE rider_assignments SET status = ?, delivered_at = NOW(), completed_at = NOW() WHERE id = ?"
             )->execute([$next, $assignment['id']]);
 
-            $dbh->prepare(
-                "UPDATE orders SET status = ?, current_status = ?, delivered_at = NOW() WHERE orderid = ?"
-            )->execute([$map['label'], $map['current'], $orderId]);
+            applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
 
             // Credited in the same transaction as the delivery itself, so a
             // rider is never marked as having delivered something without
             // also being paid for it — both commit together or neither does.
-            $credit = creditRiderEarnings($dbh, $rider['id'], $orderId);
+            $credit = creditRiderEarnings($dbh, $rider['id'], $orderId, $source);
             if (!$credit['ok']) {
                 throw new RuntimeException($credit['error']);
+            }
+
+            // A delivered surplus order also pays the VENDOR. Same transaction
+            // for the same reason: the delivery, the rider's pay and the
+            // vendor's pay are one event, and a partial commit would leave a
+            // vendor uncredited for goods that have demonstrably arrived.
+            if ($source === 'surplus') {
+                require_once __DIR__ . '/../includes/vendor_earnings.php';
+                $vendorCredit = creditVendorEarnings($dbh, $orderId);
+                if (!$vendorCredit['ok']) {
+                    throw new RuntimeException($vendorCredit['error']);
+                }
             }
         } else {
             $dbh->prepare("UPDATE rider_assignments SET status = ? WHERE id = ?")
                 ->execute([$next, $assignment['id']]);
 
-            $dbh->prepare("UPDATE orders SET status = ?, current_status = ? WHERE orderid = ?")
-                ->execute([$map['label'], $map['current'], $orderId]);
+            applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
         }
 
-        appendStatusHistory($dbh, $orderId, $map['label'], 'Updated by rider ' . $rider['name']);
+        // Shop orders only — surplus_orders has no status_history column.
+        if ($source === 'order') {
+            appendStatusHistory($dbh, $orderId, $map['label'], 'Updated by rider ' . $rider['name']);
+        }
 
         $dbh->commit();
     } catch (Exception $e) {
@@ -380,9 +423,10 @@ if ($action === 'update_status') {
     if ($next === 'picked_up') {
         try {
             require_once __DIR__ . '/../includes/brevo-sms.php';
-            $cust = $dbh->prepare("SELECT mobile, fname FROM orders WHERE orderid = ?");
-            $cust->execute([$orderId]);
-            $row = $cust->fetch(PDO::FETCH_ASSOC);
+            // Via loadDeliverable so a surplus customer is texted too. Reading
+            // `orders` directly here would have found nothing for a surplus
+            // job and silently sent no message.
+            $row = loadDeliverable($dbh, $source, $orderId);
             if ($row && !empty($row['mobile'])) {
                 sendSmsWithBrevo(
                     $row['mobile'],
@@ -391,6 +435,39 @@ if ($action === 'update_status') {
             }
         } catch (Throwable $e) {
             error_log("Order $orderId marked out for delivery but the SMS failed: " . $e->getMessage());
+        }
+    }
+
+    // A rider completing a surplus delivery writes surplus_orders.status
+    // straight to 'delivered', which means the vendor never marks it and
+    // api/surplus-orders.php's own notification never fires. Without this, the
+    // customer is told their order is on its way and then never told it
+    // arrived. Sent here so the same message reaches them either way.
+    if ($next === 'delivered' && $source === 'surplus') {
+        try {
+            require_once __DIR__ . '/../includes/notifications.php';
+            $who = $dbh->prepare(
+                "SELECT so.user_id, i.name AS product_name, v.business_name
+                   FROM surplus_orders so
+                   JOIN surplus_listings sl ON sl.id = so.listing_id
+                   JOIN items i ON i.id = sl.product_id
+                   JOIN vendors v ON v.id = sl.vendor_id
+                  WHERE so.id = ?"
+            );
+            $who->execute([$orderId]);
+            if ($row = $who->fetch(PDO::FETCH_ASSOC)) {
+                addNotification(
+                    (int)$row['user_id'],
+                    'Order delivered',
+                    'Your surplus order #' . $orderId . ' (' . $row['product_name']
+                        . ' from ' . $row['business_name'] . ') has been delivered.',
+                    'order',
+                    null,
+                    ['push', 'email']
+                );
+            }
+        } catch (Throwable $e) {
+            error_log("Surplus order $orderId delivered but the customer was not notified: " . $e->getMessage());
         }
     }
 
@@ -467,9 +544,11 @@ if ($action === 'location') {
 if ($action === 'upload_proof') {
     $rider   = requireRider($dbh, $user_id);
     $orderId = (int)param('order_id', 0);
+    $source  = (string)param('source', 'order');
     if (!$orderId) fail('No order was specified.');
+    if (!isDispatchSource($source)) fail('That is not a kind of delivery.');
 
-    $assignment = assignmentFor($dbh, $rider['id'], $orderId);
+    $assignment = assignmentFor($dbh, $rider['id'], $orderId, $source);
     if (!$assignment) fail('That delivery is not assigned to you.');
 
     if (!isset($_FILES['photo'])) fail('No photo was received.');
@@ -478,9 +557,13 @@ if ($action === 'upload_proof') {
 
     // Existing photo passed as $old so a re-take replaces rather than
     // accumulates; the helper only unlinks names it generated itself.
-    $prevStmt = $dbh->prepare("SELECT delivery_photo FROM orders WHERE orderid = ?");
-    $prevStmt->execute([$orderId]);
-    $prev = $prevStmt->fetchColumn();
+    //
+    // Read through loadDeliverable so this works for both kinds of order.
+    // surplus_orders gained delivery_photo alongside the columns `orders` has
+    // carried all along, which is what makes one path serve both.
+    $existing = loadDeliverable($dbh, $source, $orderId);
+    if (!$existing) fail('Order not found.');
+    $prev = $existing['delivery_photo'] ?? null;
 
     $result = saveUploadedImage(
         $_FILES['photo'],
@@ -491,10 +574,7 @@ if ($action === 'upload_proof') {
 
     if (!$result['ok']) fail($result['error']);
 
-    $dbh->prepare(
-        "UPDATE orders SET delivery_photo = ?, delivery_confirmed = 1, delivery_confirmed_at = NOW()
-         WHERE orderid = ?"
-    )->execute([$result['filename'], $orderId]);
+    saveDeliveryProof($dbh, $source, $orderId, $result['filename']);
 
     echo json_encode([
         'success' => true,
@@ -526,23 +606,57 @@ if ($action === 'earnings') {
     $totals->execute([$rider['id']]);
     $t = $totals->fetch(PDO::FETCH_ASSOC);
 
+    // LEFT JOIN, and joined on source as well as id.
+    //
+    // As an INNER JOIN on order_id alone this had two faults the moment surplus
+    // deliveries began being credited: a surplus earning would either vanish
+    // from the ledger entirely (no matching orders row) or, worse, match the
+    // same-numbered SHOP order and attribute the money to a customer who had
+    // nothing to do with it. A rider's pay record is not a place for either.
+    //
+    // The surplus customer's name is filled in afterwards, from users.
     $rows = $dbh->prepare(
-        "SELECT re.id, re.order_id, re.mileage_fee, re.commission_rate, re.commission_amount,
-                re.net_earnings, re.is_estimated, re.is_paid, re.created_at,
-                o.fname, o.lname
+        "SELECT re.id, re.order_id, re.source, re.mileage_fee, re.commission_rate,
+                re.commission_amount, re.net_earnings, re.is_estimated, re.is_paid,
+                re.created_at, o.fname, o.lname
          FROM rider_earnings re
-         JOIN orders o ON o.orderid = re.order_id
+         LEFT JOIN orders o ON o.orderid = re.order_id AND re.source = 'order'
          WHERE re.rider_id = ?
          ORDER BY re.created_at DESC
          LIMIT 100"
     );
     $rows->execute([$rider['id']]);
+    $earningRows = $rows->fetchAll(PDO::FETCH_ASSOC);
 
-    $history = array_map(function ($r) {
+    // One lookup for the surplus rows, rather than a query each.
+    $surplusIds = array_values(array_unique(array_map(
+        fn($r) => (int)$r['order_id'],
+        array_filter($earningRows, fn($r) => $r['source'] === 'surplus')
+    )));
+    $surplusNames = [];
+    if ($surplusIds) {
+        $in = implode(',', array_fill(0, count($surplusIds), '?'));
+        $namesStmt = $dbh->prepare(
+            "SELECT so.id, u.fname, u.lname
+               FROM surplus_orders so JOIN users u ON u.id = so.user_id
+              WHERE so.id IN ($in)"
+        );
+        $namesStmt->execute($surplusIds);
+        foreach ($namesStmt->fetchAll(PDO::FETCH_ASSOC) as $n) {
+            $surplusNames[(int)$n['id']] = trim($n['fname'] . ' ' . $n['lname']);
+        }
+    }
+
+    $history = array_map(function ($r) use ($surplusNames) {
+        $name = $r['source'] === 'surplus'
+            ? ($surplusNames[(int)$r['order_id']] ?? '')
+            : trim($r['fname'] . ' ' . $r['lname']);
+
         return [
             'id'                => (int)$r['id'],
             'order_id'          => (int)$r['order_id'],
-            'customer_name'     => trim($r['fname'] . ' ' . $r['lname']),
+            'source'            => $r['source'],
+            'customer_name'     => $name,
             'mileage_fee'       => (float)$r['mileage_fee'],
             'commission_rate'   => (float)$r['commission_rate'],
             'commission_amount' => (float)$r['commission_amount'],
@@ -551,7 +665,7 @@ if ($action === 'earnings') {
             'is_paid'           => (bool)$r['is_paid'],
             'created_at'        => $r['created_at'],
         ];
-    }, $rows->fetchAll(PDO::FETCH_ASSOC));
+    }, $earningRows);
 
     echo json_encode([
         'success' => true,

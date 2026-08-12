@@ -29,6 +29,7 @@
  */
 
 require_once __DIR__ . '/includes/pesapal.php';
+require_once __DIR__ . '/includes/surplus_payment.php';
 
 // Pesapal retries on any non-200, so this must answer 200 even on our own
 // errors — otherwise a bug here turns into an endless retry loop. Failures are
@@ -81,6 +82,35 @@ try {
 // Locate the order. The tracking id is the reliable key; the merchant reference
 // is `<orderid>-<timestamp>` and is used only as a fallback.
 try {
+    // Surplus orders live in their own table, so the tracking id has to be
+    // looked for in both. Checked first when the merchant reference says so:
+    // it is written as `SUR-<id>-<timestamp>` by api/payment.php precisely
+    // because the two id spaces overlap and a bare id would be ambiguous.
+    $looksSurplus = stripos($merchantRef, 'SUR-') === 0;
+
+    $surplus = $dbh->prepare("SELECT id, payment_status FROM surplus_orders WHERE pesapal_tracking_id = ?");
+    $surplus->execute([$trackingId]);
+    $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
+
+    if (!$surplusOrder && $looksSurplus) {
+        $idFromRef = (int)(explode('-', $merchantRef)[1] ?? 0);
+        if ($idFromRef > 0) {
+            $surplus = $dbh->prepare("SELECT id, payment_status FROM surplus_orders WHERE id = ?");
+            $surplus->execute([$idFromRef]);
+            $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
+        }
+    }
+
+    if ($surplusOrder) {
+        $surplusId = (int)$surplusOrder['id'];
+        if (strcasecmp((string)$surplusOrder['payment_status'], 'paid') === 0) {
+            ipnDone('already paid', ['surplus_order_id' => $surplusId]);
+        }
+        applySurplusPaymentStatus($dbh, $surplusId, $mapped, $trackingId);
+        error_log("Pesapal IPN: surplus order $surplusId set to $mapped.");
+        ipnDone('processed', ['surplus_order_id' => $surplusId, 'payment_status' => $mapped]);
+    }
+
     $stmt = $dbh->prepare("SELECT orderid, payment_status FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);

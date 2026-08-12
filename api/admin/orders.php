@@ -31,7 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // rider being renamed and distinguishes two riders who share a
                 // name. The table already existed with correct foreign keys but
                 // nothing had ever written to it.
-                $existing = $dbh->prepare("SELECT id FROM rider_assignments WHERE order_id = ? LIMIT 1");
+                //
+                // Scoped to source='order'. rider_assignments now also holds
+                // surplus deliveries, and the two id spaces overlap — without
+                // this, assigning a rider to shop order 41 would find the
+                // SURPLUS assignment for order 41 and reassign that instead,
+                // silently moving a different customer's delivery to a
+                // different rider.
+                $existing = $dbh->prepare(
+                    "SELECT id FROM rider_assignments WHERE order_id = ? AND source = 'order' LIMIT 1"
+                );
                 $existing->execute([$orderId]);
                 $assignmentId = $existing->fetchColumn();
 
@@ -46,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     )->execute([$riderId, $assignmentId]);
                 } else {
                     $dbh->prepare(
-                        "INSERT INTO rider_assignments (order_id, rider_id, status) VALUES (?, ?, 'assigned')"
+                        "INSERT INTO rider_assignments (order_id, source, rider_id, status)
+                         VALUES (?, 'order', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
                 }
 

@@ -2,6 +2,8 @@
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/api_auth.php';
+require_once __DIR__ . '/../includes/surplus_payment.php';
+require_once __DIR__ . '/../includes/notifications.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -110,46 +112,71 @@ try {
             exit;
         }
         
-        // Fetch listing details
+        // Hand back stock held by checkouts that were abandoned on the payment
+        // page. Done here because this is the moment the numbers have to be
+        // right — a customer being told "sold out" by an order nobody paid for
+        // is the failure this prevents. See includes/surplus_payment.php.
+        releaseStaleSurplusReservations($dbh);
+
+        // From here to the commit is one transaction.
+        //
+        // Reading remaining_quantity, deciding it is enough, and then
+        // decrementing it used to be three separate statements with no lock
+        // between them. Two customers ordering the last 40kg at the same moment
+        // both read 40, both passed the check, and the listing went to -40:
+        // oversold, with a vendor who cannot fulfil either order.
+        //
+        // FOR UPDATE makes the second request wait for the first to commit, so
+        // it reads the quantity that actually remains.
+        $dbh->beginTransaction();
+
         $listingStmt = $dbh->prepare("
-            SELECT sl.*, i.is_weight_based, i.category 
+            SELECT sl.*, i.is_weight_based, i.category, i.name AS product_name,
+                   v.user_id AS vendor_user_id, v.business_name
             FROM surplus_listings sl
             JOIN items i ON sl.product_id = i.id
+            JOIN vendors v ON v.id = sl.vendor_id
             WHERE sl.id = ? AND sl.status = 'active'
+            FOR UPDATE
         ");
         $listingStmt->execute([$listing_id]);
         $listing = $listingStmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if (!$listing) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Listing not found or not active']);
             exit;
         }
-        
+
         // Check if enough quantity available
         if ($listing['remaining_quantity'] < $quantity) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Not enough quantity available. Only ' . $listing['remaining_quantity'] . ' left']);
             exit;
         }
-        
+
         // Calculate total weight
         $weightPerUnit = $listing['weight_per_unit_kg'] ?? 1.00;
         $totalWeightKg = $quantity * $weightPerUnit;
         
         // Check weight limit (max 1000kg / 1 tonne)
         if ($totalWeightKg > 1000) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Maximum order weight is 1000kg (1 tonne). Your order weighs ' . number_format($totalWeightKg, 2) . 'kg']);
             exit;
         }
-        
+
         // Check minimum order value
         $total_price = $listing['discounted_price'] * $quantity;
         if ($total_price < 250000) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Minimum order value for surplus is UGX 250,000. Current total: UGX ' . number_format($total_price, 0)]);
             exit;
         }
-        
+
         // Check minimum quantity for weight-based products
         if (($listing['is_weight_based'] || $listing['is_weight_based'] === 1) && $quantity < 20) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Minimum order for bulk/weight-based surplus items is 20 kg']);
             exit;
         }
@@ -226,44 +253,86 @@ try {
             $order_notes ?: null
         ]);
         
-        if ($result) {
-            $order_id = $dbh->lastInsertId();
-            
-            // Update listing remaining quantity
-            $updateStmt = $dbh->prepare("
-                UPDATE surplus_listings 
-                SET remaining_quantity = remaining_quantity - ?
-                WHERE id = ?
-            ");
-            $updateStmt->execute([$quantity, $listing_id]);
-            
-            // Check if listing is now sold out
-            $checkStmt = $dbh->prepare("SELECT remaining_quantity FROM surplus_listings WHERE id = ?");
-            $checkStmt->execute([$listing_id]);
-            $remaining = $checkStmt->fetch(PDO::FETCH_ASSOC)['remaining_quantity'];
-            
-            if ($remaining == 0) {
-                $soldStmt = $dbh->prepare("UPDATE surplus_listings SET status = 'sold' WHERE id = ?");
-                $soldStmt->execute([$listing_id]);
-            }
-            
-            // Fetch created order
-            $fetchStmt = $dbh->prepare("SELECT * FROM surplus_orders WHERE id = ?");
-            $fetchStmt->execute([$order_id]);
-            $order = $fetchStmt->fetch(PDO::FETCH_ASSOC);
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Surplus order created successfully',
-                'order' => $order,
-                'delivery_fee' => $delivery_fee,
-                'total_weight_kg' => $totalWeightKg,
-                'grand_total' => $total_price + $delivery_fee
-            ]);
-        } else {
+        if (!$result) {
+            $dbh->rollBack();
             echo json_encode(['error' => 'Failed to create surplus order']);
+            exit;
         }
-        
+
+        $order_id = $dbh->lastInsertId();
+
+        // Update listing remaining quantity
+        $updateStmt = $dbh->prepare("
+            UPDATE surplus_listings
+            SET remaining_quantity = remaining_quantity - ?
+            WHERE id = ?
+        ");
+        $updateStmt->execute([$quantity, $listing_id]);
+
+        // Check if listing is now sold out
+        $checkStmt = $dbh->prepare("SELECT remaining_quantity FROM surplus_listings WHERE id = ?");
+        $checkStmt->execute([$listing_id]);
+        $remaining = $checkStmt->fetch(PDO::FETCH_ASSOC)['remaining_quantity'];
+
+        if ($remaining <= 0) {
+            $soldStmt = $dbh->prepare("UPDATE surplus_listings SET status = 'sold' WHERE id = ?");
+            $soldStmt->execute([$listing_id]);
+        }
+
+        // Fetch created order
+        $fetchStmt = $dbh->prepare("SELECT * FROM surplus_orders WHERE id = ?");
+        $fetchStmt->execute([$order_id]);
+        $order = $fetchStmt->fetch(PDO::FETCH_ASSOC);
+
+        $dbh->commit();
+
+        // Notifications go out AFTER the commit, deliberately. Queuing them
+        // inside the transaction would mean a rollback still left a job in
+        // notification_queue telling a vendor about an order that does not
+        // exist. A failure to notify is logged, never surfaced: the order is
+        // real and paid-for regardless of whether the message went out.
+        $grand_total = $total_price + $delivery_fee;
+        try {
+            addNotification(
+                (int)$listing['vendor_user_id'],
+                'New surplus order #' . $order_id,
+                'Someone ordered ' . rtrim(rtrim(number_format((float)$quantity, 2, '.', ''), '0'), '.')
+                    . ' of "' . $listing['product_name'] . '". Total UGX '
+                    . number_format($grand_total, 0) . '. It is not yours to pack until it is paid.',
+                'order',
+                null,
+                ['push']
+            );
+
+            // SMS as well as push and email. This is one of only two moments
+            // that get a text — the other is out-for-delivery in api/rider.php.
+            // A quarter-million-shilling order is worth confirming somewhere the
+            // customer will see it without opening anything, and it is the
+            // message they need if the payment then fails.
+            addNotification(
+                (int)$user_id,
+                'Order placed: ' . $listing['product_name'],
+                'Your surplus order #' . $order_id . ' from ' . $listing['business_name']
+                    . ' totals UGX ' . number_format($grand_total, 0)
+                    . ($delivery_fee > 0 ? ' including UGX ' . number_format($delivery_fee, 0) . ' delivery' : '')
+                    . '. We will confirm once payment is received.',
+                'order',
+                null,
+                ['push', 'email', 'sms']
+            );
+        } catch (Throwable $e) {
+            error_log("Surplus order $order_id created but notifications failed: " . $e->getMessage());
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Surplus order created successfully',
+            'order' => $order,
+            'delivery_fee' => $delivery_fee,
+            'total_weight_kg' => $totalWeightKg,
+            'grand_total' => $grand_total
+        ]);
+
     } elseif ($method === 'PUT') {
         // Update surplus order status (same as before)
         $input = json_decode(file_get_contents('php://input'), true);
@@ -311,6 +380,31 @@ try {
             exit;
         }
 
+        // A vendor cannot ship an order nobody has paid for.
+        //
+        // Creating an order takes the stock but not the money; until payment
+        // lands it is a reservation that the release sweep may cancel out from
+        // under everyone. Letting a vendor march that to 'delivered' would
+        // credit them for goods they were never paid for, and the credit is
+        // idempotent — it cannot be taken back by re-running anything.
+        //
+        // Admins are exempt: they need to be able to fix a payment that
+        // succeeded at Pesapal but never reconciled here.
+        $payment = $dbh->prepare("SELECT payment_status FROM surplus_orders WHERE id = ?");
+        $payment->execute([$order_id]);
+        $paymentStatus = (string)$payment->fetchColumn();
+        $isPaidOrCash = in_array($paymentStatus, ['paid', 'pending_cash'], true);
+
+        if (!$isAdminSession && !$isPaidOrCash
+            && !in_array($status, ['cancelled', 'pending'], true)) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'This order has not been paid for yet.'
+            ]);
+            exit;
+        }
+
         $updateFields = ["status = ?", "updated_at = NOW()"];
         $params = [$status, $order_id];
 
@@ -338,6 +432,64 @@ try {
             }
         }
 
+        // Tell the customer. Without this the only party who learns an order
+        // moved is the vendor who moved it, and the customer is left refreshing
+        // a screen to find out whether 250,000 shillings of produce is coming.
+        //
+        // Only the states a customer can act on get a message. 'processing' is
+        // deliberately silent: it means the vendor has started picking, which
+        // changes nothing the customer can do and would just be noise.
+        $notify = [
+            'confirmed' => ['Order confirmed', 'has accepted your order and is preparing it.'],
+            'ready'     => ['Order ready', 'has your order ready.'],
+            'delivered' => ['Order delivered', 'has marked your order delivered.'],
+            'cancelled' => ['Order cancelled', 'has cancelled your order.'],
+            'refunded'  => ['Order refunded', 'has refunded your order.'],
+        ];
+
+        if (isset($notify[$status])) {
+            try {
+                $who = $dbh->prepare(
+                    "SELECT so.user_id, so.pickup_code, i.name AS product_name, v.business_name
+                       FROM surplus_orders so
+                       JOIN surplus_listings sl ON sl.id = so.listing_id
+                       JOIN items i ON i.id = sl.product_id
+                       JOIN vendors v ON v.id = sl.vendor_id
+                      WHERE so.id = ?"
+                );
+                $who->execute([$order_id]);
+                $row = $who->fetch(PDO::FETCH_ASSOC);
+
+                if ($row) {
+                    [$title, $phrase] = $notify[$status];
+                    $body = $row['business_name'] . ' ' . $phrase
+                        . ' (order #' . $order_id . ', ' . $row['product_name'] . ')';
+
+                    // The collection code is only useful at the moment of
+                    // collection, so it rides along with "ready" rather than
+                    // being buried in the order placed weeks earlier.
+                    if ($status === 'ready' && !empty($row['pickup_code'])) {
+                        $body .= ' Your collection code is ' . $row['pickup_code'] . '.';
+                    }
+
+                    addNotification(
+                        (int)$row['user_id'],
+                        $title,
+                        $body,
+                        'order',
+                        null,
+                        // Email on the two that decide whether someone needs to
+                        // be somewhere; push alone for the rest.
+                        in_array($status, ['ready', 'cancelled'], true)
+                            ? ['push', 'email']
+                            : ['push']
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log("Surplus order $order_id moved to $status but customer not notified: " . $e->getMessage());
+            }
+        }
+
         echo json_encode(['success' => true, 'message' => 'Order status updated successfully']);
         
     } else {
@@ -345,6 +497,14 @@ try {
     }
     
 } catch (PDOException $e) {
+    // Order creation runs inside a transaction that holds a row lock on the
+    // listing. Without this rollback an exception would leave that lock held
+    // until the connection closed, blocking every other customer trying to buy
+    // the same listing.
+    if ($dbh->inTransaction()) {
+        $dbh->rollBack();
+    }
+    error_log('surplus-orders: ' . $e->getMessage());
     echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
 }
 ?>

@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../admin/includes/config.php';
 require_once __DIR__ . '/../includes/classes/PushNotificationService.php';
 require_once __DIR__ . '/../includes/brevo-email.php';
+require_once __DIR__ . '/../includes/brevo-sms.php';
 
 // Prevent multiple concurrent runs (lock file)
 $lockFile = __DIR__ . '/process_notifications.lock';
@@ -94,6 +95,19 @@ foreach ($jobs as $job) {
             }
         }
 
+        if ($job['channel'] === 'sms') {
+            // sendSmsWithBrevo normalises the number itself and refuses one it
+            // cannot make sense of, so a malformed mobile fails loudly here
+            // rather than being posted to Brevo and billed for.
+            $result = sendSmsWithBrevo($payload['to'], $payload['text']);
+            if (!empty($result['success'])) {
+                $dbh->prepare("UPDATE user_notifications SET sms_sent_at = NOW() WHERE id = ?")
+                   ->execute([$job['notification_id']]);
+            } else {
+                throw new Exception($result['error'] ?? 'SMS delivery failed');
+            }
+        }
+
         $success = true;
     } catch (Exception $e) {
         $error = $e->getMessage();
@@ -115,7 +129,13 @@ foreach ($jobs as $job) {
 
     // If failed, log error to the notification record
     if (!$success && $error) {
-        $errField = ($job['channel'] === 'email' || $job['channel'] === 'both') ? 'email_error' : 'push_error';
+        // Was a two-way choice, so an SMS failure would have been filed under
+        // push_error and looked like a broken device token.
+        $errField = match ($job['channel']) {
+            'email', 'both' => 'email_error',
+            'sms'           => 'sms_error',
+            default         => 'push_error',
+        };
         $dbh->prepare("UPDATE user_notifications SET $errField = ? WHERE id = ?")
            ->execute([$error, $job['notification_id']]);
     }

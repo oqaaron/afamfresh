@@ -13,11 +13,12 @@ class NotificationEvent {
     /**
      * Channels to attempt beyond the in-app record, which is always written.
      *
-     * Push by default, email only where the caller asks for it. If every
-     * notification became an email, a low-stock sweep across a vendor's
-     * catalogue would arrive as a dozen separate messages -- the fastest way to
-     * train someone to ignore all of them. The user's own preferences apply on
-     * top of this and can only narrow it further.
+     * Any of 'push', 'email', 'sms'. Push by default; the other two only where
+     * the caller asks. If every notification became an email, a low-stock sweep
+     * across a vendor's catalogue would arrive as a dozen separate messages --
+     * the fastest way to train someone to ignore all of them. SMS is narrower
+     * still, since it also costs money per message. The user's own preferences
+     * apply on top of this and can only narrow it further.
      */
     public array $channels = ['push'];
 

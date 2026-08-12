@@ -38,11 +38,20 @@ try {
             $whereClause .= " AND is_paid = FALSE";
         }
         
-        // Fetch earnings
+        // Fetch earnings.
+        //
+        // The join is scoped to source='order'. vendor_earnings.order_id points
+        // at `orders` or at `surplus_orders` depending on `source`, and the two
+        // id spaces overlap — unscoped, a surplus earning joins to whichever
+        // shop order happens to share its number and reports that order as the
+        // source of the money.
+        //
+        // The product name is filled in separately for surplus rows, which is
+        // every row in practice: the shop does not credit vendors at all.
         $stmt = $dbh->prepare("
             SELECT ve.*, o.orderid
             FROM vendor_earnings ve
-            LEFT JOIN orders o ON ve.order_id = o.orderid
+            LEFT JOIN orders o ON ve.order_id = o.orderid AND ve.source = 'order'
             $whereClause
             ORDER BY ve.created_at DESC
             LIMIT ? OFFSET ?
@@ -51,6 +60,34 @@ try {
         $params[] = $offset;
         $stmt->execute($params);
         $earnings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Name what each credit was for. A ledger of bare amounts and dates is
+        // not something a vendor can check against their own records.
+        $surplusIds = array_values(array_unique(array_map(
+            fn($e) => (int)$e['order_id'],
+            array_filter($earnings, fn($e) => ($e['source'] ?? 'order') === 'surplus')
+        )));
+        if ($surplusIds) {
+            $in = implode(',', array_fill(0, count($surplusIds), '?'));
+            $namesStmt = $dbh->prepare(
+                "SELECT so.id, i.name
+                   FROM surplus_orders so
+                   JOIN surplus_listings sl ON sl.id = so.listing_id
+                   JOIN items i ON i.id = sl.product_id
+                  WHERE so.id IN ($in)"
+            );
+            $namesStmt->execute($surplusIds);
+            $names = [];
+            foreach ($namesStmt->fetchAll(PDO::FETCH_ASSOC) as $n) {
+                $names[(int)$n['id']] = $n['name'];
+            }
+            foreach ($earnings as &$e) {
+                if (($e['source'] ?? 'order') === 'surplus') {
+                    $e['product_name'] = $names[(int)$e['order_id']] ?? null;
+                }
+            }
+            unset($e);
+        }
         
         // Fetch summary
         $summaryStmt = $dbh->prepare("
@@ -67,12 +104,38 @@ try {
         $summaryStmt->execute([$vendor_id]);
         $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC);
         
+        // The vendor's own withdrawal requests, newest first.
+        //
+        // Returned alongside the ledger rather than from a second endpoint: the
+        // screen needs both to say anything useful. "You have UGX 288,000
+        // available" is misleading on its own when a request for that exact
+        // amount is already sitting with an admin, and a vendor who cannot see
+        // the request they made will simply make it again.
+        $payoutsStmt = $dbh->prepare(
+            "SELECT id, amount, status, requested_at, processed_at, notes
+               FROM vendor_payout_requests
+              WHERE vendor_id = ?
+              ORDER BY id DESC
+              LIMIT 20"
+        );
+        $payoutsStmt->execute([$vendor_id]);
+        $payouts = $payoutsStmt->fetchAll(PDO::FETCH_ASSOC);
+
         echo json_encode([
             'success' => true,
             'earnings' => $earnings,
-            'summary' => $summary
+            'summary' => $summary,
+            'payouts' => $payouts,
+            // True when a request is already with an admin. The app disables
+            // the withdraw button on this rather than working it out from the
+            // list, so the rule lives in one place — here, next to the check
+            // that enforces it below.
+            'has_open_request' => (bool)array_filter(
+                $payouts,
+                fn($p) => in_array($p['status'], ['pending', 'approved'], true)
+            ),
         ]);
-        
+
     } elseif ($method === 'POST' && ($_GET['action'] ?? '') === 'request_payout') {
         // =============================================================
         // The vendor asks to withdraw. An admin approves and dispatches.
