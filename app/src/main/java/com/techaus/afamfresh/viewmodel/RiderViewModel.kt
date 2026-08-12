@@ -92,9 +92,12 @@ class RiderViewModel(
         }
     }
 
-    fun loadDelivery(orderId: Int) {
+    // `source` says which table orderId belongs to. It travels with every call
+    // about a delivery because the shop and surplus id spaces overlap — an id
+    // on its own can resolve to a different customer's job entirely.
+    fun loadDelivery(orderId: Int, source: String = "order") {
         _selected.value = null
-        repository.loadDeliveryDetail(orderId) { delivery, error ->
+        repository.loadDeliveryDetail(orderId, source) { delivery, error ->
             _selected.value = delivery
             if (delivery == null) _error.value = error
         }
@@ -107,12 +110,17 @@ class RiderViewModel(
      * transition rules and refuses anything out of order, so guessing the new
      * state would risk showing a stage the order never reached.
      */
-    fun advance(orderId: Int, status: String, onDone: (Boolean) -> Unit = {}) {
+    fun advance(
+        orderId: Int,
+        status: String,
+        source: String = "order",
+        onDone: (Boolean) -> Unit = {}
+    ) {
         _actionState.value = RiderActionState.Working
-        repository.updateDeliveryStatus(orderId, status) { ok, message ->
+        repository.updateDeliveryStatus(orderId, status, source) { ok, message ->
             if (ok) {
                 _actionState.value = RiderActionState.Done
-                loadDelivery(orderId)
+                loadDelivery(orderId, source)
                 refreshListsOnly()
             } else {
                 _actionState.value = RiderActionState.Error(message ?: "Could not update the delivery.")
@@ -143,7 +151,7 @@ class RiderViewModel(
         }
     }
 
-    fun uploadProof(orderId: Int, uri: Uri) {
+    fun uploadProof(orderId: Int, uri: Uri, source: String = "order") {
         _actionState.value = RiderActionState.Working
         viewModelScope.launch {
             // Decoding and compression happen off the main thread inside the repo.
@@ -152,10 +160,10 @@ class RiderViewModel(
                 _actionState.value = RiderActionState.Error("Couldn't read that photo. Try another one.")
                 return@launch
             }
-            repository.uploadProof(orderId, bytes) { _, message ->
+            repository.uploadProof(orderId, bytes, source) { _, message ->
                 if (message == null) {
                     _actionState.value = RiderActionState.Done
-                    loadDelivery(orderId)
+                    loadDelivery(orderId, source)
                 } else {
                     _actionState.value = RiderActionState.Error(message)
                 }

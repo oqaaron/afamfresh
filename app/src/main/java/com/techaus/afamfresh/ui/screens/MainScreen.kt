@@ -154,6 +154,10 @@ fun MainScreen(
                         Triple("vendor_dashboard", Icons.Default.Home, "Home"),
                         Triple("vendor_orders", Icons.Default.List, "Orders"),
                         Triple("vendor_products", Icons.Default.ShoppingCart, "Products"),
+                        // Vendors were being credited for delivered orders with
+                        // no way to see the money or ask for it. The ledger and
+                        // the whole payout chain were live long before this tab.
+                        Triple("vendor_earnings", Icons.Default.Payments, "Earnings"),
                         Triple("profile", Icons.Default.Person, "Profile")
                     )
                     else -> listOf(

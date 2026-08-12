@@ -5,6 +5,9 @@ import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.VendorCatalogueProduct
+import com.techaus.afamfresh.models.VendorEarning
+import com.techaus.afamfresh.models.VendorEarningsSummary
+import com.techaus.afamfresh.models.VendorPayout
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.repository.VendorRepository
@@ -380,6 +383,128 @@ class VendorViewModel(
                 _canRetry.value = error?.isRetryable ?: true
             }
         }
+    }
+
+    /**
+     * Orders whose status is being changed right now, by order id.
+     *
+     * Per-order rather than one screen-wide flag: a vendor working through a
+     * morning's orders should not have every button on the list go dead because
+     * one of them is in flight.
+     */
+    private val _updatingOrders = MutableStateFlow<Set<Int>>(emptySet())
+    val updatingOrders: StateFlow<Set<Int>> = _updatingOrders.asStateFlow()
+
+    /**
+     * Moves an order to a new status.
+     *
+     * The list is reloaded from the server afterwards rather than patched in
+     * place. The server does more than store the status — it stamps
+     * delivered_at, credits the earnings ledger, and can refuse the change
+     * outright on an unpaid order — so the only honest view of what happened is
+     * the one the server returns. Guessing locally would show a vendor
+     * "Delivered" on an order the server rejected.
+     */
+    fun updateOrderStatus(orderId: Int, status: String, onDone: (Boolean) -> Unit = {}) {
+        if (orderId in _updatingOrders.value) return   // this credits money; not twice
+
+        _updatingOrders.value = _updatingOrders.value + orderId
+        _error.value = null
+
+        vendorRepository.updateSurplusOrderStatus(orderId, status) { ok, error ->
+            _updatingOrders.value = _updatingOrders.value - orderId
+            if (ok) {
+                loadVendorOrders()
+            } else {
+                _error.value = error?.userMessage ?: "Could not update that order."
+            }
+            onDone(ok)
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Earnings and withdrawals
+    // ---------------------------------------------------------------
+
+    private val _earnings = MutableStateFlow<List<VendorEarning>>(emptyList())
+    val earnings: StateFlow<List<VendorEarning>> = _earnings.asStateFlow()
+
+    private val _earningsSummary = MutableStateFlow<VendorEarningsSummary?>(null)
+    val earningsSummary: StateFlow<VendorEarningsSummary?> = _earningsSummary.asStateFlow()
+
+    private val _payouts = MutableStateFlow<List<VendorPayout>>(emptyList())
+    val payouts: StateFlow<List<VendorPayout>> = _payouts.asStateFlow()
+
+    /** Decided server-side, so the app never offers a button the API refuses. */
+    private val _hasOpenPayoutRequest = MutableStateFlow(false)
+    val hasOpenPayoutRequest: StateFlow<Boolean> = _hasOpenPayoutRequest.asStateFlow()
+
+    private val _earningsLoading = MutableStateFlow(false)
+    val earningsLoading: StateFlow<Boolean> = _earningsLoading.asStateFlow()
+
+    private val _earningsError = MutableStateFlow<String?>(null)
+    val earningsError: StateFlow<String?> = _earningsError.asStateFlow()
+
+    private val _payoutMessage = MutableStateFlow<String?>(null)
+    val payoutMessage: StateFlow<String?> = _payoutMessage.asStateFlow()
+
+    /**
+     * Kept out of [isLoading] on purpose: the earnings screen has its own
+     * loading state, and sharing the vendor-wide one would blank the products
+     * list every time this ran.
+     */
+    fun loadEarnings() {
+        val uid = userId ?: return reportNotAVendor()
+        _earningsLoading.value = true
+        _earningsError.value = null
+
+        vendorRepository.getEarnings(uid) { response, error ->
+            _earningsLoading.value = false
+            if (response != null) {
+                _earnings.value = response.earnings.orEmpty()
+                _earningsSummary.value = response.summary
+                _payouts.value = response.payouts.orEmpty()
+                _hasOpenPayoutRequest.value = response.hasOpenRequest
+            } else {
+                _earningsError.value = error?.userMessage ?: "Could not load your earnings."
+            }
+        }
+    }
+
+    private val _requestingPayout = MutableStateFlow(false)
+    val requestingPayout: StateFlow<Boolean> = _requestingPayout.asStateFlow()
+
+    /**
+     * Asks to withdraw the whole available balance.
+     *
+     * No amount is passed anywhere: the server sums the unpaid ledger itself.
+     * Accepting one here would only suggest the caller has a say.
+     *
+     * Reloads afterwards rather than patching state, so what the vendor sees is
+     * the ledger the server actually holds.
+     */
+    fun requestPayout() {
+        val uid = userId ?: return reportNotAVendor()
+        if (_requestingPayout.value) return   // this is money; not twice
+
+        _requestingPayout.value = true
+        _earningsError.value = null
+        _payoutMessage.value = null
+
+        vendorRepository.requestPayout(uid) { amount, error ->
+            _requestingPayout.value = false
+            if (amount != null) {
+                _payoutMessage.value =
+                    "Withdrawal requested. An administrator will review it."
+                loadEarnings()
+            } else {
+                _earningsError.value = error?.userMessage ?: "Could not request a withdrawal."
+            }
+        }
+    }
+
+    fun clearPayoutMessage() {
+        _payoutMessage.value = null
     }
 
     fun loadVendorProducts() {

@@ -43,6 +43,10 @@ import com.techaus.afamfresh.viewmodel.RiderViewModel
 @Composable
 fun RiderDeliveryDetailScreen(
     orderId: Int,
+    // "order" or "surplus" — which table orderId belongs to. Passed in from the
+    // route rather than assumed: the two id spaces overlap, so the wrong value
+    // loads a different customer's delivery.
+    source: String = "order",
     riderViewModel: RiderViewModel,
     onBack: () -> Unit
 ) {
@@ -50,7 +54,7 @@ fun RiderDeliveryDetailScreen(
     val actionState by riderViewModel.actionState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(orderId) { riderViewModel.loadDelivery(orderId) }
+    LaunchedEffect(orderId, source) { riderViewModel.loadDelivery(orderId, source) }
 
     // Photo picker needs no runtime permission and falls back automatically
     // below API 30, so it works at this app's minSdk of 24 — the same choice
@@ -58,7 +62,7 @@ fun RiderDeliveryDetailScreen(
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        if (uri != null) riderViewModel.uploadProof(orderId, uri)
+        if (uri != null) riderViewModel.uploadProof(orderId, uri, source)
     }
 
     Scaffold(
@@ -98,6 +102,26 @@ fun RiderDeliveryDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+
+            // Where to COLLECT. Only surplus jobs have one: a shop order leaves
+            // the warehouse, which every rider already knows, but a surplus load
+            // sits at the vendor's premises and a rider who is not told that
+            // drives to the wrong place.
+            if (!d.pickupAddress.isNullOrBlank()) {
+                Card {
+                    Text("Collect from", fontSize = 11.sp, color = InkMuted)
+                    Text(d.pickupAddress, fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 15.sp)
+                    if (d.isSurplus) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Bulk surplus order — check the weight before you set off.",
+                            fontSize = 11.sp,
+                            color = InkMuted
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             Card {
                 Text(d.customerOrDash, fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 16.sp)
@@ -146,7 +170,10 @@ fun RiderDeliveryDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                "${item.quantity ?: 0} × ${item.name.orEmpty()}",
+                                // quantityLabel, not the raw value: a surplus
+                                // line is decimal kilograms and would otherwise
+                                // render as "20.0 ×".
+                                "${item.quantityLabel} × ${item.name.orEmpty()}",
                                 fontSize = 13.sp,
                                 color = Ink,
                                 modifier = Modifier.weight(1f)
@@ -223,7 +250,7 @@ fun RiderDeliveryDetailScreen(
                 Button(
                     onClick = {
                         riderViewModel.clearActionState()
-                        riderViewModel.advance(orderId, next)
+                        riderViewModel.advance(orderId, next, source)
                     },
                     enabled = actionState !is RiderActionState.Working,
                     modifier = Modifier.fillMaxWidth().height(52.dp),

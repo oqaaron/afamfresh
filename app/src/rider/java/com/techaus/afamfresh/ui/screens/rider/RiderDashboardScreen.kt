@@ -38,7 +38,9 @@ import com.techaus.afamfresh.viewmodel.RiderViewModel
 @Composable
 fun RiderDashboardScreen(
     riderViewModel: RiderViewModel,
-    onDeliveryClick: (Int) -> Unit,
+    // (orderId, source) — the source has to travel with the id, since the
+    // shop and surplus id spaces overlap.
+    onDeliveryClick: (Int, String) -> Unit,
     onViewAll: () -> Unit,
     onNotificationsClick: () -> Unit,
     unreadNotifications: Int,
@@ -148,7 +150,7 @@ fun RiderDashboardScreen(
                 )
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(active, key = { it.assignmentId ?: it.orderId ?: 0 }) { d ->
-                        DeliveryRow(delivery = d, onClick = { d.orderId?.let(onDeliveryClick) })
+                        DeliveryRow(delivery = d, onClick = { d.orderId?.let { id -> onDeliveryClick(id, d.source) } })
                     }
                     item { Spacer(modifier = Modifier.height(40.dp)) }
                 }

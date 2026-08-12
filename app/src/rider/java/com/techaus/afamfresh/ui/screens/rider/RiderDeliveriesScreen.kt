@@ -30,7 +30,9 @@ import com.techaus.afamfresh.viewmodel.RiderViewModel
 @Composable
 fun RiderDeliveriesScreen(
     riderViewModel: RiderViewModel,
-    onDeliveryClick: (Int) -> Unit,
+    // (orderId, source) — the source has to travel with the id, since the
+    // shop and surplus id spaces overlap.
+    onDeliveryClick: (Int, String) -> Unit,
     onBack: () -> Unit
 ) {
     val active by riderViewModel.active.collectAsState()
@@ -72,13 +74,13 @@ fun RiderDeliveriesScreen(
                 if (active.isNotEmpty()) {
                     item { SectionHeader("Active (${active.size})") }
                     items(active, key = { "a-${it.assignmentId ?: it.orderId}" }) { d ->
-                        DeliveryRow(delivery = d, onClick = { d.orderId?.let(onDeliveryClick) })
+                        DeliveryRow(delivery = d, onClick = { d.orderId?.let { id -> onDeliveryClick(id, d.source) } })
                     }
                 }
                 if (history.isNotEmpty()) {
                     item { SectionHeader("Completed (${history.size})") }
                     items(history, key = { "h-${it.assignmentId ?: it.orderId}" }) { d ->
-                        DeliveryRow(delivery = d, onClick = { d.orderId?.let(onDeliveryClick) })
+                        DeliveryRow(delivery = d, onClick = { d.orderId?.let { id -> onDeliveryClick(id, d.source) } })
                     }
                 }
                 item { Spacer(modifier = Modifier.height(40.dp)) }

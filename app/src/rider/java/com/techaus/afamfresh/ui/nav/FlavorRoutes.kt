@@ -24,7 +24,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
             riderViewModel = deps.riderViewModel,
             onNotificationsClick = { nav.navigate("notifications") },
             unreadNotifications = unread,
-            onDeliveryClick = { orderId -> nav.navigate("rider_delivery/$orderId") },
+            onDeliveryClick = { orderId, source -> nav.navigate("rider_delivery/$orderId/$source") },
             onViewAll = { nav.navigate("rider_deliveries") },
             // popBackStack, not navigate("home"): "home" is the customer
             // catalogue, which is still registered in the shared graph but is
@@ -37,7 +37,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     composable("rider_deliveries") {
         RiderDeliveriesScreen(
             riderViewModel = deps.riderViewModel,
-            onDeliveryClick = { orderId -> nav.navigate("rider_delivery/$orderId") },
+            onDeliveryClick = { orderId, source -> nav.navigate("rider_delivery/$orderId/$source") },
             onBack = { nav.navigate("rider_dashboard") }
         )
     }
@@ -49,15 +49,21 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         )
     }
 
-    composable("rider_delivery/{orderId}") { backStackEntry ->
+    // The source is part of the route, not an assumption made at the far end.
+    // rider_assignments now covers both shop and surplus orders and their ids
+    // overlap, so "rider_delivery/41" alone is ambiguous — it could be either
+    // customer's job.
+    composable("rider_delivery/{orderId}/{source}") { backStackEntry ->
         // orders.orderid is int(11), so the route argument is parsed rather
         // than compared as a string.
         val orderId = backStackEntry.arguments?.getString("orderId")?.toIntOrNull()
+        val source = backStackEntry.arguments?.getString("source") ?: "order"
         if (orderId == null) {
             nav.navigate("rider_dashboard")
         } else {
             RiderDeliveryDetailScreen(
                 orderId = orderId,
+                source = source,
                 riderViewModel = deps.riderViewModel,
                 onBack = { nav.popBackStack() }
             )

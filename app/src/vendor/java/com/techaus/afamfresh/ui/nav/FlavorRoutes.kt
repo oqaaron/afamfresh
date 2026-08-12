@@ -8,6 +8,7 @@ import com.techaus.afamfresh.ui.screens.vendor.NewProductScreen
 import com.techaus.afamfresh.ui.screens.vendor.AddSurplusScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorBusinessDetailsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorDashboardScreen
+import com.techaus.afamfresh.ui.screens.vendor.VendorEarningsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorOrdersScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorProductsScreen
 
@@ -75,6 +76,13 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
 
     composable("vendor_orders") {
         VendorOrdersScreen(vendorViewModel = vm, onBack = { nav.navigate("vendor_dashboard") })
+    }
+
+    composable("vendor_earnings") {
+        VendorEarningsScreen(
+            vendorViewModel = deps.vendorViewModel,
+            onBack = { nav.navigate("vendor_dashboard") }
+        )
     }
 
     composable("vendor_products") {

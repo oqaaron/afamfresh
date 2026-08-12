@@ -11,7 +11,10 @@ import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusListingResponse
 import com.techaus.afamfresh.models.SurplusListingsResponse
 import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.RequestVendorPayoutResponse
 import com.techaus.afamfresh.models.UpdateSurplusListingRequest
+import com.techaus.afamfresh.models.UpdateSurplusOrderStatusRequest
+import com.techaus.afamfresh.models.VendorEarningsResponse
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.UpdateVendorProfileResponse
 import com.techaus.afamfresh.models.SurplusOrdersResponse
@@ -266,6 +269,65 @@ class VendorRepository(
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.orders ?: emptyList(), null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Moves one surplus order to a new status.
+     *
+     * The failure message is passed through rather than replaced: the server's
+     * refusals here are specific and actionable — "This order has not been paid
+     * for yet", "That order is not yours" — and a generic message would hide
+     * which of them happened.
+     */
+    fun updateSurplusOrderStatus(
+        orderId: Int,
+        status: String,
+        callback: (Boolean, ApiError?) -> Unit
+    ) {
+        apiService.updateSurplusOrderStatus(
+            UpdateSurplusOrderStatusRequest(orderId = orderId, status = status)
+        ).enqueueApi<BaseResponse>("VendorRepo", "updateSurplusOrderStatus") { body, error ->
+            when {
+                error != null -> callback(false, error)
+                body?.success == true -> callback(true, null)
+                else -> callback(false, ApiError.reported(body?.error))
+            }
+        }
+    }
+
+    /**
+     * The vendor's earnings ledger, totals, and their withdrawal requests.
+     *
+     * All three arrive together because the screen cannot say anything honest
+     * with only one: "UGX 288,000 available" is misleading while a request for
+     * that exact amount is already sitting with an admin.
+     */
+    fun getEarnings(userId: Int, callback: (VendorEarningsResponse?, ApiError?) -> Unit) {
+        apiService.getVendorEarnings(userId = userId)
+            .enqueueApi<VendorEarningsResponse>("VendorRepo", "getEarnings") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    /**
+     * Requests a withdrawal of the whole available balance.
+     *
+     * The server's refusals here are specific — nothing available, or a request
+     * already in flight — so they are passed through rather than replaced.
+     */
+    fun requestPayout(userId: Int, callback: (Double?, ApiError?) -> Unit) {
+        apiService.requestVendorPayout(userId = userId)
+            .enqueueApi<RequestVendorPayoutResponse>("VendorRepo", "requestPayout") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body.amount, null)
                     else -> callback(null, ApiError.reported(body?.error))
                 }
             }

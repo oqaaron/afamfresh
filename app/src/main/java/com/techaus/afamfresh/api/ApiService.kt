@@ -308,6 +308,51 @@ interface ApiService {
         @Query("offset") offset: Int = 0
     ): Call<SurplusOrdersResponse>
 
+    /**
+     * Moves a surplus order along. The vendor who owns the listing may send it;
+     * so may an admin. Nobody else — before that check existed, anyone could
+     * mark any order delivered, which now means anyone could pay a vendor.
+     *
+     * Reaching "delivered" credits the vendor's earnings ledger, idempotently.
+     * The server refuses the transition on an unpaid order and answers 409.
+     */
+    @PUT("surplus-orders.php")
+    @Headers("Content-Type: application/json")
+    fun updateSurplusOrderStatus(
+        @Body request: UpdateSurplusOrderStatusRequest
+    ): Call<BaseResponse>
+
+    // ============================================================
+    // VENDOR EARNINGS & WITHDRAWALS
+    // ============================================================
+    //
+    // ✅ VERIFIED against api/vendor-earnings.php.
+    //
+    // `user_id` is sent but not trusted — the endpoint runs it through
+    // requireOwnUserId() and resolves the vendor from the session, so asking
+    // for another vendor's ledger returns your own, not theirs.
+
+    /** Ledger, totals and the vendor's own withdrawal requests, in one call. */
+    @GET("vendor-earnings.php")
+    fun getVendorEarnings(
+        @Query("user_id") userId: Int,
+        @Query("limit") limit: Int = 50
+    ): Call<VendorEarningsResponse>
+
+    /**
+     * Asks to withdraw. No amount is sent: the server sums the unpaid ledger
+     * itself, because a client-supplied amount is a client-supplied withdrawal.
+     *
+     * Refused when nothing is available, or when a request is already open —
+     * two open requests would each claim the same balance and approving both
+     * would pay it out twice.
+     */
+    @POST("vendor-earnings.php")
+    fun requestVendorPayout(
+        @Query("action") action: String = "request_payout",
+        @Query("user_id") userId: Int
+    ): Call<RequestVendorPayoutResponse>
+
     // ============================================================
     // VENDOR PRODUCTS ENDPOINTS
     // ============================================================
@@ -604,10 +649,16 @@ interface ApiService {
         @Query("action") action: String = "deliveries"
     ): Call<DeliveriesResponse>
 
+    //
+    // `source` says which table order_id refers to — "order" for the shop,
+    // "surplus" for a bulk order collected from a vendor. It must come from the
+    // Delivery the rider tapped, never be assumed: the id spaces overlap, and
+    // guessing would open a different customer's job.
     @GET("rider.php")
     fun getDeliveryDetail(
         @Query("action") action: String = "delivery_detail",
-        @Query("order_id") orderId: Int
+        @Query("order_id") orderId: Int,
+        @Query("source") source: String = "order"
     ): Call<DeliveryDetailResponse>
 
     /**
@@ -620,7 +671,8 @@ interface ApiService {
     fun updateDeliveryStatus(
         @Query("action") action: String = "update_status",
         @Field("order_id") orderId: Int,
-        @Field("status") status: String
+        @Field("status") status: String,
+        @Field("source") source: String = "order"
     ): Call<UpdateDeliveryStatusResponse>
 
     @POST("rider.php")
@@ -642,11 +694,16 @@ interface ApiService {
     // Same hardening as the avatar upload: the server sniffs the real MIME
     // type and derives the stored extension from that, so the filename sent
     // here is not security-relevant.
+    //
+    // Surplus deliveries are refused by the server here — surplus_orders has no
+    // delivery_photo column, so there is nowhere to file the proof. It says so
+    // rather than accepting the upload and dropping it.
     @Multipart
     @POST("rider.php")
     fun uploadDeliveryProof(
         @Query("action") action: String = "upload_proof",
         @Part("order_id") orderId: okhttp3.RequestBody,
+        @Part("source") source: okhttp3.RequestBody,
         @Part photo: okhttp3.MultipartBody.Part
     ): Call<ProofUploadResponse>
 

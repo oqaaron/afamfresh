@@ -48,6 +48,20 @@ data class RiderProfileResponse(
 data class Delivery(
     @SerializedName("assignment_id") val assignmentId: Int? = null,
     @SerializedName("order_id") val orderId: Int? = null,
+
+    /**
+     * Which table [orderId] refers to: "order" for the shop, "surplus" for a
+     * bulk surplus order collected from a vendor.
+     *
+     * Must be sent back on every call about this delivery. The two id spaces
+     * OVERLAP — shop order 41 and surplus order 41 both exist — so an id alone
+     * can resolve to a different customer's job entirely.
+     *
+     * Defaults to "order" so a response from an older server, which does not
+     * send this field, still behaves exactly as it did.
+     */
+    @SerializedName("source") val source: String = "order",
+
     @SerializedName("status") val status: String? = null,
     @SerializedName("order_status") val orderStatus: String? = null,
     @SerializedName("payment_status") val paymentStatus: String? = null,
@@ -66,10 +80,24 @@ data class Delivery(
     @SerializedName("scheduled_slot") val scheduledSlot: String? = null,
     @SerializedName("has_proof_photo") val hasProofPhoto: Boolean? = null,
     @SerializedName("proof_photo_url") val proofPhotoUrl: String? = null,
+
+    /**
+     * Where the rider COLLECTS from. Null for shop orders, which all leave the
+     * warehouse; a surplus job is collected from the vendor's own premises, and
+     * a rider sent to the warehouse for one would find nothing there.
+     */
+    @SerializedName("pickup_address") val pickupAddress: String? = null,
+
+    /** Set on collection-only surplus orders. Detail view only. */
+    @SerializedName("pickup_code") val pickupCode: String? = null,
+
     @SerializedName("items") val items: List<DeliveryItem>? = null
 ) {
     val customerOrDash: String get() = customerName?.takeIf { it.isNotBlank() } ?: "Customer"
     val addressOrDash: String get() = address?.takeIf { it.isNotBlank() } ?: "No address given"
+
+    /** A bulk surplus job rather than an ordinary shop delivery. */
+    val isSurplus: Boolean get() = source == "surplus"
 
     /** Human label for the rider's own progress. */
     val stageLabel: String
@@ -109,10 +137,22 @@ data class Delivery(
 
 data class DeliveryItem(
     @SerializedName("name") val name: String? = null,
-    @SerializedName("quantity") val quantity: Int? = null,
+    /**
+     * Decimal, not whole units. A surplus line is ordered in kilograms and can
+     * be 20.5; as an Int, Gson truncated it and showed a rider a load lighter
+     * than the one they have to carry.
+     */
+    @SerializedName("quantity") val quantity: Double? = null,
     @SerializedName("price") val price: Double? = null
 ) {
-    val lineTotal: Double get() = (price ?: 0.0) * (quantity ?: 0)
+    /** [price] is per unit on both kinds of delivery, so this holds for both. */
+    val lineTotal: Double get() = (price ?: 0.0) * (quantity ?: 0.0)
+
+    /** Whole numbers without a trailing ".0"; decimals to one place. */
+    val quantityLabel: String
+        get() = (quantity ?: 0.0).let {
+            if (it % 1.0 == 0.0) it.toLong().toString() else String.format("%.1f", it)
+        }
 }
 
 data class DeliveriesResponse(
@@ -225,6 +265,14 @@ data class EarningsSummary(
 data class EarningsEntry(
     @SerializedName("id") val id: Int? = null,
     @SerializedName("order_id") val orderId: Int? = null,
+
+    /**
+     * "order" or "surplus". Two entries can share an order id, so this is what
+     * tells them apart in the ledger — and a surplus entry is paid from the
+     * surplus delivery fee rather than a mileage component.
+     */
+    @SerializedName("source") val source: String = "order",
+
     @SerializedName("customer_name") val customerName: String? = null,
     @SerializedName("mileage_fee") val mileageFee: Double? = null,
     @SerializedName("commission_rate") val commissionRate: Double? = null,

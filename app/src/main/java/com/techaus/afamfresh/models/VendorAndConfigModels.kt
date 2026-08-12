@@ -172,6 +172,17 @@ data class SurplusOrder(
      */
     @SerializedName("payment_status") val paymentStatus: String = "pending",
 
+    /**
+     * Set when an admin dispatches the order to a rider.
+     *
+     * Once it is set, the delivery is the rider's to complete — they mark it
+     * delivered, which credits both of them in one transaction. A vendor
+     * marking it delivered themselves at that point would credit the vendor
+     * while the rider is still carrying the load, and that credit cannot be
+     * taken back.
+     */
+    @SerializedName("rider_assigned_at") val riderAssignedAt: String? = null,
+
     @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("delivery_area") val deliveryArea: String? = null,
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
@@ -221,6 +232,9 @@ data class SurplusOrder(
     /** Placed but not yet paid for, and therefore still releasable. */
     val isAwaitingPayment: Boolean
         get() = paymentStatus == "pending" || paymentStatus == "authorization_pending"
+
+    /** A rider is carrying this. Completing it is theirs, not the vendor's. */
+    val hasRider: Boolean get() = !riderAssignedAt.isNullOrBlank()
 
     /** Whole numbers without a trailing ".0"; decimals to one place. */
     val quantityLabel: String
@@ -410,5 +424,112 @@ data class NotificationsResponse(
 data class UnreadCountResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("count") val count: Int = 0,
+    @SerializedName("error") val error: String? = null
+)
+
+// ===========================================================================
+// VENDOR EARNINGS & WITHDRAWALS
+//
+// ✅ VERIFIED against api/vendor-earnings.php.
+//
+// A vendor is credited when a surplus order is DELIVERED, not when it is paid
+// for — see creditVendorEarnings() in includes/vendor_earnings.php. The credit
+// is the goods value less the vendor's own commission_rate; the delivery fee is
+// never part of it, because that money pays the rider who carried the load.
+//
+// Nothing here computes money. Every figure is read from the ledger, which the
+// server writes once, inside the same transaction as the delivery itself.
+// ===========================================================================
+
+/** One credit in the ledger: what a single delivered order earned. */
+data class VendorEarning(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("order_id") val orderId: Int = 0,
+
+    /** "surplus" in practice — the shop does not credit vendors at all. */
+    @SerializedName("source") val source: String = "order",
+
+    /** The goods value this was calculated from, before commission. */
+    @SerializedName("order_amount") val orderAmount: Double = 0.0,
+    @SerializedName("commission_amount") val commissionAmount: Double = 0.0,
+
+    /** What the vendor actually earns: order_amount − commission_amount. */
+    @SerializedName("net_earnings") val netEarnings: Double = 0.0,
+
+    @SerializedName("is_paid") val isPaid: Boolean = false,
+    @SerializedName("paid_at") val paidAt: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+
+    /** Filled in server-side for surplus rows so the row says what it was for. */
+    @SerializedName("product_name") val productName: String? = null
+) {
+    val displayTitle: String
+        get() = productName?.takeIf { it.isNotBlank() } ?: "Order #$orderId"
+}
+
+/**
+ * Totals across the whole ledger.
+ *
+ * Every field is nullable because the endpoint's summary is a set of SQL
+ * aggregates, and SUM() over no rows is NULL, not 0 — a brand new vendor gets
+ * nulls throughout rather than zeros.
+ */
+data class VendorEarningsSummary(
+    @SerializedName("total_orders") val totalOrders: Int? = null,
+    @SerializedName("total_revenue") val totalRevenue: Double? = null,
+    @SerializedName("total_commission") val totalCommission: Double? = null,
+    @SerializedName("total_net_earnings") val totalNetEarnings: Double? = null,
+    @SerializedName("paid_earnings") val paidEarnings: Double? = null,
+
+    /** Unpaid, and therefore withdrawable. The figure the vendor cares about. */
+    @SerializedName("pending_earnings") val pendingEarnings: Double? = null
+)
+
+/** One withdrawal request and where it has got to. */
+data class VendorPayout(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("amount") val amount: Double = 0.0,
+
+    /** pending | approved | paid | rejected */
+    @SerializedName("status") val status: String = "pending",
+
+    @SerializedName("requested_at") val requestedAt: String? = null,
+    @SerializedName("processed_at") val processedAt: String? = null,
+
+    /** The admin's note. Carries the reason on a rejection, so it is shown. */
+    @SerializedName("notes") val notes: String? = null
+) {
+    val statusLabel: String
+        get() = when (status) {
+            "pending" -> "Waiting for approval"
+            "approved" -> "Approved — being sent"
+            "paid" -> "Sent"
+            "rejected" -> "Not approved"
+            else -> status.replaceFirstChar { it.uppercase() }
+        }
+
+    val isOpen: Boolean get() = status == "pending" || status == "approved"
+}
+
+data class VendorEarningsResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("earnings") val earnings: List<VendorEarning>? = null,
+    @SerializedName("summary") val summary: VendorEarningsSummary? = null,
+    @SerializedName("payouts") val payouts: List<VendorPayout>? = null,
+
+    /**
+     * True when a request is already with an admin. Decided server-side, beside
+     * the check that enforces it, so the app is never offering a button the
+     * endpoint would refuse.
+     */
+    @SerializedName("has_open_request") val hasOpenRequest: Boolean = false,
+    @SerializedName("error") val error: String? = null
+)
+
+/** Reply to `?action=request_payout`. The amount is the server's figure. */
+data class RequestVendorPayoutResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("amount") val amount: Double? = null,
+    @SerializedName("message") val message: String? = null,
     @SerializedName("error") val error: String? = null
 )

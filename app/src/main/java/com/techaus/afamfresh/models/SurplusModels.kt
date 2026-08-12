@@ -198,3 +198,46 @@ data class CreateSurplusOrderResponse(
 
 // The list response is `SurplusOrdersResponse` in VendorAndConfigModels.kt,
 // alongside the row model. Same endpoint, same rows, one type.
+
+/**
+ * Body for PUT `surplus-orders.php` — the vendor moving their own order along.
+ *
+ * The server decides who may send this: the vendor who owns the listing, or an
+ * admin. It also refuses to advance an order that has not been paid for, since
+ * reaching 'delivered' credits the vendor's earnings ledger and that credit
+ * cannot be undone.
+ */
+data class UpdateSurplusOrderStatusRequest(
+    @SerializedName("order_id") val orderId: Int,
+    @SerializedName("status") val status: String
+) {
+    companion object {
+        /**
+         * The states a vendor moves through, in order.
+         *
+         * `pending` is absent on purpose — it is where an order starts, and
+         * `confirmed` is set automatically when payment lands, not by hand.
+         * `refunded` is absent too: money has to move before a row may claim it
+         * did, and nothing in the app moves money back.
+         */
+        val VENDOR_FLOW = listOf("processing", "ready", "delivered")
+
+        const val CANCELLED = "cancelled"
+
+        /** The next step for an order in [current], or null if there isn't one. */
+        fun nextAfter(current: String): String? = when (current) {
+            "confirmed" -> "processing"
+            "processing" -> "ready"
+            "ready" -> "delivered"
+            else -> null
+        }
+
+        /** What the button for [status] should say. */
+        fun actionLabel(status: String): String = when (status) {
+            "processing" -> "Start preparing"
+            "ready" -> "Mark ready"
+            "delivered" -> "Mark delivered"
+            else -> status.replaceFirstChar { it.uppercase() }
+        }
+    }
+}

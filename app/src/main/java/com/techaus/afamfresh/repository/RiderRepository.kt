@@ -71,8 +71,16 @@ class RiderRepository(
         }
     }
 
-    fun loadDeliveryDetail(orderId: Int, onResult: (Delivery?, String?) -> Unit) {
-        api.getDeliveryDetail(orderId = orderId).enqueueApi(TAG, "delivery detail") { body, error ->
+    // `source` comes from the Delivery the rider tapped. It is not optional and
+    // must never be guessed: shop order 41 and surplus order 41 both exist, so
+    // the wrong value opens a different customer's job.
+    fun loadDeliveryDetail(
+        orderId: Int,
+        source: String = "order",
+        onResult: (Delivery?, String?) -> Unit
+    ) {
+        api.getDeliveryDetail(orderId = orderId, source = source)
+            .enqueueApi(TAG, "delivery detail") { body, error ->
             when {
                 body?.success == true && body.delivery != null -> onResult(body.delivery, null)
                 body != null -> onResult(null, body.error ?: "Could not load that delivery.")
@@ -81,8 +89,13 @@ class RiderRepository(
         }
     }
 
-    fun updateDeliveryStatus(orderId: Int, status: String, onResult: (Boolean, String?) -> Unit) {
-        api.updateDeliveryStatus(orderId = orderId, status = status)
+    fun updateDeliveryStatus(
+        orderId: Int,
+        status: String,
+        source: String = "order",
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        api.updateDeliveryStatus(orderId = orderId, status = status, source = source)
             .enqueueApi(TAG, "update status") { body, error ->
                 when {
                     body?.success == true -> onResult(true, null)
@@ -114,15 +127,21 @@ class RiderRepository(
         }
     }
 
-    fun uploadProof(orderId: Int, bytes: ByteArray, onResult: (String?, String?) -> Unit) {
+    fun uploadProof(
+        orderId: Int,
+        bytes: ByteArray,
+        source: String = "order",
+        onResult: (String?, String?) -> Unit
+    ) {
         val part = MultipartBody.Part.createFormData(
             "photo",
             "proof.jpg",
             bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
         )
         val idPart = orderId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+        val sourcePart = source.toRequestBody("text/plain".toMediaTypeOrNull())
 
-        api.uploadDeliveryProof(orderId = idPart, photo = part)
+        api.uploadDeliveryProof(orderId = idPart, source = sourcePart, photo = part)
             .enqueueApi(TAG, "upload proof") { body, error ->
                 when {
                     body?.success == true -> onResult(body.proofPhotoUrl, null)
