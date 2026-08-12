@@ -184,13 +184,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([$orderId]);
 
                 // The goods go back on sale. Capped at the original quantity so
-                // a double cancellation cannot inflate the listing, and the
-                // listing is only revived if it was marked sold — an expired or
-                // admin-cancelled one stays down.
+                // a double cancellation cannot inflate the listing.
+                //
+                // The status is deliberately untouched: sold-out is expressed
+                // by remaining_quantity, not by a status value, so restoring
+                // the quantity is what makes the listing visible again.
                 $dbh->prepare(
                     "UPDATE surplus_listings
-                        SET remaining_quantity = LEAST(remaining_quantity + ?, surplus_quantity),
-                            status = CASE WHEN status = 'sold' THEN 'active' ELSE status END
+                        SET remaining_quantity = LEAST(remaining_quantity + ?, surplus_quantity)
                       WHERE id = ?"
                 )->execute([$order['quantity'], $order['listing_id']]);
 

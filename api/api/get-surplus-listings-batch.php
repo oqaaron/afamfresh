@@ -16,8 +16,13 @@ $stmt = $dbh->prepare("
            i.name as product_name, i.image
     FROM surplus_listings sl
     JOIN items i ON sl.product_id = i.id
-    WHERE sl.id IN ($placeholders) AND sl.status = 'active'
+    WHERE sl.id IN ($placeholders) AND sl.status = 'approved'
 ");
+// 'approved', not 'active': the status enum is
+// ('pending','approved','rejected','cancelled') and nothing ever writes
+// 'active', so this matched no row that has ever existed. Nothing calls this
+// endpoint today, but a query that silently returns nothing is worse than one
+// that is simply unused.
 $stmt->execute($listingIds);
 $listings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

@@ -114,8 +114,11 @@ function applySurplusPaymentStatus(PDO $dbh, int $orderId, string $mapped, ?stri
  *     'pending_cash' is excluded — a cash-on-delivery order is not abandoned,
  *     it is simply not paid yet, and cancelling it would be wrong.
  *
- * A listing brought back above zero is returned to 'active' only if it was
- * marked 'sold', so an expired or admin-cancelled listing is not resurrected.
+ * Only the quantity is restored; the status is left alone. Sold-out is
+ * expressed by remaining_quantity reaching zero, not by a status value —
+ * api/surplus-listings.php filters on `remaining_quantity > 0` — so putting
+ * stock back is enough to make the listing visible again, and an expired or
+ * admin-cancelled listing stays down where it belongs.
  *
  * Called at the top of order creation rather than from cron: that is the moment
  * the numbers have to be right, and it bounds the work to one query per order
@@ -136,10 +139,11 @@ function releaseStaleSurplusReservations(PDO $dbh, int $minutes = 30): int {
     $rows = $stale->fetchAll(PDO::FETCH_ASSOC);
     if (!$rows) return 0;
 
+    // Capped at the original quantity so a double release cannot inflate the
+    // listing beyond what the vendor actually put up.
     $restore = $dbh->prepare("
         UPDATE surplus_listings
-           SET remaining_quantity = LEAST(remaining_quantity + ?, surplus_quantity),
-               status = CASE WHEN status = 'sold' THEN 'active' ELSE status END
+           SET remaining_quantity = LEAST(remaining_quantity + ?, surplus_quantity)
          WHERE id = ?
     ");
     $cancel = $dbh->prepare("
