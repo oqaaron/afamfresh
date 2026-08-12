@@ -71,6 +71,27 @@ try {
     error_log('admin nav: pending payout count failed: ' . $e->getMessage());
 }
 
+// Paid surplus orders with nobody sent to collect them. The most urgent queue
+// on this menu: the goods are perishable, the customer has already paid, and
+// nothing happens until someone here assigns a rider.
+$navNeedsRider = 0;
+try {
+    if (isset($dbh)) {
+        $navNeedsRider = (int)$dbh->query(
+            "SELECT COUNT(*)
+               FROM surplus_orders so
+               JOIN surplus_listings sl ON sl.id = so.listing_id
+               LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'surplus'
+              WHERE so.payment_status IN ('paid','pending_cash')
+                AND sl.pickup_only = 0
+                AND so.status NOT IN ('delivered','cancelled','refunded')
+                AND ra.id IS NULL"
+        )->fetchColumn();
+    }
+} catch (Throwable $e) {
+    error_log('admin nav: needs-rider count failed: ' . $e->getMessage());
+}
+
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
     ['products.php',         'Products',           'fa-box'],
@@ -82,6 +103,7 @@ $navItems = [
     ['admin-dashboard.php',  'Vendor Verification','fa-store'],
     ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
     ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
+    ['surplus-orders.php',   'Surplus Orders',     'fa-truck-fast'],
     ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
 ];
 ?>
@@ -100,6 +122,9 @@ $navItems = [
                 <?php endif; ?>
                 <?php if ($href === 'surplus-listings.php' && $navPendingSurplus > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingSurplus ?></span>
+                <?php endif; ?>
+                <?php if ($href === 'surplus-orders.php' && $navNeedsRider > 0): ?>
+                    <span class="bg-red-400 text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $navNeedsRider ?></span>
                 <?php endif; ?>
                 <?php if ($href === 'vendor-payouts.php' && $navPendingPayouts > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingPayouts ?></span>

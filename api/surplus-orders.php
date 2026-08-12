@@ -304,6 +304,11 @@ try {
                 ['push']
             );
 
+            // SMS as well as push and email. This is one of only two moments
+            // that get a text — the other is out-for-delivery in api/rider.php.
+            // A quarter-million-shilling order is worth confirming somewhere the
+            // customer will see it without opening anything, and it is the
+            // message they need if the payment then fails.
             addNotification(
                 (int)$user_id,
                 'Order placed: ' . $listing['product_name'],
@@ -313,7 +318,7 @@ try {
                     . '. We will confirm once payment is received.',
                 'order',
                 null,
-                ['push', 'email']
+                ['push', 'email', 'sms']
             );
         } catch (Throwable $e) {
             error_log("Surplus order $order_id created but notifications failed: " . $e->getMessage());
@@ -375,6 +380,31 @@ try {
             exit;
         }
 
+        // A vendor cannot ship an order nobody has paid for.
+        //
+        // Creating an order takes the stock but not the money; until payment
+        // lands it is a reservation that the release sweep may cancel out from
+        // under everyone. Letting a vendor march that to 'delivered' would
+        // credit them for goods they were never paid for, and the credit is
+        // idempotent — it cannot be taken back by re-running anything.
+        //
+        // Admins are exempt: they need to be able to fix a payment that
+        // succeeded at Pesapal but never reconciled here.
+        $payment = $dbh->prepare("SELECT payment_status FROM surplus_orders WHERE id = ?");
+        $payment->execute([$order_id]);
+        $paymentStatus = (string)$payment->fetchColumn();
+        $isPaidOrCash = in_array($paymentStatus, ['paid', 'pending_cash'], true);
+
+        if (!$isAdminSession && !$isPaidOrCash
+            && !in_array($status, ['cancelled', 'pending'], true)) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'This order has not been paid for yet.'
+            ]);
+            exit;
+        }
+
         $updateFields = ["status = ?", "updated_at = NOW()"];
         $params = [$status, $order_id];
 
@@ -399,6 +429,64 @@ try {
             $credit = creditVendorEarnings($dbh, $order_id);
             if (!$credit['ok']) {
                 error_log("Surplus order $order_id delivered but vendor not credited: " . $credit['error']);
+            }
+        }
+
+        // Tell the customer. Without this the only party who learns an order
+        // moved is the vendor who moved it, and the customer is left refreshing
+        // a screen to find out whether 250,000 shillings of produce is coming.
+        //
+        // Only the states a customer can act on get a message. 'processing' is
+        // deliberately silent: it means the vendor has started picking, which
+        // changes nothing the customer can do and would just be noise.
+        $notify = [
+            'confirmed' => ['Order confirmed', 'has accepted your order and is preparing it.'],
+            'ready'     => ['Order ready', 'has your order ready.'],
+            'delivered' => ['Order delivered', 'has marked your order delivered.'],
+            'cancelled' => ['Order cancelled', 'has cancelled your order.'],
+            'refunded'  => ['Order refunded', 'has refunded your order.'],
+        ];
+
+        if (isset($notify[$status])) {
+            try {
+                $who = $dbh->prepare(
+                    "SELECT so.user_id, so.pickup_code, i.name AS product_name, v.business_name
+                       FROM surplus_orders so
+                       JOIN surplus_listings sl ON sl.id = so.listing_id
+                       JOIN items i ON i.id = sl.product_id
+                       JOIN vendors v ON v.id = sl.vendor_id
+                      WHERE so.id = ?"
+                );
+                $who->execute([$order_id]);
+                $row = $who->fetch(PDO::FETCH_ASSOC);
+
+                if ($row) {
+                    [$title, $phrase] = $notify[$status];
+                    $body = $row['business_name'] . ' ' . $phrase
+                        . ' (order #' . $order_id . ', ' . $row['product_name'] . ')';
+
+                    // The collection code is only useful at the moment of
+                    // collection, so it rides along with "ready" rather than
+                    // being buried in the order placed weeks earlier.
+                    if ($status === 'ready' && !empty($row['pickup_code'])) {
+                        $body .= ' Your collection code is ' . $row['pickup_code'] . '.';
+                    }
+
+                    addNotification(
+                        (int)$row['user_id'],
+                        $title,
+                        $body,
+                        'order',
+                        null,
+                        // Email on the two that decide whether someone needs to
+                        // be somewhere; push alone for the rest.
+                        in_array($status, ['ready', 'cancelled'], true)
+                            ? ['push', 'email']
+                            : ['push']
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log("Surplus order $order_id moved to $status but customer not notified: " . $e->getMessage());
             }
         }
 

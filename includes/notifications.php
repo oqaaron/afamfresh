@@ -23,9 +23,16 @@ require_once __DIR__ . '/../admin/includes/config.php';
  * @param string $message - Notification message
  * @param string $type - Notification type (order, promo, system, etc.)
  * @param string|null $link - Optional link to relevant page
- * @param array $channels - Beyond in-app: 'push' and/or 'email'. Email is
- *                          opt-in per call so routine notifications do not
- *                          each become a separate message in someone's inbox.
+ * @param array $channels - Beyond in-app: 'push', 'email' and/or 'sms'. All
+ *                          three are opt-in per call so routine notifications
+ *                          do not each become a message in someone's inbox.
+ *
+ *                          'sms' is the narrowest and should stay that way: it
+ *                          costs money per message, it reaches people whether
+ *                          or not the app is installed, and there is no
+ *                          unsubscribe. Reserved for the two moments a customer
+ *                          needs to know without opening anything — their order
+ *                          was placed, and it is on its way.
  * @return bool - Success status
  */
 function addNotification($userId, $title, $message, $type = 'system', $link = null, array $channels = ['push']) {
