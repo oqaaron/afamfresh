@@ -99,12 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $body .= ' An administrator adjusted the ' . implode(' and ', $changed) . '.';
                     }
                     if ($notes !== '') $body .= ' Note: ' . $notes;
-                    addNotification((int)$listing['user_id'], '✅ Listing approved: ' . $productName, $body, 'system', null, ['push', 'email']);
+                    addNotification((int)$listing['user_id'], 'Listing approved: ' . $productName, $body, 'system', null, ['push', 'email']);
                     $flash = 'Approved' . ($changed ? ' with adjustments' : '') . '. The vendor has been notified.';
                 } elseif ($decision === 'reject') {
                     addNotification(
                         (int)$listing['user_id'],
-                        '❌ Listing not approved: ' . $productName,
+                        'Listing not approved: ' . $productName,
                         'Your surplus listing for "' . $productName . '" was not approved. Reason: ' . $notes,
                         'system', null, ['push', 'email']
                     );

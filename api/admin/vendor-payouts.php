@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             addNotification(
                 (int)$payout['user_id'],
-                '✅ Withdrawal approved',
+                'Withdrawal approved',
                 'Your withdrawal of UGX ' . number_format((float)$payout['amount'], 2)
                     . ' has been approved and will be sent shortly.'
                     . ($note !== '' ? ' Note: ' . $note : ''),
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             addNotification(
                 (int)$payout['user_id'],
-                '💰 Withdrawal sent',
+                'Withdrawal sent',
                 'UGX ' . number_format((float)$payout['amount'], 2) . ' has been sent to you.'
                     . ($note !== '' ? ' Note: ' . $note : ''),
                 'payment', null, ['push', 'email']
@@ -122,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             addNotification(
                 (int)$payout['user_id'],
-                '❌ Withdrawal not approved',
+                'Withdrawal not approved',
                 'Your withdrawal request was not approved. Reason: ' . $note
                     . ' Your earnings remain available to request again.',
                 'payment', null, ['push', 'email']

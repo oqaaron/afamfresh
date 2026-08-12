@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([$productId]);
         addNotification(
             (int)$row['user_id'],
-            '✅ Product approved: ' . $row['name'],
+            'Product approved: ' . $row['name'],
             'Your product "' . $row['name'] . '" has been approved. You can now list surplus of it.',
             'system',
             null,
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$reason, $productId]);
             addNotification(
                 (int)$row['user_id'],
-                '❌ Product not approved: ' . $row['name'],
+                'Product not approved: ' . $row['name'],
                 'Your product "' . $row['name'] . '" was not approved. Reason: ' . $reason,
                 'system',
                 null,
