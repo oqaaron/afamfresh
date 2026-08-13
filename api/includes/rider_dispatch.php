@@ -215,18 +215,26 @@ function saveDeliveryProof(PDO $dbh, string $source, int $orderId, string $filen
 /**
  * What a rider earns for delivering a surplus order.
  *
- * Shop riders are paid from the MILEAGE component of the delivery fee, but a
- * surplus fee is charged on WEIGHT (base + per-kg, capped, waived above a
- * threshold) and carries no mileage figure to draw from.
+ * Matches the shop's own rule in includes/rider_earnings.php: paid from
+ * carriage only (base + weight + distance) — never the service fee,
+ * insurance, or processing fee, which cover the platform's own costs and are
+ * not something the rider performs. A surplus order has no single "mileage"
+ * figure the way a shop order does, so this sums the carriage components out
+ * of the stored `delivery_fee_breakdown` JSON instead.
  *
- * So the rider is paid out of the surplus delivery fee itself, less the same
- * platform commission. Two things follow from that choice, both deliberate:
+ * `delivery_fee_breakdown` has two shapes, both handled:
  *
- *   - It can never pay out more than was collected, unlike a distance-based
- *     rate applied to a fee that was not calculated by distance.
- *   - It puts that fee to work. Before dispatch existed the platform kept the
- *     surplus delivery fee while the vendor did the driving, which was a fee
- *     charged for a service nobody performed.
+ *   - Current: {base_fee, weight_fee, distance_fee, service_fee,
+ *     insurance_fee, processing_fee, total_fee, ...} — carriage is the first
+ *     three, summed.
+ *   - Legacy ("type":"weight_based"): {base_fee, weight_charge, total_fee}
+ *     from before service/insurance/processing existed. total_fee here IS
+ *     carriage in full — there is nothing else in it to strip out.
+ *
+ * Falls back to the full delivery_fee only if the breakdown is missing or
+ * unparseable, which should not happen for any order placed through the
+ * normal checkout path — logged when it does, so a bad fallback is visible
+ * rather than silently paying from the wrong base.
  *
  * A pickup-only order has no delivery fee and should never have been
  * dispatched; it returns null rather than crediting zero, so the mistake is
@@ -235,17 +243,36 @@ function saveDeliveryProof(PDO $dbh, string $source, int $orderId, string $filen
  * @return array{amount: float, estimated: bool}|null
  */
 function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
-    $stmt = $dbh->prepare("SELECT delivery_fee FROM surplus_orders WHERE id = ?");
+    $stmt = $dbh->prepare(
+        "SELECT delivery_fee, delivery_fee_breakdown FROM surplus_orders WHERE id = ?"
+    );
     $stmt->execute([$orderId]);
-    $fee = $stmt->fetchColumn();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($fee === false || (float)$fee <= 0) {
+    if (!$row || $row['delivery_fee'] === null || (float)$row['delivery_fee'] <= 0) {
         return null;
     }
 
-    // Not an estimate: this is the exact amount the customer was charged for
-    // delivery, read from the order.
-    return ['amount' => (float)$fee, 'estimated' => false];
+    $fullFee = (float)$row['delivery_fee'];
+    $breakdown = $row['delivery_fee_breakdown'] ? json_decode($row['delivery_fee_breakdown'], true) : null;
+
+    if (!is_array($breakdown)) {
+        error_log("surplusRiderFeeFor: order $orderId has no parseable delivery_fee_breakdown, "
+                 . "falling back to the full delivery_fee");
+        return ['amount' => $fullFee, 'estimated' => true];
+    }
+
+    // Legacy shape: no service_fee key means nothing was ever added beyond
+    // carriage, so the total is already the right number.
+    if (!array_key_exists('service_fee', $breakdown)) {
+        return ['amount' => $fullFee, 'estimated' => false];
+    }
+
+    $carriage = (float)($breakdown['base_fee'] ?? 0)
+              + (float)($breakdown['weight_fee'] ?? 0)
+              + (float)($breakdown['distance_fee'] ?? 0);
+
+    return ['amount' => $carriage, 'estimated' => false];
 }
 
 /**
