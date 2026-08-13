@@ -37,18 +37,22 @@ if ($action == 'update') {
     }
     
 } elseif ($action == 'rider') {
-    $rider_id = intval($_GET['id'] ?? 0);
-    
-    $stmt = $dbh->prepare("SELECT current_lat, current_lng, last_location_update FROM riders WHERE id = ?");
-    $stmt->execute([$rider_id]);
-    $rider = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($rider) {
-        echo json_encode(['success' => true, 'location' => $rider]);
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Rider not found']);
-    }
-    
+    // REMOVED. This took a rider id straight from the query string and returned
+    // that rider's live position to any signed-in user — no ownership check, no
+    // relationship to an order, nothing. Anyone with an account could have
+    // watched any courier move around the city all day by incrementing a number.
+    //
+    // No Kotlin file ever called it, so nothing breaks by refusing it.
+    //
+    // The replacement is api/tracking.php, which resolves permission from the
+    // ORDER: its customer, its rider, or an admin — and withholds the rider's
+    // phone number once the delivery is over.
+    http_response_code(410);
+    echo json_encode([
+        'success' => false,
+        'error' => 'This endpoint has been removed. Use tracking.php?order_id=&source=.',
+    ]);
+
 } else {
     echo json_encode(['success' => false, 'error' => 'Invalid action']);
 }

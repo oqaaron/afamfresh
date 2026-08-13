@@ -37,7 +37,7 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
     // The vendor and the money both come from the listing behind the order,
     // read server-side. Nothing here is taken from a request.
     $stmt = $dbh->prepare(
-        "SELECT so.id, so.total_price, so.delivery_fee,
+        "SELECT so.id, so.total_price, so.delivery_fee, so.payment_status,
                 sl.vendor_id, v.commission_rate
            FROM surplus_orders so
            JOIN surplus_listings sl ON sl.id = so.listing_id
@@ -50,6 +50,31 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
     if (!$row) {
         error_log("creditVendorEarnings: surplus order $surplusOrderId has no listing or vendor");
         return ['ok' => false, 'error' => 'That order has no vendor to credit.'];
+    }
+
+    // No money in, no money out.
+    //
+    // This check was missing, and could not have been added any earlier: cash
+    // orders sat at 'pending_cash' forever because nothing confirmed
+    // collection, so requiring 'paid' would have stranded every cash vendor
+    // payment. Now that api/rider.php settles cash at the moment of delivery —
+    // in the very transaction that calls this — 'paid' is reachable by both
+    // routes and the check is safe.
+    //
+    // `code` distinguishes this from a genuine fault. api/rider.php aborts the
+    // delivery transaction on a crediting error, which is right for a missing
+    // vendor — but wrong here: the rider is standing at the customer's door
+    // with goods that have demonstrably arrived, and refusing to record the
+    // delivery helps nobody. An unpaid delivered order is instead surfaced on
+    // the reconciliation page's exceptions list, where someone can act on it.
+    if (strcasecmp((string)$row['payment_status'], 'paid') !== 0) {
+        error_log("creditVendorEarnings: surplus order $surplusOrderId is '"
+                  . $row['payment_status'] . "', not paid — vendor not credited");
+        return [
+            'ok'    => false,
+            'code'  => 'NOT_PAID',
+            'error' => 'That order has not been paid for.',
+        ];
     }
 
     $vendorId = (int)$row['vendor_id'];

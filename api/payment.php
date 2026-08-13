@@ -26,6 +26,7 @@ session_start();
 require_once '../admin/includes/config.php';
 require_once '../includes/pesapal.php';
 require_once __DIR__ . '/../includes/surplus_payment.php';
+require_once __DIR__ . '/../includes/payment_ledger.php';
 header('Content-Type: application/json');
 
 error_reporting(E_ALL);
@@ -186,15 +187,29 @@ switch ($action) {
             $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
 
             if ($paymentMethod === 'cash') {
+                // payment_method is recorded now, not inferred later. Until
+                // this column existed the only evidence an order was cash was
+                // the transient 'pending_cash' status, which disappears the
+                // moment the rider confirms collection.
                 $stmt = $dbh->prepare("
                     UPDATE surplus_orders
                        SET payment_status = 'pending_cash',
+                           payment_method = 'cash',
                            status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
                            confirmed_at = COALESCE(confirmed_at, NOW()),
                            updated_at = NOW()
                      WHERE id = ? AND user_id = ?
                 ");
                 $stmt->execute([$orderId, $userId]);
+
+                recordPaymentEvent($dbh, 'surplus', $orderId, 'cash_selected', [
+                    'from_status' => $order['payment_status'] ?? null,
+                    'to_status'   => 'pending_cash',
+                    'method'      => 'cash',
+                    'amount'      => $amount,
+                    'actor_type'  => 'customer',
+                    'actor_id'    => (int)$userId,
+                ]);
 
                 reply([
                     'success'  => true,
@@ -283,11 +298,21 @@ switch ($action) {
             $stmt = $dbh->prepare("
                 UPDATE orders
                 SET payment_status = 'pending_cash',
+                    payment_method = 'cash',
                     status = CASE WHEN status = 'Awaiting Payment'
                                   THEN 'Received' ELSE status END
                 WHERE orderid = ? AND user_id = ?
             ");
             $stmt->execute([$orderId, $userId]);
+
+            recordPaymentEvent($dbh, 'order', $orderId, 'cash_selected', [
+                'from_status' => $order['payment_status'] ?? null,
+                'to_status'   => 'pending_cash',
+                'method'      => 'cash',
+                'amount'      => $amount,
+                'actor_type'  => 'customer',
+                'actor_id'    => (int)$userId,
+            ]);
 
             reply([
                 'success'  => true,
@@ -424,6 +449,30 @@ switch ($action) {
             $mapped = $pesapal->mapStatus($status);
             applySurplusPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
+            // Persist how it was paid. Pesapal's own wording was already being
+            // read here and returned to the app, then thrown away -- so the one
+            // authoritative statement of the instrument used was never stored.
+            $channel = $status['payment_method'] ?? null;
+            if ($mapped === 'paid') {
+                $dbh->prepare(
+                    "UPDATE surplus_orders
+                        SET payment_method = ?, payment_channel = ?
+                      WHERE id = ? AND payment_method IN ('unknown','mobile_money','card')"
+                )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
+            }
+
+            recordPaymentEvent($dbh, 'surplus', $orderId, 'verified', [
+                'from_status' => $order['payment_status'] ?? null,
+                'to_status'   => $mapped,
+                'method'      => classifyPaymentChannel($channel),
+                'channel'     => $channel,
+                'amount'      => isset($status['amount']) ? (float)$status['amount'] : surplusPayableTotal($order),
+                'tracking_id' => $trackingId,
+                'actor_type'  => 'customer',
+                'actor_id'    => (int)$userId,
+                'raw'         => json_encode($status),
+            ]);
+
             reply([
                 'success'        => true,
                 'status'         => $mapped,
@@ -498,6 +547,30 @@ switch ($action) {
 
         $mapped = $pesapal->mapStatus($status);
         applyPaymentStatus($dbh, $orderId, $mapped, $trackingId);
+
+        // Same as the surplus branch: record the instrument rather than
+        // reporting it to the app and discarding it. The guard on
+        // payment_method stops a verify overwriting a confirmed cash collection.
+        $channel = $status['payment_method'] ?? null;
+        if ($mapped === 'paid') {
+            $dbh->prepare(
+                "UPDATE orders
+                    SET payment_method = ?, payment_channel = ?
+                  WHERE orderid = ? AND payment_method IN ('unknown','mobile_money','card')"
+            )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
+        }
+
+        recordPaymentEvent($dbh, 'order', $orderId, 'verified', [
+            'from_status' => $order['payment_status'] ?? null,
+            'to_status'   => $mapped,
+            'method'      => classifyPaymentChannel($channel),
+            'channel'     => $channel,
+            'amount'      => isset($status['amount']) ? (float)$status['amount'] : (float)$order['total_amount'],
+            'tracking_id' => $trackingId,
+            'actor_type'  => 'customer',
+            'actor_id'    => (int)$userId,
+            'raw'         => json_encode($status),
+        ]);
 
         reply([
             'success'        => true,

@@ -58,7 +58,12 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
         if (!$row) return null;
 
         $row['source'] = 'order';
-        $row['pickup_address'] = null;   // shop orders leave from the warehouse
+        // Shop orders all leave from the warehouse, so the pickup point is a
+        // constant rather than a column. Returned anyway so callers that draw a
+        // route do not have to know which kind of order they are holding.
+        $row['pickup_address'] = defined('OFFICE_LABEL') ? OFFICE_LABEL : 'AfamFresh warehouse';
+        $row['pickup_lat'] = defined('OFFICE_LAT') ? OFFICE_LAT : 0.38082497218633615;
+        $row['pickup_lng'] = defined('OFFICE_LNG') ? OFFICE_LNG : 32.65071116168179;
         $row['pickup_code'] = null;
         return $row;
     }
@@ -79,7 +84,10 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
                     so.delivery_photo,
                     so.scheduled_delivery_date, so.scheduled_delivery_slot,
                     so.pickup_code,
-                    v.location AS pickup_address, v.business_name
+                    v.location AS pickup_address, v.business_name,
+                    -- The vendor's pin, not the warehouse: a surplus load is
+                    -- collected from their premises. Null until they pin it.
+                    v.lat AS pickup_lat, v.lng AS pickup_lng
                FROM surplus_orders so
                JOIN surplus_listings sl ON sl.id = so.listing_id
                JOIN vendors v ON v.id = sl.vendor_id

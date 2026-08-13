@@ -32,6 +32,7 @@ require_once __DIR__ . '/../includes/rider_earnings.php';
 // Surplus orders are dispatched to riders too. They live in a different table
 // with different column names, normalised to one shape here.
 require_once __DIR__ . '/../includes/rider_dispatch.php';
+require_once __DIR__ . '/../includes/payment_ledger.php';
 // Proof photos are read on the detail action, not just written on upload,
 // so this is needed for the whole file rather than inside upload_proof.
 require_once __DIR__ . '/../includes/storage.php';
@@ -362,6 +363,36 @@ if ($action === 'update_status') {
 
     $map = $STATUS_MAP[$next];
 
+    // Cash on delivery: the rider has to say they took the money.
+    //
+    // 'pending_cash' was a TERMINAL state. Nothing anywhere ever moved it on,
+    // so a rider collecting UGX 45,000 at the door left no record of it and the
+    // order stayed permanently unpaid in the books. Cash revenue was therefore
+    // never confirmed and never reconcilable.
+    //
+    // Gated on CASH_CONFIRMATION_REQUIRED because riders running the OLD app do
+    // not send the flag: enforcing this before that build is out would leave
+    // them unable to complete any cash delivery. The ledger records the
+    // collection either way, so nothing is lost by waiting to enforce it.
+    $requiresCashConfirm = false;
+    $payableForCash = 0.0;
+    if ($next === 'delivered') {
+        $deliverable = loadDeliverable($dbh, $source, $orderId);
+        if ($deliverable && strcasecmp((string)$deliverable['payment_status'], 'pending_cash') === 0) {
+            $payableForCash = (float)$deliverable['total_amount'];
+            $confirmed = in_array((string)param('cash_collected', ''), ['1', 'true', 'yes'], true);
+            $enforce = env('CASH_CONFIRMATION_REQUIRED', '0') === '1';
+
+            if (!$confirmed && $enforce) {
+                // A distinct code so the app can open its confirm sheet rather
+                // than showing this as a generic failure.
+                fail('Confirm you have collected UGX ' . number_format($payableForCash, 0)
+                     . ' in cash before marking this delivered.', 409, 'CASH_NOT_CONFIRMED');
+            }
+            $requiresCashConfirm = $confirmed || !$enforce;
+        }
+    }
+
     try {
         $dbh->beginTransaction();
 
@@ -371,6 +402,34 @@ if ($action === 'update_status') {
             )->execute([$next, $assignment['id']]);
 
             applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
+
+            // Settle the cash, inside the same transaction as the delivery.
+            //
+            // The `AND payment_status = 'pending_cash'` guard makes this
+            // idempotent and means a retried request can never overwrite a
+            // genuinely electronic payment. The amount comes from the stored
+            // total, never from the rider's device — same rule api/payment.php
+            // enforces for the customer.
+            if ($requiresCashConfirm) {
+                if ($source === 'order') {
+                    $dbh->prepare(
+                        "UPDATE orders
+                            SET payment_status = 'paid', payment_method = 'cash',
+                                cash_collected_by = ?, cash_collected_at = NOW(),
+                                payment_captured_at = COALESCE(payment_captured_at, NOW())
+                          WHERE orderid = ? AND payment_status = 'pending_cash'"
+                    )->execute([$rider['id'], $orderId]);
+                } else {
+                    $dbh->prepare(
+                        "UPDATE surplus_orders
+                            SET payment_status = 'paid', payment_method = 'cash',
+                                cash_collected_by = ?, cash_collected_at = NOW(),
+                                payment_captured_at = COALESCE(payment_captured_at, NOW()),
+                                updated_at = NOW()
+                          WHERE id = ? AND payment_status = 'pending_cash'"
+                    )->execute([$rider['id'], $orderId]);
+                }
+            }
 
             // Credited in the same transaction as the delivery itself, so a
             // rider is never marked as having delivered something without
@@ -387,7 +446,12 @@ if ($action === 'update_status') {
             if ($source === 'surplus') {
                 require_once __DIR__ . '/../includes/vendor_earnings.php';
                 $vendorCredit = creditVendorEarnings($dbh, $orderId);
-                if (!$vendorCredit['ok']) {
+                // NOT_PAID is not a fault to abort on. The rider is at the
+                // customer's door and the goods have arrived; refusing to
+                // record that helps nobody, and the order shows up on the
+                // reconciliation page as "delivered but not paid" for someone
+                // to chase. Any OTHER failure is a real fault and still aborts.
+                if (!$vendorCredit['ok'] && ($vendorCredit['code'] ?? '') !== 'NOT_PAID') {
                     throw new RuntimeException($vendorCredit['error']);
                 }
             }
@@ -396,6 +460,37 @@ if ($action === 'update_status') {
                 ->execute([$next, $assignment['id']]);
 
             applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
+
+            // Fetch the route once, when the load is collected.
+            //
+            // The customer's tracking screen polls every ten seconds; asking
+            // Google for the same geometry on each poll would be ~180 billable
+            // calls per delivery for a line that does not change. Cached on the
+            // assignment, so a reassignment re-fetches and a redelivery does not
+            // inherit the previous rider's route.
+            if ($next === 'picked_up' && empty($assignment['route_polyline'])) {
+                $d = loadDeliverable($dbh, $source, $orderId);
+                if ($d && $d['pickup_lat'] !== null && $d['pickup_lng'] !== null
+                    && $d['dest_lat'] !== null && $d['dest_lng'] !== null) {
+                    require_once __DIR__ . '/../includes/google_routes.php';
+                    $route = roadDistanceBetween(
+                        (float)$d['pickup_lat'], (float)$d['pickup_lng'],
+                        (float)$d['dest_lat'], (float)$d['dest_lng'],
+                        true
+                    );
+                    $dbh->prepare(
+                        "UPDATE rider_assignments
+                            SET route_polyline = ?, route_distance_km = ?,
+                                route_duration_min = ?, route_fetched_at = NOW()
+                          WHERE id = ?"
+                    )->execute([
+                        $route['polyline'] ?? null,
+                        round($route['km'], 2),
+                        round($route['minutes'], 1),
+                        $assignment['id'],
+                    ]);
+                }
+            }
         }
 
         // Shop orders only — surplus_orders has no status_history column.
@@ -404,6 +499,20 @@ if ($action === 'update_status') {
         }
 
         $dbh->commit();
+
+        // After the commit, so a ledger row never claims a collection that
+        // rolled back.
+        if ($requiresCashConfirm) {
+            recordPaymentEvent($dbh, $source === 'order' ? 'order' : 'surplus', $orderId,
+                'cash_collected', [
+                    'from_status' => 'pending_cash',
+                    'to_status'   => 'paid',
+                    'method'      => 'cash',
+                    'amount'      => $payableForCash,
+                    'actor_type'  => 'rider',
+                    'actor_id'    => (int)$rider['id'],
+                ]);
+        }
     } catch (Exception $e) {
         // Catches both PDOException (the write itself) and the
         // RuntimeException creditRiderEarnings() throws — either way the
@@ -518,23 +627,58 @@ if ($action === 'location') {
         "UPDATE riders SET current_lat = ?, current_lng = ?, last_location_update = NOW() WHERE id = ?"
     )->execute([$lat, $lng, $rider['id']]);
 
-    // Also breadcrumb the active delivery, so the customer-side tracking view
-    // has a trail to draw when it is built. order_tracking_logs already
-    // existed with 330 rows and no code writing to it.
+    // Quality metadata, all optional so an older rider build still posts fine.
+    $accuracy = is_numeric(param('accuracy')) ? (float)param('accuracy') : null;
+    $speed    = is_numeric(param('speed'))    ? (float)param('speed')    : null;
+    $heading  = is_numeric(param('heading'))  ? (float)param('heading')  : null;
+
+    // Breadcrumb the active delivery, so the customer's tracking view has a
+    // trail to draw.
+    //
+    // `source` is selected and stored: order_tracking_logs used to hold a bare
+    // order_id, and shop order 41 and surplus order 41 both exist — so the two
+    // trails interleaved into one stream and a customer tracking either would
+    // have been shown the other rider's position.
     $active = $dbh->prepare(
-        "SELECT order_id FROM rider_assignments
+        "SELECT id, order_id, source FROM rider_assignments
           WHERE rider_id = ? AND status IN ('picked_up','on_way')
           ORDER BY assigned_at DESC LIMIT 1"
     );
     $active->execute([$rider['id']]);
-    $orderId = $active->fetchColumn();
+    $assignmentRow = $active->fetch(PDO::FETCH_ASSOC);
+    $orderId = $assignmentRow['order_id'] ?? null;
 
-    if ($orderId) {
-        $dbh->prepare("INSERT INTO order_tracking_logs (order_id, lat, lng) VALUES (?, ?, ?)")
-            ->execute([$orderId, $lat, $lng]);
+    // A fix worse than 100m is noise. Stored, it makes the customer's map jump
+    // a block sideways and back — indistinguishable from the rider actually
+    // moving. The rider's own position on `riders` is still updated above, so
+    // nothing is lost by dropping it from the trail.
+    $usable = $accuracy === null || $accuracy <= 100;
+
+    if ($orderId && $usable) {
+        $dbh->prepare(
+            "INSERT INTO order_tracking_logs
+                (order_id, source, rider_id, assignment_id, lat, lng, accuracy_m, speed_mps, heading_deg)
+             VALUES (?,?,?,?,?,?,?,?,?)"
+        )->execute([
+            $orderId,
+            $assignmentRow['source'] ?? 'order',
+            $rider['id'],
+            $assignmentRow['id'] ?? null,
+            $lat, $lng,
+            $accuracy !== null ? (int)round($accuracy) : null,
+            $speed,
+            $heading !== null ? (int)round($heading) : null,
+        ]);
     }
 
-    echo json_encode(['success' => true, 'tracked_order_id' => $orderId ? (int)$orderId : null]);
+    echo json_encode([
+        'success' => true,
+        'tracked_order_id' => $orderId ? (int)$orderId : null,
+        'source' => $assignmentRow['source'] ?? null,
+        // So a rider build can tell a dropped-for-accuracy fix from a stored
+        // one without guessing.
+        'recorded' => (bool)($orderId && $usable),
+    ]);
     exit;
 }
 
