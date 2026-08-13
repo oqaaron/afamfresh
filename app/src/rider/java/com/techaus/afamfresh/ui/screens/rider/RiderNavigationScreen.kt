@@ -72,6 +72,8 @@ fun RiderNavigationScreen(
     val context = LocalContext.current
     val delivery by riderViewModel.selected.collectAsState()
     val tracking by trackingViewModel.tracking.collectAsState()
+    val trackingError by trackingViewModel.error.collectAsState()
+    val trackingStale by trackingViewModel.stale.collectAsState()
     val actionState by riderViewModel.actionState.collectAsState()
 
     LaunchedEffect(orderId, source) { riderViewModel.loadDelivery(orderId, source) }
@@ -236,6 +238,37 @@ fun RiderNavigationScreen(
                             .background(CardWhite)
                     ) {
                         Icon(Icons.Default.MyLocation, contentDescription = "Recentre", tint = Forest)
+                    }
+                }
+
+                // Surfaced explicitly rather than left as a silently blank map.
+                // A 403 (this rider is no longer the one assigned, after a
+                // reassignment) and a dropped connection both used to look
+                // identical to "no route yet" here — nothing distinguished a
+                // real failure from the ordinary case of geometry not existing.
+                if (trackingError != null) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Tomato
+                    ) {
+                        Text(
+                            trackingError ?: "Could not load this delivery's route.",
+                            color = androidx.compose.ui.graphics.Color.White, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    }
+                } else if (trackingStale) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = androidx.compose.ui.graphics.Color(0xFFF9A825)
+                    ) {
+                        Text(
+                            "Reconnecting…",
+                            color = androidx.compose.ui.graphics.Color.White, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
                     }
                 }
             }
