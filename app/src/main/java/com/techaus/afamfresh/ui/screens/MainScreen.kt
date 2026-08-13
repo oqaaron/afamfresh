@@ -382,9 +382,16 @@ fun MainScreen(
                             popUpTo("surplus") { inclusive = false }
                         }
                     },
-                    onFailed = {
-                        navController.navigate("surplus") {
-                            popUpTo("surplus") { inclusive = true }
+                    // Reuses this same order rather than sending the customer
+                    // back to the marketplace, where buying again would create
+                    // a second surplus_orders row — a fresh reservation against
+                    // the listing while the first one sits dead until
+                    // releaseStaleSurplusReservations() eventually cleans it up.
+                    onFailed = { orderId, amount ->
+                        navController.navigate(
+                            "payment_retry/surplus/${orderId ?: ""}/${amount ?: 0.0}"
+                        ) {
+                            popUpTo("surplus") { inclusive = false }
                         }
                     },
                     // Unknown outcome sends them to their orders, never back to
@@ -394,6 +401,46 @@ fun MainScreen(
                         navController.navigate("surplus_orders") {
                             popUpTo("surplus") { inclusive = false }
                         }
+                    }
+                )
+            }
+
+            // Retries payment on an order that already exists. Shared between
+            // shop and surplus, keyed by orderType, since both hit the same
+            // "failed mobile money → wants to pay differently" situation and
+            // the fix is identical: call api/payment.php?action=initiate again
+            // on the SAME order id, never api/orders.php?action=create again.
+            if (isCustomerApp) composable("payment_retry/{orderType}/{orderId}/{amount}") { backStackEntry ->
+                val orderType = backStackEntry.arguments?.getString("orderType") ?: ApiService.ORDER_TYPE_SHOP
+                val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
+                val amount = backStackEntry.arguments?.getString("amount")?.toDoubleOrNull()
+                val isSurplus = orderType == ApiService.ORDER_TYPE_SURPLUS
+
+                PaymentRetryScreen(
+                    orderId = orderId,
+                    orderType = orderType,
+                    amount = amount,
+                    paymentViewModel = paymentViewModel,
+                    onBack = {
+                        if (isSurplus) {
+                            navController.navigate("surplus_orders") { popUpTo("surplus") { inclusive = false } }
+                        } else {
+                            navController.navigate("orders") { popUpTo("home") { inclusive = false } }
+                        }
+                    },
+                    onCashAccepted = {
+                        if (isSurplus) {
+                            navController.navigate("surplus_orders") { popUpTo("surplus") { inclusive = false } }
+                        } else {
+                            cartViewModel.clearCart()
+                            navController.navigate("orders") { popUpTo("home") { inclusive = false } }
+                        }
+                    },
+                    onRedirect = { paymentUrl, transactionId ->
+                        val webviewRoute = if (isSurplus) "surplus_payment_webview" else "payment_webview"
+                        navController.navigate(
+                            "$webviewRoute/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
+                        )
                     }
                 )
             }
@@ -554,8 +601,15 @@ fun MainScreen(
                             popUpTo("home") { inclusive = false }
                         }
                     },
-                    onFailed = {
-                        navController.navigate("checkout") {
+                    // Reuses this same order rather than sending the customer
+                    // back to checkout, where "Place order" would call
+                    // api/orders.php?action=create again and leave this order
+                    // behind, dead at payment_status = 'failed' forever — shop
+                    // orders have no cleanup job to ever remove it.
+                    onFailed = { orderId, amount ->
+                        navController.navigate(
+                            "payment_retry/${ApiService.ORDER_TYPE_SHOP}/${orderId ?: ""}/${amount ?: 0.0}"
+                        ) {
                             popUpTo("checkout") { inclusive = true }
                         }
                     },

@@ -346,8 +346,9 @@ private fun CheckoutField(value: String, onChange: (String) -> Unit, label: Stri
     )
 }
 
+/** Shared with PaymentRetryScreen, which offers the same choice on an existing order. */
 @Composable
-private fun PaymentOptionRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+fun PaymentOptionRow(label: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

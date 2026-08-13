@@ -45,6 +45,11 @@ import com.techaus.afamfresh.viewmodel.PaymentViewModel
  * The customer must not be able to leave this screen into a state that invites a
  * second payment, so an unknown outcome routes to the order list, never back to
  * checkout.
+ *
+ * A FAILED outcome carries the order id and amount from the verify response
+ * forward, rather than none at all — the caller uses them to send the
+ * customer to a retry screen that reuses this order, instead of back to
+ * checkout where "Place order" would create a second one.
  */
 @Composable
 fun PaymentConfirmingScreen(
@@ -55,7 +60,7 @@ fun PaymentConfirmingScreen(
     // told their payment could not be confirmed when it went through fine.
     orderType: String = ApiService.ORDER_TYPE_SHOP,
     onPaid: () -> Unit,
-    onFailed: () -> Unit,
+    onFailed: (orderId: String?, amount: Double?) -> Unit,
     onUnconfirmed: () -> Unit
 ) {
     val result by paymentViewModel.paymentResult.collectAsState()
@@ -70,7 +75,8 @@ fun PaymentConfirmingScreen(
             when (outcome) {
                 PaymentViewModel.Outcome.PAID -> onPaid()
                 PaymentViewModel.Outcome.CASH_ON_DELIVERY -> onPaid()
-                PaymentViewModel.Outcome.FAILED -> onFailed()
+                PaymentViewModel.Outcome.FAILED ->
+                    onFailed(paymentViewModel.paymentResult.value?.orderId, paymentViewModel.paymentResult.value?.amount)
                 PaymentViewModel.Outcome.UNCONFIRMED -> onUnconfirmed()
             }
         }
