@@ -464,35 +464,14 @@ if ($action === 'update_status') {
 
             applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
 
-            // Fetch the route once, when the load is collected.
-            //
-            // The customer's tracking screen polls every ten seconds; asking
-            // Google for the same geometry on each poll would be ~180 billable
-            // calls per delivery for a line that does not change. Cached on the
-            // assignment, so a reassignment re-fetches and a redelivery does not
-            // inherit the previous rider's route.
+            // Normally already cached at dispatch time by
+            // cacheAssignmentRoute() (admin/orders.php, admin/surplus-orders.php).
+            // This is the safety net: an assignment created before that
+            // existed, or one where Google was briefly unreachable at
+            // dispatch, still gets a route here rather than never. The
+            // `empty()` guard means this is a no-op on the normal path.
             if ($next === 'picked_up' && empty($assignment['route_polyline'])) {
-                $d = loadDeliverable($dbh, $source, $orderId);
-                if ($d && $d['pickup_lat'] !== null && $d['pickup_lng'] !== null
-                    && $d['dest_lat'] !== null && $d['dest_lng'] !== null) {
-                    require_once __DIR__ . '/../includes/google_routes.php';
-                    $route = roadDistanceBetween(
-                        (float)$d['pickup_lat'], (float)$d['pickup_lng'],
-                        (float)$d['dest_lat'], (float)$d['dest_lng'],
-                        true
-                    );
-                    $dbh->prepare(
-                        "UPDATE rider_assignments
-                            SET route_polyline = ?, route_distance_km = ?,
-                                route_duration_min = ?, route_fetched_at = NOW()
-                          WHERE id = ?"
-                    )->execute([
-                        $route['polyline'] ?? null,
-                        round($route['km'], 2),
-                        round($route['minutes'], 1),
-                        $assignment['id'],
-                    ]);
-                }
+                cacheAssignmentRoute($dbh, $source, $orderId, (int)$assignment['id']);
             }
         }
 

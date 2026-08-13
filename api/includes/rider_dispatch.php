@@ -247,3 +247,49 @@ function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
     // delivery, read from the order.
     return ['amount' => (float)$fee, 'estimated' => false];
 }
+
+/**
+ * Fetches and caches a fresh assignment's route geometry, if it does not
+ * already have one.
+ *
+ * Called at dispatch time (admin/orders.php, admin/surplus-orders.php) rather
+ * than waiting for the rider to mark the delivery picked_up, which is where
+ * this used to happen exclusively. That left a real gap: the rider's
+ * Navigate screen and the customer's tracking map both had nothing to draw
+ * for however long a delivery sat in "assigned". api/rider.php's own
+ * picked_up-time fetch is left in place as a safety net — it only runs when
+ * `route_polyline` is still empty, so it costs nothing on the normal path
+ * where this function already filled it in, and still recovers a route for
+ * an assignment created before this existed, or where Google was briefly
+ * unreachable at dispatch time.
+ *
+ * Not repeated on reassignment: the pickup and drop-off points belong to the
+ * order, not the rider carrying it, so whatever route is already cached
+ * stays correct regardless of who is assigned next.
+ */
+function cacheAssignmentRoute(PDO $dbh, string $source, int $orderId, int $assignmentId): void {
+    $d = loadDeliverable($dbh, $source, $orderId);
+    if (!$d || $d['pickup_lat'] === null || $d['pickup_lng'] === null
+        || $d['dest_lat'] === null || $d['dest_lng'] === null) {
+        return;
+    }
+
+    require_once __DIR__ . '/google_routes.php';
+    $route = roadDistanceBetween(
+        (float)$d['pickup_lat'], (float)$d['pickup_lng'],
+        (float)$d['dest_lat'], (float)$d['dest_lng'],
+        true
+    );
+
+    $dbh->prepare(
+        "UPDATE rider_assignments
+            SET route_polyline = ?, route_distance_km = ?,
+                route_duration_min = ?, route_fetched_at = NOW()
+          WHERE id = ?"
+    )->execute([
+        $route['polyline'] ?? null,
+        round($route['km'], 2),
+        round($route['minutes'], 1),
+        $assignmentId,
+    ]);
+}
