@@ -57,9 +57,12 @@ function param($key, $default = null) {
     return $default;
 }
 
-function fail($message) {
+function fail($message, $httpCode = 200, $code = null) {
     // Key is 'error', matching auth.php's login/register/me and profile.php.
-    echo json_encode(['success' => false, 'error' => $message]);
+    if ($httpCode !== 200) http_response_code($httpCode);
+    $body = ['success' => false, 'error' => $message];
+    if ($code !== null) $body['code'] = $code;
+    echo json_encode($body);
     exit;
 }
 
