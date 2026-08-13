@@ -105,6 +105,7 @@ $navItems = [
     ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
     ['surplus-orders.php',   'Surplus Orders',     'fa-truck-fast'],
     ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
+    ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced'],
     ['routing-check.php',    'Routing check',      'fa-route'],
 ];
 ?>

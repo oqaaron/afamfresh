@@ -54,7 +54,8 @@ const GOOGLE_ROUTES_TIMEOUT = 6;
  *         which is a real answer for two points separated by water.
  */
 function googleRouteBetween(float $originLat, float $originLng,
-                            float $destLat, float $destLng): ?array {
+                            float $destLat, float $destLng,
+                            bool $withPolyline = false): ?array {
     $key = trim((string)env('GOOGLE_MAPS_API_KEY', ''));
     if ($key === '') {
         // Logged once per call rather than silently degrading: a missing key
@@ -82,12 +83,19 @@ function googleRouteBetween(float $originLat, float $originLng,
     // A field mask is REQUIRED by this API — a request without one is rejected.
     // Asking only for what is used also keeps the response in the cheapest
     // billing tier.
+    //
+    // Geometry is opt-in and OFF by default, so the fee-quoting path — which
+    // runs on every checkout keystroke — keeps asking for the two small fields
+    // it needs. encodedPolyline is in the same Essentials SKU, so requesting it
+    // where it IS wanted does not move the call into a dearer tier.
+    $mask = 'routes.distanceMeters,routes.duration'
+          . ($withPolyline ? ',routes.polyline.encodedPolyline' : '');
     $context = stream_context_create([
         'http' => [
             'method'  => 'POST',
             'header'  => "Content-Type: application/json\r\n"
                        . "X-Goog-Api-Key: {$key}\r\n"
-                       . "X-Goog-FieldMask: routes.distanceMeters,routes.duration\r\n",
+                       . "X-Goog-FieldMask: {$mask}\r\n",
             'content' => $body,
             'timeout' => GOOGLE_ROUTES_TIMEOUT,
             // So a 4xx body can be read and logged rather than becoming a bare
@@ -124,9 +132,12 @@ function googleRouteBetween(float $originLat, float $originLng,
         : 0.0;
 
     return [
-        'km'      => $route['distanceMeters'] / 1000,
-        'minutes' => $seconds / 60,
-        'source'  => 'google',
+        'km'       => $route['distanceMeters'] / 1000,
+        'minutes'  => $seconds / 60,
+        'source'   => 'google',
+        // Null when geometry was not asked for. Callers that need a line to
+        // draw check for null rather than assuming one is always present.
+        'polyline' => $route['polyline']['encodedPolyline'] ?? null,
     ];
 }
 
@@ -143,17 +154,22 @@ function googleRouteBetween(float $originLat, float $originLng,
  * @return array{km: float, minutes: float, source: string, estimated: bool}
  */
 function roadDistanceBetween(float $originLat, float $originLng,
-                             float $destLat, float $destLng): array {
+                             float $destLat, float $destLng,
+                             bool $withPolyline = false): array {
     static $cache = [];
+    // The flag is PART OF THE KEY. Without it, a geometry-free result cached by
+    // the fee quote would be handed to the tracking code, which would then draw
+    // no route and look broken for reasons nothing in the logs would explain.
     $cacheKey = implode(',', [
         round($originLat, 5), round($originLng, 5),
         round($destLat, 5), round($destLng, 5),
+        $withPolyline ? 'geo' : 'nogeo',
     ]);
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
     }
 
-    $google = googleRouteBetween($originLat, $originLng, $destLat, $destLng);
+    $google = googleRouteBetween($originLat, $originLng, $destLat, $destLng, $withPolyline);
     if ($google !== null) {
         return $cache[$cacheKey] = $google + ['estimated' => false];
     }
@@ -167,6 +183,10 @@ function roadDistanceBetween(float $originLat, float $originLng,
             'minutes' => 0.0,
             'source' => 'osrm',
             'estimated' => true,
+            // No geometry either. The client draws a dashed straight line
+            // labelled approximate rather than being handed a different
+            // router's route presented as the real one.
+            'polyline' => null,
         ];
     }
 
@@ -178,5 +198,6 @@ function roadDistanceBetween(float $originLat, float $originLng,
         'minutes' => 0.0,
         'source' => 'haversine',
         'estimated' => true,
+        'polyline' => null,
     ];
 }

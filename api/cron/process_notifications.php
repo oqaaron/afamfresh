@@ -40,6 +40,25 @@ try {
     error_log('notification worker: could not recover stuck jobs: ' . $e->getMessage());
 }
 
+// Prune old tracking breadcrumbs.
+//
+// One rider on an active delivery writes ~120 rows an hour. Nothing needs a
+// trail older than a month, and left alone this becomes the largest table in
+// the database. LIMIT keeps the delete short enough not to hold a lock while
+// the worker should be sending notifications; it runs every minute, so a
+// backlog drains on its own.
+try {
+    $pruned = $dbh->exec(
+        "DELETE FROM order_tracking_logs
+          WHERE recorded_at < DATE_SUB(NOW(), INTERVAL 30 DAY) LIMIT 5000"
+    );
+    if ($pruned > 0) {
+        error_log("notification worker: pruned $pruned old tracking rows");
+    }
+} catch (PDOException $e) {
+    error_log('notification worker: tracking prune failed: ' . $e->getMessage());
+}
+
 // Fetch up to 20 pending jobs
 $stmt = $dbh->prepare("
     SELECT * FROM notification_queue 

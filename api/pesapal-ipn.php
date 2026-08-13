@@ -30,6 +30,7 @@
 
 require_once __DIR__ . '/includes/pesapal.php';
 require_once __DIR__ . '/includes/surplus_payment.php';
+require_once __DIR__ . '/includes/payment_ledger.php';
 
 // Pesapal retries on any non-200, so this must answer 200 even on our own
 // errors — otherwise a bug here turns into an endless retry loop. Failures are
@@ -107,6 +108,24 @@ try {
             ipnDone('already paid', ['surplus_order_id' => $surplusId]);
         }
         applySurplusPaymentStatus($dbh, $surplusId, $mapped, $trackingId);
+
+        $channel = $status['payment_method'] ?? null;
+        if ($mapped === 'paid') {
+            $dbh->prepare(
+                "UPDATE surplus_orders SET payment_method = ?, payment_channel = ?
+                  WHERE id = ? AND payment_method IN ('unknown','mobile_money','card')"
+            )->execute([classifyPaymentChannel($channel), $channel, $surplusId]);
+        }
+        recordPaymentEvent($dbh, 'surplus', $surplusId, 'ipn', [
+            'from_status' => $surplusOrder['payment_status'] ?? null,
+            'to_status'   => $mapped,
+            'method'      => classifyPaymentChannel($channel),
+            'channel'     => $channel,
+            'tracking_id' => $trackingId,
+            'merchant_ref'=> $merchantRef ?: null,
+            'actor_type'  => 'pesapal',
+            'raw'         => json_encode($status),
+        ]);
         error_log("Pesapal IPN: surplus order $surplusId set to $mapped.");
         ipnDone('processed', ['surplus_order_id' => $surplusId, 'payment_status' => $mapped]);
     }
@@ -159,6 +178,27 @@ try {
         $stmt->execute([$mapped, $trackingId, $orderId]);
         error_log("Pesapal IPN: order $orderId set to $mapped.");
     }
+
+    $channel = $status['payment_method'] ?? null;
+    if ($mapped === 'paid') {
+        $dbh->prepare(
+            "UPDATE orders SET payment_method = ?, payment_channel = ?
+              WHERE orderid = ? AND payment_method IN ('unknown','mobile_money','card')"
+        )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
+    }
+    // Recorded even when $mapped changed nothing. An IPN that arrived and did
+    // not move the order is exactly the evidence wanted in a dispute -- it
+    // proves the notification was received and what it said.
+    recordPaymentEvent($dbh, 'order', $orderId, 'ipn', [
+        'from_status' => $order['payment_status'] ?? null,
+        'to_status'   => $mapped,
+        'method'      => classifyPaymentChannel($channel),
+        'channel'     => $channel,
+        'tracking_id' => $trackingId,
+        'merchant_ref'=> $merchantRef ?: null,
+        'actor_type'  => 'pesapal',
+        'raw'         => json_encode($status),
+    ]);
 
     ipnDone('processed', ['order_id' => $orderId, 'payment_status' => $mapped]);
 
