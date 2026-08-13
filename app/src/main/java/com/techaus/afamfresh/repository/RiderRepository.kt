@@ -202,19 +202,23 @@ class RiderRepository(
      */
     suspend fun prepareProofBytes(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
         try {
+            // inJustDecodeBounds = true makes decodeStream always return null by
+            // design — it's only populating `bounds` as a side effect, not
+            // handing back a Bitmap. Treating that null as "couldn't read the
+            // photo" (the bug this replaced) meant every upload failed here,
+            // on a perfectly valid image, before the real decode ever ran.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            context.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, bounds)
-            } ?: return@withContext null
+            val boundsStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
 
             var sample = 1
             val longest = maxOf(bounds.outWidth, bounds.outHeight)
             while (longest / sample > MAX_DIMEN * 2) sample *= 2
 
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-            val bitmap = context.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, opts)
-            } ?: return@withContext null
+            val decodeStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            val bitmap = decodeStream.use { BitmapFactory.decodeStream(it, null, opts) }
+                ?: return@withContext null
 
             val scale = MAX_DIMEN.toFloat() / maxOf(bitmap.width, bitmap.height).toFloat()
             val scaled = if (scale < 1f) {
