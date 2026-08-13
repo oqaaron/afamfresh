@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
     private val roleGateViewModel: RoleGateViewModel by viewModels { viewModelFactory }
     private val addressViewModel: AddressViewModel by viewModels { viewModelFactory }
     private val notificationViewModel: NotificationViewModel by viewModels { viewModelFactory }
+val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
 
     /** Order id carried by a tapped push notification. */
     private val pendingOrderId = mutableStateOf<String?>(null)
@@ -297,6 +298,7 @@ class MainActivity : ComponentActivity() {
                                             roleGateViewModel = roleGateViewModel,
                                             addressViewModel = addressViewModel,
                                             notificationViewModel = notificationViewModel,
+                                            trackingViewModel = trackingViewModel,
                                             deliveryRepository = viewModelFactory.deliveryRepository,
                                             pendingOrderId = pendingOrderId.value,
                                             onPendingOrderHandled = { pendingOrderId.value = null },

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,7 +43,9 @@ import com.techaus.afamfresh.viewmodel.SurplusViewModel
 fun SurplusOrdersScreen(
     surplusViewModel: SurplusViewModel,
     userId: Int?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** Opens live tracking. Only offered while the order is actually moving. */
+    onTrackOrder: (Int) -> Unit = {}
 ) {
     val orders by surplusViewModel.myOrders.collectAsState()
     val isLoading by surplusViewModel.ordersLoading.collectAsState()
@@ -97,7 +100,9 @@ fun SurplusOrdersScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(orders, key = { it.id }) { order -> OrderCard(order) }
+                        items(orders, key = { it.id }) { order ->
+                            OrderCard(order, onTrack = { onTrackOrder(order.id) })
+                        }
                     }
             }
         }
@@ -105,7 +110,7 @@ fun SurplusOrdersScreen(
 }
 
 @Composable
-private fun OrderCard(order: SurplusOrder) {
+private fun OrderCard(order: SurplusOrder, onTrack: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -176,6 +181,18 @@ private fun OrderCard(order: SurplusOrder) {
                 fontSize = 11.sp,
                 color = InkMuted
             )
+        }
+
+        // Only while it is moving. A tracking map for a delivered order shows a
+        // journey that has finished, and for a pending one shows nothing at all.
+        if (order.hasRider && order.status !in setOf("delivered", "cancelled", "refunded")) {
+            Spacer(Modifier.height(10.dp))
+            FilledTonalButton(onClick = onTrack, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.LocationOn, contentDescription = null,
+                     modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Track this delivery")
+            }
         }
     }
 }

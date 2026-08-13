@@ -332,15 +332,21 @@ dependencies {
     "riderImplementation"("com.google.android.gms:play-services-location:21.3.0")
     "riderImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 
-    "customerImplementation"("com.google.maps.android:maps-compose:4.3.0")
-    "customerImplementation"("com.google.android.gms:play-services-maps:18.2.0")
-
-    // The vendor app draws one map: the pin marking where a rider collects a
-    // surplus load. Scoped rather than promoted to `implementation` so the
-    // rider APK does not carry a Maps SDK it never opens — the rider is given
-    // addresses and hands off to whatever navigation app is installed.
-    "vendorImplementation"("com.google.maps.android:maps-compose:4.3.0")
-    "vendorImplementation"("com.google.android.gms:play-services-maps:18.2.0")
+    // Maps, in all three apps.
+    //
+    // These were flavour-scoped, and the argument for that was sound while ONE
+    // screen in ONE app drew a map: compiler-enforced isolation for a dependency
+    // most of the build did not need. All three draw maps now — the customer
+    // tracks a delivery, the vendor pins their premises, the rider navigates —
+    // so scoping would mean the shared map package could not live in src/main
+    // and the same styling, polyline and marker code would be copy-pasted into
+    // three source sets. That is precisely the failure mode this file already
+    // documents having paid for once.
+    //
+    // play-services-location stays rider-only below: only the rider streams a
+    // position.
+    implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

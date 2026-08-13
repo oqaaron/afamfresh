@@ -6,6 +6,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.techaus.afamfresh.models.DeliveryResult
 import com.techaus.afamfresh.ui.screens.DeliveryMapScreen
+import com.techaus.afamfresh.ui.screens.OrderTrackingScreen
 import com.techaus.afamfresh.utils.OrderCalc
 
 /**
@@ -19,11 +20,23 @@ import com.techaus.afamfresh.utils.OrderCalc
 fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     val nav = deps.navController
 
-    // The same map, returning to surplus checkout instead of the cart's.
-    //
-    // A separate route rather than a parameter on the shop one: they differ in
-    // where they go back to, and the surplus fee is computed server-side at
-    // quote time, so the shop's cart-subtotal quote is meaningless here.
+    // Live tracking. Customer-only: the rider has their own navigation screen,
+    // and the vendor has no reason to watch a delivery move.
+    composable("track/{orderId}/{source}") { backStackEntry ->
+        val orderId = backStackEntry.arguments?.getString("orderId")?.toIntOrNull()
+        val source = backStackEntry.arguments?.getString("source") ?: "order"
+        if (orderId == null) {
+            nav.popBackStack()
+        } else {
+            OrderTrackingScreen(
+                orderId = orderId,
+                source = source,
+                trackingViewModel = deps.trackingViewModel,
+                onBack = { nav.popBackStack() }
+            )
+        }
+    }
+
     composable("surplus_delivery_map/{listingId}") { backStackEntry ->
         val listingId = backStackEntry.arguments?.getString("listingId").orEmpty()
         DeliveryMapScreen(

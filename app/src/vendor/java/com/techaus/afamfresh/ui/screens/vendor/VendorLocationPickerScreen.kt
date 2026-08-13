@@ -14,12 +14,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.techaus.afamfresh.ui.map.rememberAfamFreshMapProperties
+import com.techaus.afamfresh.ui.map.rememberAfamFreshMapUiSettings
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.GkmaBounds
 
@@ -91,7 +91,8 @@ fun VendorLocationPickerScreen(
                     // Same box the server enforces in includes/service_area.php.
                     // A vendor outside Greater Kampala would price every one of
                     // their listings off a journey no rider makes.
-                    properties = MapProperties(latLngBoundsForCameraTarget = GKMA_BOUNDS),
+                    properties = rememberAfamFreshMapProperties(),
+                    uiSettings = rememberAfamFreshMapUiSettings(),
                     onMapClick = { latLng ->
                         if (GkmaBounds.contains(latLng.latitude, latLng.longitude)) {
                             outOfArea = false
@@ -148,9 +149,3 @@ fun VendorLocationPickerScreen(
         }
     }
 }
-
-/** Built from [GkmaBounds] so map and server cannot drift apart. */
-private val GKMA_BOUNDS = LatLngBounds(
-    LatLng(GkmaBounds.SOUTH, GkmaBounds.WEST),
-    LatLng(GkmaBounds.NORTH, GkmaBounds.EAST)
-)

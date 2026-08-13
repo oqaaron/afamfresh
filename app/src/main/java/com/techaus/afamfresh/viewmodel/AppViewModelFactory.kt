@@ -15,6 +15,7 @@ import com.techaus.afamfresh.repository.PaymentRepository
 import com.techaus.afamfresh.repository.ProductRepository
 import com.techaus.afamfresh.repository.RiderRepository
 import com.techaus.afamfresh.repository.SurplusRepository
+import com.techaus.afamfresh.repository.TrackingRepository
 import com.techaus.afamfresh.repository.VendorRepository
 
 /**
@@ -56,6 +57,7 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
     private val productRepository = ProductRepository(apiService)
     private val orderRepository = OrderRepository(apiService)
     private val surplusRepository = SurplusRepository(apiService)
+    private val trackingRepository = TrackingRepository(apiService)
     private val paymentRepository = PaymentRepository(apiService)
     private val vendorRepository = VendorRepository(apiService)
 
@@ -88,6 +90,9 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
 
             modelClass.isAssignableFrom(SurplusViewModel::class.java) ->
                 SurplusViewModel(surplusRepository)
+
+            modelClass.isAssignableFrom(TrackingViewModel::class.java) ->
+                TrackingViewModel(trackingRepository)
 
             modelClass.isAssignableFrom(CartViewModel::class.java) ->
                 CartViewModel()

@@ -1,16 +1,16 @@
 package com.techaus.afamfresh.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -85,14 +85,27 @@ fun SplashScreen(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "AfamFresh",
+            // brand_mark is per-flavour: each app shows its own icon here, so a
+            // rider opening the app is not greeted by the customer branding.
+            //
+            // On a white disc, because the marks are mid-greens and this screen
+            // is Forest (#1B7A3D). Green on green would be close to unreadable.
+            // The source artwork was drawn on a white plate for the same reason,
+            // so this restores the contrast the launcher icon gets from its own
+            // white background.
+            Box(
                 modifier = Modifier
-                    .size(120.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .padding(16.dp)
-            )
+                    .size(150.dp)
+                    .clip(CircleShape)
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.brand_mark),
+                    contentDescription = "AfamFresh",
+                    modifier = Modifier.size(108.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = "AfamFresh",

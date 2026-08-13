@@ -7,6 +7,7 @@ import com.techaus.afamfresh.viewmodel.DeliveryResultViewModel
 import com.techaus.afamfresh.viewmodel.NotificationViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
 import com.techaus.afamfresh.viewmodel.RiderViewModel
+import com.techaus.afamfresh.viewmodel.TrackingViewModel
 import com.techaus.afamfresh.viewmodel.VendorViewModel
 
 /**
@@ -48,4 +49,10 @@ data class FlavorRouteDeps(
      * than inventing them, so the Add-to-inventory screen picks from here.
      */
     val productViewModel: ProductViewModel,
+    /**
+     * Live delivery tracking. Customer-only in practice — the tracking screen
+     * is registered in the customer flavor — but supplied to all three because
+     * the signature has to match across them.
+     */
+    val trackingViewModel: TrackingViewModel,
 )

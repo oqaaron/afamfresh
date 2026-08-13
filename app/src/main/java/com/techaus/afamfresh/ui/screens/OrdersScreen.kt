@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,15 +33,28 @@ import com.techaus.afamfresh.viewmodel.OrderViewModel
 fun OrdersScreen(
     orderViewModel: OrderViewModel,
     onBack: () -> Unit,
-    onEditOrder: (String) -> Unit
+    onEditOrder: (String) -> Unit,
+    /** Opens live tracking. Only offered on orders that are actually moving. */
+    onTrackOrder: (String) -> Unit = {}
 ) {
     val orders by orderViewModel.orders.collectAsState()
     val isLoading by orderViewModel.isLoading.collectAsState()
     val error by orderViewModel.error.collectAsState()
     val canRetry by orderViewModel.canRetry.collectAsState()
 
+    // Reloaded on a slow loop, not once.
+    //
+    // This was a single load on first composition. A customer who opened the
+    // list before a rider was dispatched would never see the Track button
+    // appear, because nothing ever re-read the list — which made the feature
+    // invisible to exactly the people waiting on a delivery. Sixty seconds is
+    // slow enough to be free and fast enough that a dispatch shows up while
+    // someone is still looking at the screen.
     LaunchedEffect(Unit) {
-        orderViewModel.loadOrders()
+        while (true) {
+            orderViewModel.loadOrders()
+            kotlinx.coroutines.delay(60_000L)
+        }
     }
 
     Scaffold(
@@ -81,7 +95,11 @@ fun OrdersScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(orders, key = { it.id }) { order ->
-                            OrderRow(order = order, onClick = { onEditOrder(order.id) })
+                            OrderRow(
+                                order = order,
+                                onClick = { onEditOrder(order.id) },
+                                onTrack = { onTrackOrder(order.id) }
+                            )
                         }
                         item { Spacer(modifier = Modifier.height(20.dp)) }
                     }
@@ -92,7 +110,14 @@ fun OrdersScreen(
 }
 
 @Composable
-private fun OrderRow(order: Order, onClick: () -> Unit) {
+private fun OrderRow(order: Order, onClick: () -> Unit, onTrack: () -> Unit) {
+    // Offered only while the order is actually moving. A "Track" button on a
+    // delivered order leads to a map of a journey that has finished, and on a
+    // pending one to a map with nothing on it.
+    val trackable = order.status.lowercase() in setOf(
+        "out for delivery", "on way", "on the way", "preparing", "ready", "shipped"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -110,9 +135,26 @@ private fun OrderRow(order: Order, onClick: () -> Unit) {
             Text(it, fontSize = 12.sp, color = InkMuted)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("${order.items.size} item(s)", fontSize = 13.sp, color = InkMuted)
             Text(formatUgx(order.total), fontWeight = FontWeight.Bold, color = Ink)
+        }
+
+        if (trackable) {
+            Spacer(modifier = Modifier.height(10.dp))
+            FilledTonalButton(
+                onClick = onTrack,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.LocationOn, contentDescription = null,
+                     modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Track this delivery")
+            }
         }
     }
 }

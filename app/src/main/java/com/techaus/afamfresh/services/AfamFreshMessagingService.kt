@@ -13,6 +13,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.techaus.afamfresh.MainActivity
 import com.techaus.afamfresh.R
+import com.techaus.afamfresh.utils.DeliveryPushBus
 import com.techaus.afamfresh.utils.FirebaseTokenManager
 import kotlin.random.Random
 
@@ -68,9 +69,22 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
         }
 
         val data = message.data
+        val orderId = data["order_id"]
+
+        // Delivery transitions come in ahead of the body check on purpose.
+        //
+        // The server sends these as data-only so an open tracking screen can be
+        // nudged without a duplicate notification; the `?: return` below would
+        // otherwise swallow every one of them before anything saw the payload.
+        if (data["type"] == "delivery_status") {
+            val id = orderId?.toIntOrNull()
+            if (id != null) {
+                DeliveryPushBus.publish(id, data["source"] ?: "order")
+            }
+        }
+
         val title = data["title"] ?: message.notification?.title ?: "AfamFresh"
         val body = data["body"] ?: message.notification?.body ?: return
-        val orderId = data["order_id"]
 
         showNotification(title, body, orderId)
     }

@@ -775,11 +775,41 @@ interface ApiService {
     @GET("config.php")
     fun getAppConfig(): Call<AppConfigResponse>
 
+    // ============================================================
+    // LIVE TRACKING
+    // ============================================================
+
+    /**
+     * Where a delivery is right now.
+     *
+     * Permission is resolved server-side FROM THE ORDER — its customer, its
+     * rider, or an admin — so passing someone else's order id answers 403 with
+     * the same wording as an order that does not exist.
+     *
+     * `since` returns only breadcrumbs newer than that timestamp, which keeps a
+     * steady-state poll to a few hundred bytes. The response carries
+     * `poll_after_seconds`; obey it rather than choosing an interval here.
+     */
+    @GET("tracking.php")
+    fun getOrderTracking(
+        @Query("order_id") orderId: Int,
+        @Query("source") source: String = ORDER_TYPE_SHOP_TRACKING,
+        @Query("since") since: String? = null
+    ): Call<TrackingResponse>
+
     companion object {
         /** payment.php `order_type`: the `orders` table. The server's default. */
         const val ORDER_TYPE_SHOP = "shop"
 
         /** payment.php `order_type`: the `surplus_orders` table. */
         const val ORDER_TYPE_SURPLUS = "surplus"
+
+        /**
+         * tracking.php and rider.php use `source`, whose shop value is "order"
+         * — NOT payment.php's "shop". Two different endpoints, two vocabularies;
+         * naming them separately is cheaper than one of them being silently
+         * wrong.
+         */
+        const val ORDER_TYPE_SHOP_TRACKING = "order"
     }
 }

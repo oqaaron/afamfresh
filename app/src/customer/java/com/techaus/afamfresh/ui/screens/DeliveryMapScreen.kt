@@ -19,11 +19,13 @@ import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MapsComposeExperimentalApi
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.android.gms.maps.model.LatLngBounds
+import com.techaus.afamfresh.ui.map.DropoffMarker
+import com.techaus.afamfresh.ui.map.PickupMarker
+import com.techaus.afamfresh.ui.map.rememberAfamFreshMapProperties
+import com.techaus.afamfresh.ui.map.rememberAfamFreshMapUiSettings
 import com.techaus.afamfresh.utils.GkmaBounds
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.config.DeliveryConfig
@@ -45,6 +47,7 @@ private const val TAG = "DeliveryMap"
 // Signature confirmed exactly from MainScreen.kt's composable("delivery_map"):
 //   onLocationSelected(pickupAddress, dropoffAddress, pickupLat, pickupLng,
 //                      dropoffLat, dropoffLng, distanceKm, totalCost)
+@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 fun DeliveryMapScreen(
     onBack: () -> Unit,
@@ -169,10 +172,8 @@ fun DeliveryMapScreen(
                     // box is enforced server-side in includes/service_area.php,
                     // because coordinates travel in a request body and this
                     // restriction is a convenience rather than a control.
-                    properties = MapProperties(
-                        isMyLocationEnabled = false,
-                        latLngBoundsForCameraTarget = GKMA_CAMERA_BOUNDS
-                    ),
+                    properties = rememberAfamFreshMapProperties(),
+                    uiSettings = rememberAfamFreshMapUiSettings(),
                     onMapClick = { latLng ->
                         if (GkmaBounds.contains(latLng.latitude, latLng.longitude)) {
                             outOfArea = false
@@ -184,13 +185,13 @@ fun DeliveryMapScreen(
                         }
                     }
                 ) {
-                    Marker(
+                    PickupMarker(
                         state = MarkerState(position = pickupLatLng),
-                        title = "Pickup",
-                        snippet = DeliveryConfig.PICKUP_LABEL
+                        label = "Pickup",
+                        sub = DeliveryConfig.PICKUP_LABEL
                     )
                     dropoff?.let {
-                        Marker(state = MarkerState(position = it), title = "Delivery here")
+                        DropoffMarker(state = MarkerState(position = it), label = "Delivery here")
                     }
                 }
 
@@ -341,14 +342,3 @@ private suspend fun reverseGeocode(point: LatLng): String = withContext(Dispatch
 
     "%.5f, %.5f".format(point.latitude, point.longitude)
 }
-
-/**
- * The camera cannot leave Greater Kampala.
- *
- * Built from [GkmaBounds] so the map and the server agree; if they drifted, a
- * customer could pin a point the map allowed and then be refused at checkout.
- */
-private val GKMA_CAMERA_BOUNDS = LatLngBounds(
-    LatLng(GkmaBounds.SOUTH, GkmaBounds.WEST),
-    LatLng(GkmaBounds.NORTH, GkmaBounds.EAST)
-)

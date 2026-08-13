@@ -47,6 +47,7 @@ fun MainScreen(
     roleGateViewModel: RoleGateViewModel,
     addressViewModel: AddressViewModel,
     notificationViewModel: NotificationViewModel,
+    trackingViewModel: TrackingViewModel,
     deliveryRepository: DeliveryRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
     pendingOrderId: String? = null,
@@ -232,6 +233,11 @@ fun MainScreen(
                     onBack = { navController.navigate("home") },
                     onEditOrder = { orderId ->
                         navController.navigate("edit_order/$orderId")
+                    },
+                    // "order" is tracking.php's vocabulary for a shop order —
+                    // NOT payment.php's "shop". Two endpoints, two words.
+                    onTrackOrder = { orderId ->
+                        navController.navigate("track/$orderId/order")
                     }
                 )
             }
@@ -397,7 +403,8 @@ fun MainScreen(
                 SurplusOrdersScreen(
                     surplusViewModel = surplusViewModel,
                     userId = user?.id?.toIntOrNull(),
-                    onBack = { navController.navigate("surplus") }
+                    onBack = { navController.navigate("surplus") },
+                    onTrackOrder = { orderId -> navController.navigate("track/$orderId/surplus") }
                 )
             }
 
@@ -462,6 +469,7 @@ fun MainScreen(
                     deliveryRepository = deliveryRepository,
                     notificationViewModel = notificationViewModel,
                     productViewModel = productViewModel,
+                    trackingViewModel = trackingViewModel,
                 )
             )
 
