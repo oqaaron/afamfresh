@@ -31,6 +31,7 @@ require_once __DIR__ . '/auth_check.php';
 requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/rider_dispatch.php';
 
 $flash = '';
 $flashError = '';
@@ -99,6 +100,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "INSERT INTO rider_assignments (order_id, source, rider_id, status)
                          VALUES (?, 'surplus', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
+
+                    // Fetched now rather than left for the picked_up transition,
+                    // so the rider's Navigate screen and the customer's tracking
+                    // map both have a route to draw from the moment of dispatch.
+                    cacheAssignmentRoute($dbh, 'surplus', $orderId, (int)$dbh->lastInsertId());
                 }
 
                 $dbh->prepare(

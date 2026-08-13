@@ -58,6 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "INSERT INTO rider_assignments (order_id, source, rider_id, status)
                          VALUES (?, 'order', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
+
+                    // Fetched now rather than left for the picked_up transition,
+                    // so the rider's Navigate screen and the customer's tracking
+                    // map both have a route to draw from the moment of dispatch.
+                    require_once __DIR__ . '/../includes/rider_dispatch.php';
+                    cacheAssignmentRoute($dbh, 'order', $orderId, (int)$dbh->lastInsertId());
                 }
 
                 // delivery_person is kept in step because the customer's order
