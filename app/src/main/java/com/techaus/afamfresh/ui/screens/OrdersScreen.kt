@@ -35,7 +35,10 @@ fun OrdersScreen(
     onBack: () -> Unit,
     onEditOrder: (String) -> Unit,
     /** Opens live tracking. Only offered on orders that are actually moving. */
-    onTrackOrder: (String) -> Unit = {}
+    onTrackOrder: (String) -> Unit = {},
+    /** Opens the confirm-and-rate screen. Offered once the rider has uploaded
+     *  proof of delivery and the customer has not yet confirmed it. */
+    onConfirmReceipt: (String) -> Unit = {}
 ) {
     val orders by orderViewModel.orders.collectAsState()
     val isLoading by orderViewModel.isLoading.collectAsState()
@@ -98,7 +101,8 @@ fun OrdersScreen(
                             OrderRow(
                                 order = order,
                                 onClick = { onEditOrder(order.id) },
-                                onTrack = { onTrackOrder(order.id) }
+                                onTrack = { onTrackOrder(order.id) },
+                                onConfirmReceipt = { onConfirmReceipt(order.id) }
                             )
                         }
                         item { Spacer(modifier = Modifier.height(20.dp)) }
@@ -110,7 +114,12 @@ fun OrdersScreen(
 }
 
 @Composable
-private fun OrderRow(order: Order, onClick: () -> Unit, onTrack: () -> Unit) {
+private fun OrderRow(
+    order: Order,
+    onClick: () -> Unit,
+    onTrack: () -> Unit,
+    onConfirmReceipt: () -> Unit = {}
+) {
     // Offered only while the order is actually moving. A "Track" button on a
     // delivered order leads to a map of a journey that has finished, and on a
     // pending one to a map with nothing on it.
@@ -154,6 +163,18 @@ private fun OrderRow(order: Order, onClick: () -> Unit, onTrack: () -> Unit) {
                      modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Track this delivery")
+            }
+        }
+
+        // Delivered by the rider, not yet confirmed by the customer.
+        if (order.needsReceiptConfirmation) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = onConfirmReceipt,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Forest)
+            ) {
+                Text("Confirm & Rate", color = Color.White)
             }
         }
     }

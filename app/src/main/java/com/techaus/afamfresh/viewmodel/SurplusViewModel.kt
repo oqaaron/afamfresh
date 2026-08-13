@@ -182,4 +182,27 @@ class SurplusViewModel(
             }
         }
     }
+
+    fun confirmReceipt(
+        orderId: Int,
+        userId: Int,
+        rating: Int?,
+        ratingSpeed: Int?,
+        ratingProfessionalism: Int?,
+        ratingPackaging: Int?,
+        feedback: String?,
+        emojiReaction: String?,
+        photoBytes: ByteArray?,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        _ordersLoading.value = true
+        surplusRepository.confirmReceipt(
+            orderId, userId, rating, ratingSpeed, ratingProfessionalism, ratingPackaging,
+            feedback, emojiReaction, photoBytes
+        ) { success, error ->
+            _ordersLoading.value = false
+            if (success) loadMyOrders(userId)
+            onResult(success, error?.userMessage)
+        }
+    }
 }

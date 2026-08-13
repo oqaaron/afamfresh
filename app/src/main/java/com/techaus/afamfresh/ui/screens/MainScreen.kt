@@ -238,6 +238,9 @@ fun MainScreen(
                     // NOT payment.php's "shop". Two endpoints, two words.
                     onTrackOrder = { orderId ->
                         navController.navigate("track/$orderId/order")
+                    },
+                    onConfirmReceipt = { orderId ->
+                        navController.navigate("confirm_receipt/order/$orderId")
                     }
                 )
             }
@@ -451,7 +454,30 @@ fun MainScreen(
                     surplusViewModel = surplusViewModel,
                     userId = user?.id?.toIntOrNull(),
                     onBack = { navController.navigate("surplus") },
-                    onTrackOrder = { orderId -> navController.navigate("track/$orderId/surplus") }
+                    onTrackOrder = { orderId -> navController.navigate("track/$orderId/surplus") },
+                    onConfirmReceipt = { orderId ->
+                        navController.navigate("confirm_receipt/surplus/$orderId")
+                    }
+                )
+            }
+
+            // ===== CONFIRM RECEIPT (shop and surplus) =====
+            //
+            // Reached from a "Confirm & Rate" button offered once the rider has
+            // uploaded proof of delivery — see Order.needsReceiptConfirmation /
+            // SurplusOrder.needsReceiptConfirmation. "order" / "surplus" is
+            // tracking.php's vocabulary already used by the track/... route.
+            if (isCustomerApp) composable("confirm_receipt/{orderType}/{orderId}") { backStackEntry ->
+                val orderType = backStackEntry.arguments?.getString("orderType") ?: "order"
+                val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
+                ConfirmReceiptScreen(
+                    orderId = orderId,
+                    orderType = orderType,
+                    userId = user?.id?.toIntOrNull(),
+                    orderViewModel = orderViewModel,
+                    surplusViewModel = surplusViewModel,
+                    onBack = { navController.popBackStack() },
+                    onDone = { navController.popBackStack() }
                 )
             }
 

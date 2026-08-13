@@ -59,7 +59,15 @@ data class Order(
     @SerializedName("delivery_person") val deliveryPerson: String? = null,
     @SerializedName("estimated_delivery") val estimatedDelivery: String? = null,
     @SerializedName("dest_lat") val destLat: Double? = null,
-    @SerializedName("dest_lng") val destLng: Double? = null
+    @SerializedName("dest_lng") val destLng: Double? = null,
+
+    // ----- customer confirm-and-rate -----
+    // `deliveryConfirmed` is the RIDER's proof-of-delivery attestation, not
+    // the customer's — see includes/order_feedback.php on the server. Once
+    // true, and `completedAt` is still null, the app can offer "Confirm & Rate".
+    @SerializedName("delivery_confirmed") val deliveryConfirmed: Boolean = false,
+    @SerializedName("completed_at") val completedAt: String? = null,
+    @SerializedName("customer_rating") val customerRating: Int? = null
 ) {
     /** Everything charged on top of the goods. */
     val totalFees: Double
@@ -83,6 +91,10 @@ data class Order(
 
     val customerName: String
         get() = listOfNotNull(fname, lname).joinToString(" ").trim()
+
+    /** Delivered by the rider, not yet confirmed by the customer. */
+    val needsReceiptConfirmation: Boolean
+        get() = deliveryConfirmed && completedAt == null
 }
 
 /**

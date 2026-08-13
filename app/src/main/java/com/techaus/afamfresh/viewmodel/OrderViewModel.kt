@@ -73,4 +73,26 @@ class OrderViewModel(
             onResult(success, error?.userMessage)
         }
     }
+
+    fun confirmReceipt(
+        orderId: String,
+        rating: Int?,
+        ratingSpeed: Int?,
+        ratingProfessionalism: Int?,
+        ratingPackaging: Int?,
+        feedback: String?,
+        emojiReaction: String?,
+        photoBytes: ByteArray?,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        _isLoading.value = true
+        orderRepository.confirmReceipt(
+            orderId, rating, ratingSpeed, ratingProfessionalism, ratingPackaging,
+            feedback, emojiReaction, photoBytes
+        ) { success, error ->
+            _isLoading.value = false
+            if (success) loadOrders()
+            onResult(success, error?.userMessage)
+        }
+    }
 }

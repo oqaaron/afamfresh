@@ -45,7 +45,10 @@ fun SurplusOrdersScreen(
     userId: Int?,
     onBack: () -> Unit,
     /** Opens live tracking. Only offered while the order is actually moving. */
-    onTrackOrder: (Int) -> Unit = {}
+    onTrackOrder: (Int) -> Unit = {},
+    /** Opens the confirm-and-rate screen, once the rider has uploaded proof
+     *  of delivery and the customer has not yet confirmed it. */
+    onConfirmReceipt: (Int) -> Unit = {}
 ) {
     val orders by surplusViewModel.myOrders.collectAsState()
     val isLoading by surplusViewModel.ordersLoading.collectAsState()
@@ -101,7 +104,11 @@ fun SurplusOrdersScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(orders, key = { it.id }) { order ->
-                            OrderCard(order, onTrack = { onTrackOrder(order.id) })
+                            OrderCard(
+                                order,
+                                onTrack = { onTrackOrder(order.id) },
+                                onConfirmReceipt = { onConfirmReceipt(order.id) }
+                            )
                         }
                     }
             }
@@ -110,7 +117,11 @@ fun SurplusOrdersScreen(
 }
 
 @Composable
-private fun OrderCard(order: SurplusOrder, onTrack: () -> Unit = {}) {
+private fun OrderCard(
+    order: SurplusOrder,
+    onTrack: () -> Unit = {},
+    onConfirmReceipt: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -192,6 +203,18 @@ private fun OrderCard(order: SurplusOrder, onTrack: () -> Unit = {}) {
                      modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Track this delivery")
+            }
+        }
+
+        // Delivered by the rider, not yet confirmed by the customer.
+        if (order.needsReceiptConfirmation) {
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onConfirmReceipt,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Forest)
+            ) {
+                Text("Confirm & Rate", color = Color.White)
             }
         }
     }

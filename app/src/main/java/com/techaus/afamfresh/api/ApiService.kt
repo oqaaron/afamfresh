@@ -201,6 +201,29 @@ interface ApiService {
         @Field("order_id") orderId: String
     ): Call<BaseResponse>
 
+    /**
+     * The customer's confirm-and-rate step, once the rider has uploaded proof
+     * of delivery. The server refuses this before that (409-shaped error in
+     * the JSON body, not an HTTP code — see api/orders.php) and refuses a
+     * second call once it has already been confirmed.
+     *
+     * Multipart because the photo is optional, not because one is expected —
+     * every field but order_id may be omitted for a bare confirmation.
+     */
+    @Multipart
+    @POST("orders.php")
+    fun confirmOrderReceipt(
+        @Query("action") action: String = "confirm_receipt",
+        @Part("order_id") orderId: okhttp3.RequestBody,
+        @Part("rating") rating: okhttp3.RequestBody? = null,
+        @Part("rating_speed") ratingSpeed: okhttp3.RequestBody? = null,
+        @Part("rating_professionalism") ratingProfessionalism: okhttp3.RequestBody? = null,
+        @Part("rating_packaging") ratingPackaging: okhttp3.RequestBody? = null,
+        @Part("feedback") feedback: okhttp3.RequestBody? = null,
+        @Part("emoji_reaction") emojiReaction: okhttp3.RequestBody? = null,
+        @Part photo: okhttp3.MultipartBody.Part? = null
+    ): Call<BaseResponse>
+
     // ============================================================
     // SURPLUS ENDPOINTS (Public)
     // ============================================================
@@ -336,6 +359,31 @@ interface ApiService {
     @Headers("Content-Type: application/json")
     fun updateSurplusOrderStatus(
         @Body request: UpdateSurplusOrderStatusRequest
+    ): Call<BaseResponse>
+
+    /**
+     * The customer's confirm-and-rate step for a SURPLUS order. Mirrors
+     * [confirmOrderReceipt]; kept as its own call because it hits a different
+     * file and the server needs user_id to resolve which of the two id spaces
+     * `order_id` (shared with `orders`) actually means.
+     *
+     * A plain POST gated on ?action=confirm_receipt, not PUT — PHP does not
+     * auto-populate $_FILES for PUT/PATCH bodies, and this optionally carries
+     * a photo.
+     */
+    @Multipart
+    @POST("surplus-orders.php")
+    fun confirmSurplusReceipt(
+        @Query("action") action: String = "confirm_receipt",
+        @Part("order_id") orderId: okhttp3.RequestBody,
+        @Part("user_id") userId: okhttp3.RequestBody,
+        @Part("rating") rating: okhttp3.RequestBody? = null,
+        @Part("rating_speed") ratingSpeed: okhttp3.RequestBody? = null,
+        @Part("rating_professionalism") ratingProfessionalism: okhttp3.RequestBody? = null,
+        @Part("rating_packaging") ratingPackaging: okhttp3.RequestBody? = null,
+        @Part("feedback") feedback: okhttp3.RequestBody? = null,
+        @Part("emoji_reaction") emojiReaction: okhttp3.RequestBody? = null,
+        @Part photo: okhttp3.MultipartBody.Part? = null
     ): Call<BaseResponse>
 
     // ============================================================

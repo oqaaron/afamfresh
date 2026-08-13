@@ -222,7 +222,15 @@ data class SurplusOrder(
     @SerializedName("business_name") val businessName: String? = null,
     @SerializedName("vendor_location") val vendorLocation: String? = null,
     @SerializedName("customer_fname") val customerFirstName: String? = null,
-    @SerializedName("customer_lname") val customerLastName: String? = null
+    @SerializedName("customer_lname") val customerLastName: String? = null,
+
+    // ----- customer confirm-and-rate -----
+    // Mirrors the same pair on `orders` / Order — see includes/order_feedback.php.
+    // `so.*` already selects these once the 2026-08-13 migration lands, so no
+    // server change was needed beyond that migration to expose them here.
+    @SerializedName("delivery_confirmed") val deliveryConfirmed: Boolean = false,
+    @SerializedName("completed_at") val completedAt: String? = null,
+    @SerializedName("customer_rating") val customerRating: Int? = null
 ) {
     val customerName: String
         get() = listOfNotNull(customerFirstName, customerLastName).joinToString(" ").trim()
@@ -256,6 +264,10 @@ data class SurplusOrder(
     /** Whole numbers without a trailing ".0"; decimals to one place. */
     val quantityLabel: String
         get() = if (quantity % 1.0 == 0.0) "${quantity.toLong()}" else String.format("%.1f", quantity)
+
+    /** Delivered by the rider, not yet confirmed by the customer. */
+    val needsReceiptConfirmation: Boolean
+        get() = deliveryConfirmed && completedAt == null
 }
 
 /**
