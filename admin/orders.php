@@ -44,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $existing->execute([$orderId]);
                 $assignmentId = $existing->fetchColumn();
 
+                require_once __DIR__ . '/../includes/rider_dispatch.php';
+
                 if ($assignmentId) {
                     // Reassignment: move the order to the new rider and put the
                     // assignment back to the start of the flow.
@@ -58,13 +60,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "INSERT INTO rider_assignments (order_id, source, rider_id, status)
                          VALUES (?, 'order', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
-
-                    // Fetched now rather than left for the picked_up transition,
-                    // so the rider's Navigate screen and the customer's tracking
-                    // map both have a route to draw from the moment of dispatch.
-                    require_once __DIR__ . '/../includes/rider_dispatch.php';
-                    cacheAssignmentRoute($dbh, 'order', $orderId, (int)$dbh->lastInsertId());
+                    $assignmentId = (int)$dbh->lastInsertId();
                 }
+
+                // Fetched now rather than left for the picked_up transition, so
+                // the rider's Navigate screen and the customer's tracking map
+                // both have a route to draw as soon as possible. Self-guarding
+                // — a no-op if this assignment already has one, which covers
+                // both a fresh dispatch and reassigning an order that already
+                // had its route cached.
+                cacheAssignmentRoute($dbh, 'order', $orderId, (int)$assignmentId);
 
                 // delivery_person is kept in step because the customer's order
                 // screen and this page still display the name.

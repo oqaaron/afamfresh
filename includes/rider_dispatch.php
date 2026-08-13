@@ -249,25 +249,36 @@ function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
 }
 
 /**
- * Fetches and caches a fresh assignment's route geometry, if it does not
- * already have one.
+ * Fetches and caches an assignment's route geometry, if it does not already
+ * have one.
  *
- * Called at dispatch time (admin/orders.php, admin/surplus-orders.php) rather
- * than waiting for the rider to mark the delivery picked_up, which is where
- * this used to happen exclusively. That left a real gap: the rider's
- * Navigate screen and the customer's tracking map both had nothing to draw
- * for however long a delivery sat in "assigned". api/rider.php's own
- * picked_up-time fetch is left in place as a safety net — it only runs when
- * `route_polyline` is still empty, so it costs nothing on the normal path
- * where this function already filled it in, and still recovers a route for
- * an assignment created before this existed, or where Google was briefly
- * unreachable at dispatch time.
+ * SELF-GUARDING: callers do not need to check `route_polyline` first, and
+ * should not — every call site is expected to call this unconditionally.
+ * That matters for reassignment: the pickup and drop-off points belong to
+ * the order, not the rider carrying it, so a route already cached is still
+ * correct and this is a one-query no-op. But an assignment that has NEVER
+ * had a route cached — one created before this function existed, or one
+ * where an earlier Google call failed — genuinely needs this to run on
+ * reassignment too, or it stays routeless forever. An external `empty()`
+ * check at the call site (the original version of this function) cannot
+ * tell those two cases apart without a query of its own, so the check
+ * belongs here, once, instead of duplicated at every caller.
  *
- * Not repeated on reassignment: the pickup and drop-off points belong to the
- * order, not the rider carrying it, so whatever route is already cached
- * stays correct regardless of who is assigned next.
+ * Called at dispatch time and on reassignment (admin/orders.php,
+ * admin/surplus-orders.php) rather than waiting for the rider to mark the
+ * delivery picked_up, which is where this used to happen exclusively. That
+ * left a real gap: the rider's Navigate screen and the customer's tracking
+ * map both had nothing to draw for however long a delivery sat in
+ * "assigned". api/rider.php's own picked_up-time call is left in place as a
+ * safety net for the same reason — Google can still fail here.
  */
 function cacheAssignmentRoute(PDO $dbh, string $source, int $orderId, int $assignmentId): void {
+    $existing = $dbh->prepare("SELECT route_polyline FROM rider_assignments WHERE id = ?");
+    $existing->execute([$assignmentId]);
+    if (!empty($existing->fetchColumn())) {
+        return;
+    }
+
     $d = loadDeliverable($dbh, $source, $orderId);
     if (!$d || $d['pickup_lat'] === null || $d['pickup_lng'] === null
         || $d['dest_lat'] === null || $d['dest_lng'] === null) {
