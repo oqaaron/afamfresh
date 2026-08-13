@@ -8,6 +8,7 @@ import com.techaus.afamfresh.ui.screens.rider.RiderDashboardScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderDeliveriesScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderDeliveryDetailScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderEarningsScreen
+import com.techaus.afamfresh.ui.screens.rider.RiderNavigationScreen
 
 /**
  * Routes that exist only in the Rider app.
@@ -65,6 +66,23 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
                 orderId = orderId,
                 source = source,
                 riderViewModel = deps.riderViewModel,
+                onBack = { nav.popBackStack() },
+                onNavigate = { id, src -> nav.navigate("rider_navigate/$id/$src") }
+            )
+        }
+    }
+
+    composable("rider_navigate/{orderId}/{source}") { backStackEntry ->
+        val orderId = backStackEntry.arguments?.getString("orderId")?.toIntOrNull()
+        val source = backStackEntry.arguments?.getString("source") ?: "order"
+        if (orderId == null) {
+            nav.popBackStack()
+        } else {
+            RiderNavigationScreen(
+                orderId = orderId,
+                source = source,
+                riderViewModel = deps.riderViewModel,
+                trackingViewModel = deps.trackingViewModel,
                 onBack = { nav.popBackStack() }
             )
         }

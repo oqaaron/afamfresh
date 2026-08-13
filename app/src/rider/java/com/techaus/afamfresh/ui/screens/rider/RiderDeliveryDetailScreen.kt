@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.RiderActionState
+import com.techaus.afamfresh.services.RiderTrackingService
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
@@ -48,13 +49,27 @@ fun RiderDeliveryDetailScreen(
     // loads a different customer's delivery.
     source: String = "order",
     riderViewModel: RiderViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** Opens the in-app follow-camera map, replacing the old geo: hand-off to Google Maps. */
+    onNavigate: (Int, String) -> Unit = { _, _ -> }
 ) {
     val delivery by riderViewModel.selected.collectAsState()
     val actionState by riderViewModel.actionState.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(orderId, source) { riderViewModel.loadDelivery(orderId, source) }
+
+    // Keeps position posts going even after this screen is left, by handing
+    // off to a real Service rather than a Compose effect. "delivered" (or any
+    // other terminal status) stops it; picked_up/on_way (re)start it — see
+    // RiderTrackingService for why "on_way" alone gets the tighter cadence.
+    LaunchedEffect(delivery?.status) {
+        when (delivery?.status) {
+            "picked_up", "on_way" -> RiderTrackingService.start(context, delivery!!.status!!)
+            null -> Unit
+            else -> RiderTrackingService.stop(context)
+        }
+    }
 
     // Photo picker needs no runtime permission and falls back automatically
     // below API 30, so it works at this app's minSdk of 24 — the same choice
@@ -143,13 +158,7 @@ fun RiderDeliveryDetailScreen(
                     }
                     if (d.destLat != null && d.destLng != null) {
                         SmallAction(Icons.Default.Map, "Navigate") {
-                            val label = Uri.encode(d.addressOrDash)
-                            context.startActivity(
-                                Intent(
-                                    Intent.ACTION_VIEW,
-                                    Uri.parse("geo:${d.destLat},${d.destLng}?q=${d.destLat},${d.destLng}($label)")
-                                )
-                            )
+                            onNavigate(orderId, source)
                         }
                     }
                 }
@@ -243,6 +252,32 @@ fun RiderDeliveryDetailScreen(
                     fontSize = 13.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            val cashConfirm = actionState as? RiderActionState.NeedsCashConfirm
+            if (cashConfirm != null) {
+                AlertDialog(
+                    onDismissRequest = { riderViewModel.clearActionState() },
+                    title = { Text("Confirm cash collected") },
+                    text = {
+                        Text(
+                            "Collect ${formatUgx(cashConfirm.amount)} in cash from the " +
+                                "customer. Confirm you have received it in full before " +
+                                "marking this delivered."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            riderViewModel.advance(
+                                cashConfirm.orderId, "delivered", cashConfirm.source,
+                                cashCollected = true
+                            )
+                        }) { Text("I've collected the cash") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { riderViewModel.clearActionState() }) { Text("Not yet") }
+                    }
+                )
             }
 
             val next = d.nextStage

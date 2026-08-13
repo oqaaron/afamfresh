@@ -179,7 +179,10 @@ data class UpdateDeliveryStatusResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("status") val status: String? = null,
     @SerializedName("order_status") val orderStatus: String? = null,
-    @SerializedName("error") val error: String? = null
+    @SerializedName("error") val error: String? = null,
+    // "CASH_NOT_CONFIRMED" tells the app to open the confirm-collection sheet
+    // rather than showing this as a generic failure. See api/rider.php.
+    @SerializedName("code") val code: String? = null
 )
 
 data class ProofUploadResponse(
@@ -194,6 +197,9 @@ sealed class RiderActionState {
     object Working : RiderActionState()
     object Done : RiderActionState()
     data class Error(val message: String) : RiderActionState()
+
+    /** The server refused to mark this delivered until cash is confirmed collected. */
+    data class NeedsCashConfirm(val orderId: Int, val source: String, val amount: Double) : RiderActionState()
 }
 
 // =============================================================

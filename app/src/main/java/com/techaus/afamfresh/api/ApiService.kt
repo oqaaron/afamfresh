@@ -688,7 +688,11 @@ interface ApiService {
         @Query("action") action: String = "update_status",
         @Field("order_id") orderId: Int,
         @Field("status") status: String,
-        @Field("source") source: String = "order"
+        @Field("source") source: String = "order",
+        // Only meaningful on the transition to "delivered" for an order that
+        // was pending_cash — the server ignores it otherwise. Sent as "1" once
+        // the rider has confirmed they physically hold the cash.
+        @Field("cash_collected") cashCollected: String? = null
     ): Call<UpdateDeliveryStatusResponse>
 
     @POST("rider.php")
@@ -704,7 +708,13 @@ interface ApiService {
     fun postRiderLocation(
         @Query("action") action: String = "location",
         @Field("lat") lat: Double,
-        @Field("lng") lng: Double
+        @Field("lng") lng: Double,
+        // Optional quality metadata. The server drops trail points worse than
+        // 100m of accuracy — without it, GPS wobble reads as the rider
+        // teleporting on the customer's map.
+        @Field("accuracy") accuracy: Float? = null,
+        @Field("speed") speed: Float? = null,
+        @Field("heading") heading: Float? = null
     ): Call<BaseResponse>
 
     // Same hardening as the avatar upload: the server sniffs the real MIME

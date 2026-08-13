@@ -76,7 +76,14 @@ fun RiderLocationUpdates(
 
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { riderViewModel.postLocation(it.latitude, it.longitude) }
+                result.lastLocation?.let {
+                    riderViewModel.postLocation(
+                        it.latitude, it.longitude,
+                        accuracy = if (it.hasAccuracy()) it.accuracy else null,
+                        speed = if (it.hasSpeed()) it.speed else null,
+                        heading = if (it.hasBearing()) it.bearing else null
+                    )
+                }
             }
         }
 

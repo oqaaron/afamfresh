@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Only the rider app runs a foreground location service, so these stay
+         out of src/main. FOREGROUND_SERVICE_LOCATION is mandatory at
+         targetSdk 34 for any service declaring foregroundServiceType="location". -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <application>
+        <!-- Runs only while a delivery is picked_up/on_way — see
+             RiderTrackingService's start()/stop(). A persistent notification
+             is mandatory while it's alive, satisfied by RiderDashboardScreen
+             and RiderDeliveryDetailScreen both having posted notification
+             permission requests already for FCM. -->
+        <service
+            android:name=".services.RiderTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+    </application>
+
+</manifest>

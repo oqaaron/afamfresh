@@ -7,10 +7,18 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+    <!-- ACCESS_BACKGROUND_LOCATION removed: it was declared but never
+         requested, and a Play policy flag on all three apps for it. The rider
+         flavor's foreground tracking service gives continuous location while
+         a delivery is active without needing it. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Required on API 33+ for any posted notification, including FCM's.
+         MainActivity and AfamFreshMessagingService already request/handle
+         this at runtime; without the manifest declaration that request was
+         silently ungrantable. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"

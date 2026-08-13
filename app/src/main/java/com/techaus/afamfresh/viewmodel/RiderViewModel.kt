@@ -114,16 +114,27 @@ class RiderViewModel(
         orderId: Int,
         status: String,
         source: String = "order",
+        cashCollected: Boolean = false,
         onDone: (Boolean) -> Unit = {}
     ) {
         _actionState.value = RiderActionState.Working
-        repository.updateDeliveryStatus(orderId, status, source) { ok, message ->
-            if (ok) {
-                _actionState.value = RiderActionState.Done
-                loadDelivery(orderId, source)
-                refreshListsOnly()
-            } else {
-                _actionState.value = RiderActionState.Error(message ?: "Could not update the delivery.")
+        repository.updateDeliveryStatus(orderId, status, source, cashCollected) { ok, message, code ->
+            when {
+                ok -> {
+                    _actionState.value = RiderActionState.Done
+                    loadDelivery(orderId, source)
+                    refreshListsOnly()
+                }
+                code == "CASH_NOT_CONFIRMED" -> {
+                    // The amount to show comes from the delivery already loaded
+                    // on screen, not the error message text — parsing UGX back
+                    // out of a sentence the server is free to reword is fragile.
+                    val amount = _selected.value?.totalAmount ?: 0.0
+                    _actionState.value = RiderActionState.NeedsCashConfirm(orderId, source, amount)
+                }
+                else -> {
+                    _actionState.value = RiderActionState.Error(message ?: "Could not update the delivery.")
+                }
             }
             onDone(ok)
         }
@@ -145,8 +156,8 @@ class RiderViewModel(
         }
     }
 
-    fun postLocation(lat: Double, lng: Double) {
-        repository.postLocation(lat, lng) { ok ->
+    fun postLocation(lat: Double, lng: Double, accuracy: Float? = null, speed: Float? = null, heading: Float? = null) {
+        repository.postLocation(lat, lng, accuracy, speed, heading) { ok ->
             if (!ok) Log.w("RiderViewModel", "location post failed")
         }
     }

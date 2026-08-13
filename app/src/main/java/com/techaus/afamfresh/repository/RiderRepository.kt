@@ -93,16 +93,21 @@ class RiderRepository(
         orderId: Int,
         status: String,
         source: String = "order",
-        onResult: (Boolean, String?) -> Unit
+        cashCollected: Boolean = false,
+        onResult: (Boolean, String?, String?) -> Unit
     ) {
-        api.updateDeliveryStatus(orderId = orderId, status = status, source = source)
-            .enqueueApi(TAG, "update status") { body, error ->
-                when {
-                    body?.success == true -> onResult(true, null)
-                    body != null -> onResult(false, body.error ?: "Could not update the delivery.")
-                    else -> onResult(false, error?.userMessage ?: "Could not update the delivery.")
-                }
+        api.updateDeliveryStatus(
+            orderId = orderId,
+            status = status,
+            source = source,
+            cashCollected = if (cashCollected) "1" else null
+        ).enqueueApi(TAG, "update status") { body, error ->
+            when {
+                body?.success == true -> onResult(true, null, null)
+                body != null -> onResult(false, body.error ?: "Could not update the delivery.", body.code)
+                else -> onResult(false, error?.userMessage ?: "Could not update the delivery.", null)
             }
+        }
     }
 
     fun setDutyStatus(online: Boolean, onResult: (Boolean, String?) -> Unit) {
@@ -121,10 +126,18 @@ class RiderRepository(
      * repeatedly while on duty, and a transient failure is not worth
      * interrupting the rider for.
      */
-    fun postLocation(lat: Double, lng: Double, onResult: (Boolean) -> Unit = {}) {
-        api.postRiderLocation(lat = lat, lng = lng).enqueueApi(TAG, "location") { body, _ ->
-            onResult(body?.success == true)
-        }
+    fun postLocation(
+        lat: Double,
+        lng: Double,
+        accuracy: Float? = null,
+        speed: Float? = null,
+        heading: Float? = null,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        api.postRiderLocation(lat = lat, lng = lng, accuracy = accuracy, speed = speed, heading = heading)
+            .enqueueApi(TAG, "location") { body, _ ->
+                onResult(body?.success == true)
+            }
     }
 
     fun uploadProof(
