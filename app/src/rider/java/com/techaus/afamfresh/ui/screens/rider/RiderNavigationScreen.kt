@@ -127,6 +127,16 @@ fun RiderNavigationScreen(
     val dropoff = delivery?.destLat?.let { lat ->
         delivery?.destLng?.let { lng -> LatLng(lat, lng) }
     }
+    // Real geometry is fetched once, server-side, at dispatch time (falling
+    // back to the picked_up transition for older assignments) — see
+    // cacheAssignmentRoute() in includes/rider_dispatch.php. If that fetch
+    // failed (Google briefly unreachable) there is still no polyline to
+    // decode, and this screen used to just show nothing in that gap. The
+    // dashed line, drawn from api/tracking.php's own pickup/dropoff
+    // coordinates, gives an honest "approximate" line instead of a blank map.
+    val pickup = tracking?.pickup?.let { p ->
+        if (p.lat != null && p.lng != null) LatLng(p.lat, p.lng) else null
+    }
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(GKMA_CENTER, 15f)
@@ -197,11 +207,14 @@ fun RiderNavigationScreen(
                     uiSettings = rememberAfamFreshMapUiSettings(allowScroll = true),
                     onMapClick = { following = false }
                 ) {
-                    if (route.size >= 2) {
-                        val progressIndex = myLat?.let { lat ->
-                            myLng?.let { lng -> nearestPointIndex(route, lat, lng) }
-                        } ?: 0
-                        RoutePolyline(points = route, progressIndex = progressIndex)
+                    when {
+                        route.size >= 2 -> {
+                            val progressIndex = myLat?.let { lat ->
+                                myLng?.let { lng -> nearestPointIndex(route, lat, lng) }
+                            } ?: 0
+                            RoutePolyline(points = route, progressIndex = progressIndex)
+                        }
+                        pickup != null && dropoff != null -> ApproximateRouteLine(pickup, dropoff)
                     }
                     dropoff?.let {
                         DropoffMarker(
