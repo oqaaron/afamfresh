@@ -100,12 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         "INSERT INTO rider_assignments (order_id, source, rider_id, status)
                          VALUES (?, 'surplus', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
-
-                    // Fetched now rather than left for the picked_up transition,
-                    // so the rider's Navigate screen and the customer's tracking
-                    // map both have a route to draw from the moment of dispatch.
-                    cacheAssignmentRoute($dbh, 'surplus', $orderId, (int)$dbh->lastInsertId());
+                    $assignmentId = (int)$dbh->lastInsertId();
                 }
+
+                // Fetched now rather than left for the picked_up transition, so
+                // the rider's Navigate screen and the customer's tracking map
+                // both have a route to draw as soon as possible. Self-guarding
+                // — a no-op if this assignment already has one, which covers
+                // both a fresh dispatch and reassigning an order that already
+                // had its route cached.
+                cacheAssignmentRoute($dbh, 'surplus', $orderId, (int)$assignmentId);
 
                 $dbh->prepare(
                     "UPDATE surplus_orders SET rider_assigned_at = NOW(), updated_at = NOW() WHERE id = ?"
