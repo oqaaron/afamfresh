@@ -179,3 +179,59 @@ function revenueSummary(PDO $dbh, ?string $from = null, ?string $to = null): arr
         'by_method' => $byMethod,
     ];
 }
+
+/**
+ * Platform fees collected independently of vendor commission and rider pay —
+ * the service, insurance and processing fees folded into every delivery fee.
+ *
+ * These are NOT part of a vendor's cut (includes/vendor_earnings.php credits
+ * only on the goods total) and NOT part of a rider's cut since the
+ * carriage-only fix (includes/rider_dispatch.php's surplusRiderFeeFor(),
+ * includes/rider_earnings.php's mileageFeeFor()) — they are pure platform
+ * revenue, and until now nothing anywhere totalled them up.
+ *
+ * Only counted once money has actually settled (payment_status = 'paid'),
+ * matching revenueForTable()'s definition — a fee on an order nobody paid
+ * for was never collected.
+ *
+ * Shop orders persist these as their own columns (api/orders.php's create
+ * action). Surplus orders keep them inside the delivery_fee_breakdown JSON;
+ * older ("weight_based") rows predate these fees existing at all and simply
+ * have no such keys, which JSON_EXTRACT reports as NULL and SUM() ignores —
+ * so this is accurate for both eras of surplus order without special-casing.
+ */
+function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null): array {
+    [$shopDateSql, $shopDateParams] = revenueDateClause('ordertime', $from, $to);
+    $shopStmt = $dbh->prepare(
+        "SELECT COALESCE(SUM(service_fee), 0)    AS service_fee,
+                COALESCE(SUM(insurance_fee), 0)  AS insurance_fee,
+                COALESCE(SUM(processing_fee), 0) AS processing_fee
+           FROM orders
+          WHERE payment_status = 'paid' $shopDateSql"
+    );
+    $shopStmt->execute($shopDateParams);
+    $shop = array_map('floatval', $shopStmt->fetch(PDO::FETCH_ASSOC));
+
+    [$surplusDateSql, $surplusDateParams] = revenueDateClause('created_at', $from, $to);
+    $surplusStmt = $dbh->prepare(
+        "SELECT
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.service_fee')) AS DECIMAL(12,2))), 0)    AS service_fee,
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.insurance_fee')) AS DECIMAL(12,2))), 0)  AS insurance_fee,
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.processing_fee')) AS DECIMAL(12,2))), 0) AS processing_fee
+           FROM surplus_orders
+          WHERE payment_status = 'paid' $surplusDateSql"
+    );
+    $surplusStmt->execute($surplusDateParams);
+    $surplus = array_map('floatval', $surplusStmt->fetch(PDO::FETCH_ASSOC));
+
+    $add = fn(string $k) => $shop[$k] + $surplus[$k];
+
+    return [
+        'service_fee'    => $add('service_fee'),
+        'insurance_fee'  => $add('insurance_fee'),
+        'processing_fee' => $add('processing_fee'),
+        'total'          => $add('service_fee') + $add('insurance_fee') + $add('processing_fee'),
+        'shop'           => $shop,
+        'surplus'        => $surplus,
+    ];
+}

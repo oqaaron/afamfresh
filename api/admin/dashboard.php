@@ -11,6 +11,7 @@ require_once __DIR__ . '/../includes/revenue.php';
 
 $stats = [];
 $revenue = null;
+$platformFees = null;
 try {
     // 'Received'/'Pending', not 'pending': orders.status is written capitalised
     // everywhere, so the old lowercase comparison reported a permanent zero.
@@ -28,6 +29,7 @@ try {
     // as revenue while excluding the entire surplus channel. It now comes from
     // one shared definition — see includes/revenue.php.
     $revenue = revenueSummary($dbh);
+    $platformFees = platformFeesSummary($dbh);
 } catch (Exception $e) {
     error_log('admin dashboard stats: ' . $e->getMessage());
     $stats = [];
@@ -159,6 +161,43 @@ try {
                         Cash/electronic split unavailable — the payment_method migration has not been run.
                     </div>
                 <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($platformFees !== null): ?>
+        <!-- Fees the platform keeps, independent of vendor commission and
+             rider pay. Vendors are credited on goods only and riders are paid
+             carriage only (see includes/vendor_earnings.php,
+             includes/rider_dispatch.php) — this is the money neither of
+             them ever touches. Settled only: a fee on an order nobody paid
+             for was never actually collected. -->
+        <div class="bg-white p-5 rounded-xl shadow mb-8">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="font-semibold text-gray-800">Platform fees collected</h2>
+                <span class="text-xs text-gray-400">service + insurance + processing, settled orders only</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-gray-500 text-xs uppercase tracking-wide">Service fee</p>
+                    <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['service_fee']) ?></p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-xs uppercase tracking-wide">Insurance fee</p>
+                    <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['insurance_fee']) ?></p>
+                </div>
+                <div>
+                    <p class="text-gray-500 text-xs uppercase tracking-wide">Processing fee</p>
+                    <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['processing_fee']) ?></p>
+                </div>
+                <div class="border-l-4 border-green-600 pl-3">
+                    <p class="text-gray-500 text-xs uppercase tracking-wide">Total</p>
+                    <p class="text-xl font-bold text-green-800">UGX <?= number_format($platformFees['total']) ?></p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 text-xs text-gray-500 mt-3 pt-3 border-t">
+                <div>Shop: UGX <?= number_format($platformFees['shop']['service_fee'] + $platformFees['shop']['insurance_fee'] + $platformFees['shop']['processing_fee']) ?></div>
+                <div>Surplus: UGX <?= number_format($platformFees['surplus']['service_fee'] + $platformFees['surplus']['insurance_fee'] + $platformFees['surplus']['processing_fee']) ?></div>
             </div>
         </div>
         <?php endif; ?>
