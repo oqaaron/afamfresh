@@ -90,6 +90,81 @@ try {
         
         echo json_encode(['success' => true, 'orders' => $orders]);
         
+    } elseif ($method === 'POST' && ($_GET['action'] ?? '') === 'confirm_receipt') {
+        // The customer's confirm-and-rate step. Kept as a plain POST rather
+        // than PUT/PATCH (which is what updateSurplusOrderStatus above uses)
+        // because PHP does not auto-populate $_FILES for those methods, and
+        // this action optionally takes a photo. Gated on the action query
+        // param specifically so it does not fall into "create order" below,
+        // which is what an unqualified POST to this file has always meant.
+        require_once __DIR__ . '/../includes/order_feedback.php';
+
+        $orderId = intval($_POST['order_id'] ?? 0);
+        $userId  = requireOwnUserId(intval($_POST['user_id'] ?? 0));
+        if ($orderId === 0) {
+            echo json_encode(['success' => false, 'error' => 'order_id is required']);
+            exit;
+        }
+
+        $ratingRaw = isset($_POST['rating']) ? intval($_POST['rating']) : null;
+        if ($ratingRaw !== null && ($ratingRaw < 1 || $ratingRaw > 5)) {
+            echo json_encode(['success' => false, 'error' => 'Rating must be between 1 and 5']);
+            exit;
+        }
+
+        $target = loadFeedbackTarget($dbh, 'surplus', $orderId, $userId);
+        if (!$target) {
+            echo json_encode(['success' => false, 'error' => 'Order not found']);
+            exit;
+        }
+        if (!$target['delivery_confirmed']) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'This order has not been marked delivered yet.'
+            ]);
+            exit;
+        }
+        if ($target['completed_at'] !== null) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'You already confirmed receipt of this order.'
+            ]);
+            exit;
+        }
+
+        $photoFilename = null;
+        if (isset($_FILES['photo']) && $_FILES['photo']['error'] !== UPLOAD_ERR_NO_FILE) {
+            require_once __DIR__ . '/../includes/image_upload.php';
+            $result = saveUploadedImage($_FILES['photo'], 'proof', 'customer_confirm', null);
+            if (!$result['ok']) {
+                echo json_encode(['success' => false, 'error' => $result['error']]);
+                exit;
+            }
+            $photoFilename = $result['filename'];
+        }
+
+        $emoji = trim((string)($_POST['emoji_reaction'] ?? ''));
+        if ($emoji !== '' && !in_array($emoji, validEmojiReactions(), true)) {
+            $emoji = '';
+        }
+
+        $intOrNull = function ($v) {
+            return $v === null || $v === '' ? null : (int)$v;
+        };
+
+        saveCustomerReceiptConfirmation($dbh, 'surplus', $orderId, [
+            'rating'                 => $ratingRaw,
+            'rating_speed'           => $intOrNull($_POST['rating_speed'] ?? null),
+            'rating_professionalism' => $intOrNull($_POST['rating_professionalism'] ?? null),
+            'rating_packaging'       => $intOrNull($_POST['rating_packaging'] ?? null),
+            'feedback'               => trim((string)($_POST['feedback'] ?? '')) ?: null,
+            'emoji'                  => $emoji ?: null,
+            'photo_filename'         => $photoFilename,
+        ]);
+
+        echo json_encode(['success' => true, 'message' => 'Thanks for confirming!']);
+        exit;
+
     } elseif ($method === 'POST') {
         // Create new surplus order with weight-based delivery
         $input = json_decode(file_get_contents('php://input'), true);

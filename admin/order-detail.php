@@ -146,6 +146,17 @@ if (!empty($order['delivery_photo']) && storageExists('proof/' . $order['deliver
     $proofUrl = storageUrl('proof/' . $order['delivery_photo']);
 }
 
+// The customer's OWN confirmation photo — separate from the rider's proof
+// above. See includes/order_feedback.php.
+$confirmPhotoUrl = null;
+if (!empty($order['delivery_confirmed_photo']) && storageExists('proof/' . $order['delivery_confirmed_photo'])) {
+    $confirmPhotoUrl = storageUrl('proof/' . $order['delivery_confirmed_photo']);
+}
+
+$emojiFace = [
+    'thumbs_up' => '👍', 'heart' => '❤️', 'smile' => '😊', 'fire' => '🔥', 'rocket' => '🚀',
+][$order['emoji_reaction'] ?? ''] ?? null;
+
 function money($v) { return 'UGX ' . number_format((float)$v, 0); }
 ?>
 <!DOCTYPE html>
@@ -244,10 +255,18 @@ function money($v) { return 'UGX ' . number_format((float)$v, 0); }
                         </div>
                     <?php endif; ?>
 
-                    <?php if ($order['customer_rating'] || $order['customer_feedback']): ?>
+                    <?php if ($order['completed_at'] || $order['customer_rating'] || $order['customer_feedback']): ?>
                         <div class="border-t pt-3 mt-3 text-sm">
-                            <span class="text-gray-500">Customer rating</span> — <?= $order['customer_rating'] ? str_repeat('★', (int)$order['customer_rating']) : '—' ?>
+                            <span class="text-gray-500">Customer confirmed</span> — <?= htmlspecialchars($order['completed_at'] ?? 'not yet') ?>
+                            <?php if ($order['customer_rating']): ?>
+                                <br><span class="text-gray-500">Rating</span> — <?= str_repeat('★', (int)$order['customer_rating']) ?><?= $emojiFace ? ' ' . $emojiFace : '' ?>
+                            <?php endif; ?>
                             <?php if ($order['customer_feedback']): ?><p class="text-gray-600 mt-1"><?= htmlspecialchars($order['customer_feedback']) ?></p><?php endif; ?>
+                            <?php if ($confirmPhotoUrl): ?>
+                                <a href="<?= htmlspecialchars($confirmPhotoUrl) ?>" target="_blank">
+                                    <img src="<?= htmlspecialchars($confirmPhotoUrl) ?>" class="mt-2 max-h-64 rounded-lg border" alt="Customer confirmation photo">
+                                </a>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </div>

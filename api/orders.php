@@ -75,6 +75,13 @@ function mapOrderRow(array $row) {
         'scheduled_delivery_slot'  => $row['scheduled_delivery_slot'],
         'cancelled_at'             => $row['cancelled_at'],
         'delivered_at'             => $row['delivered_at'],
+        // The rider's own attestation, not the customer's — see
+        // includes/order_feedback.php. The app uses these two together to
+        // decide whether to offer "Confirm & Rate": delivered by the rider,
+        // not yet confirmed by the customer.
+        'delivery_confirmed'       => (bool)($row['delivery_confirmed'] ?? false),
+        'completed_at'             => $row['completed_at'] ?? null,
+        'customer_rating'          => isset($row['customer_rating']) ? (int)$row['customer_rating'] : null,
     ];
 }
 
@@ -148,7 +155,8 @@ switch ($action) {
                        delivery_fee, service_fee, insurance_fee,
                        processing_fee, small_order_surcharge,
                        scheduled_delivery_date, scheduled_delivery_slot,
-                       cancelled_at, delivered_at
+                       cancelled_at, delivered_at,
+                       delivery_confirmed, completed_at, customer_rating
                 FROM orders
                 WHERE user_id = ?
                 ORDER BY ordertime DESC
@@ -210,7 +218,8 @@ switch ($action) {
                        scheduled_delivery_date, scheduled_delivery_slot,
                        cancelled_at, delivered_at,
                        delivery_person, estimated_delivery,
-                       dest_lat, dest_lng
+                       dest_lat, dest_lng,
+                       delivery_confirmed, completed_at, customer_rating
                 FROM orders
                 WHERE orderid = ? AND user_id = ?
             ");
@@ -531,6 +540,86 @@ switch ($action) {
         } catch (Exception $e) {
             error_log("Cancel order error: " . $e->getMessage());
             echo json_encode(['success' => false, 'error' => 'Could not cancel the order']);
+        }
+        exit;
+
+    case 'confirm_receipt':
+        // The customer's half of delivery confirmation — see
+        // includes/order_feedback.php for why this is separate from the
+        // rider's delivery_confirmed flag.
+        $orderId = intval(getParam('order_id', 0));
+        if ($orderId === 0) {
+            echo json_encode(['success' => false, 'error' => 'order_id is required']);
+            exit;
+        }
+
+        $ratingRaw = getParam('rating', null);
+        if ($ratingRaw !== null && ($ratingRaw < 1 || $ratingRaw > 5)) {
+            echo json_encode(['success' => false, 'error' => 'Rating must be between 1 and 5']);
+            exit;
+        }
+
+        try {
+            require_once __DIR__ . '/../includes/order_feedback.php';
+
+            $target = loadFeedbackTarget($dbh, 'order', $orderId, $user_id);
+            if (!$target) {
+                echo json_encode(['success' => false, 'error' => 'Order not found']);
+                exit;
+            }
+            if (!$target['delivery_confirmed']) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'This order has not been marked delivered yet.'
+                ]);
+                exit;
+            }
+            if ($target['completed_at'] !== null) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'You already confirmed receipt of this order.'
+                ]);
+                exit;
+            }
+
+            // Optional — most confirmations will just be a rating, not a
+            // photo. $_FILES populates fine here because this action is
+            // reached over a plain POST, unlike a PUT/PATCH multipart body,
+            // which PHP does not parse automatically.
+            $photoFilename = null;
+            if (isset($_FILES['photo']) && $_FILES['photo']['error'] !== UPLOAD_ERR_NO_FILE) {
+                require_once __DIR__ . '/../includes/image_upload.php';
+                $result = saveUploadedImage($_FILES['photo'], 'proof', 'customer_confirm', null);
+                if (!$result['ok']) {
+                    echo json_encode(['success' => false, 'error' => $result['error']]);
+                    exit;
+                }
+                $photoFilename = $result['filename'];
+            }
+
+            $emoji = trim((string)getParam('emoji_reaction', ''));
+            if ($emoji !== '' && !in_array($emoji, validEmojiReactions(), true)) {
+                $emoji = '';
+            }
+
+            $intOrNull = function ($v) {
+                return $v === null || $v === '' ? null : (int)$v;
+            };
+
+            saveCustomerReceiptConfirmation($dbh, 'order', $orderId, [
+                'rating'                 => $intOrNull($ratingRaw),
+                'rating_speed'           => $intOrNull(getParam('rating_speed')),
+                'rating_professionalism' => $intOrNull(getParam('rating_professionalism')),
+                'rating_packaging'       => $intOrNull(getParam('rating_packaging')),
+                'feedback'               => trim((string)getParam('feedback', '')) ?: null,
+                'emoji'                  => $emoji ?: null,
+                'photo_filename'         => $photoFilename,
+            ]);
+
+            echo json_encode(['success' => true, 'message' => 'Thanks for confirming!']);
+        } catch (Exception $e) {
+            error_log("confirm_receipt error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => 'Could not confirm receipt']);
         }
         exit;
 
