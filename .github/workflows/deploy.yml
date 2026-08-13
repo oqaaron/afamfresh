@@ -1,14 +1,11 @@
 name: Deploy backend to Cloud Run
 
-# Only when the backend actually changes. The Android app lives in the same
-# repo and its commits used to trigger a pointless container rebuild.
+# Manual only for now. The backend actually deploys through Render on every
+# push to main; this Cloud Run path was never finished (no repository secrets
+# configured), and firing it automatically on every api/** push just produces
+# a failed check. Re-add the `push:` trigger above once this is the real
+# deploy target and the secrets it checks for actually exist.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'api/**'
-      - 'Dockerfile'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 env:
