@@ -87,11 +87,16 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
         return ['ok' => true, 'error' => null];
     }
 
-    // total_price is the goods total after discount; the delivery fee is a
-    // separate column, so it is not in here to begin with. Subtracted anyway
-    // in case a caller ever folds it in — a defensive max() rather than a
-    // silent negative.
-    $goods = max(0.0, (float)$row['total_price'] - (float)$row['delivery_fee']);
+    // total_price IS the goods total, full stop — delivery_fee is a separate
+    // column that is never folded into it anywhere in the checkout path
+    // (api/surplus-orders.php computes total_price as unit_price * quantity
+    // before delivery_fee is even known; surplusPayableTotal() then sums the
+    // two for the amount actually charged). A previous version of this
+    // function subtracted delivery_fee here "defensively", which was wrong
+    // under the schema as it has always behaved: it silently under-credited
+    // every vendor, on every delivered surplus order, by their delivery fee's
+    // worth before commission was even applied.
+    $goods = max(0.0, (float)$row['total_price']);
     if ($goods <= 0) {
         error_log("creditVendorEarnings: surplus order $surplusOrderId has no goods value to credit");
         return ['ok' => false, 'error' => 'That order has nothing to credit.'];
