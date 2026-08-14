@@ -25,7 +25,7 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once '../includes/pesapal.php';
-require_once __DIR__ . '/../includes/surplus_payment.php';
+require_once __DIR__ . '/../includes/Bulk_payment.php';
 require_once __DIR__ . '/../includes/payment_ledger.php';
 header('Content-Type: application/json');
 
@@ -74,14 +74,14 @@ if (!$userId) fail('Not logged in', 401, 'UNAUTHENTICATED');
  *
  * 'shop' is the `orders` table and is the default, so every existing caller —
  * the customer checkout, the web front end — keeps working untouched.
- * 'surplus' is `surplus_orders`, a different table with different column names
- * and a payable total split across two columns. See includes/surplus_payment.php.
+ * 'Bulk' is `Bulk_orders`, a different table with different column names
+ * and a payable total split across two columns. See includes/Bulk_payment.php.
  *
- * The two id spaces overlap: shop order 7 and surplus order 7 both exist. That
+ * The two id spaces overlap: shop order 7 and Bulk order 7 both exist. That
  * is exactly why this is explicit rather than guessed from the id.
  */
 $orderType = strtolower(trim((string)param('order_type', 'shop')));
-if (!in_array($orderType, ['shop', 'surplus'], true)) {
+if (!in_array($orderType, ['shop', 'Bulk'], true)) {
     fail('Unknown order_type', 400, 'BAD_REQUEST');
 }
 
@@ -160,8 +160,8 @@ switch ($action) {
         $orderId = (int)param('order_id', 0);
         if ($orderId <= 0) fail('order_id is required', 400, 'BAD_REQUEST');
 
-        if ($orderType === 'surplus') {
-            $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+        if ($orderType === 'Bulk') {
+            $order = loadOwnedBulkOrder($dbh, $orderId, (int)$userId);
             if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
 
             if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
@@ -175,14 +175,14 @@ switch ($action) {
             }
 
             // A cancelled order still has a row, and without this check an
-            // abandoned reservation that releaseStaleSurplusReservations() has
+            // abandoned reservation that releaseStaleBulkReservations() has
             // already given back to stock could still be paid for.
             if (in_array(strtolower((string)$order['status']), ['cancelled', 'refunded'], true)) {
                 fail('This order has been cancelled. Please order again.', 409, 'ORDER_CANCELLED');
             }
 
             // RULE 1 again: goods plus delivery, both read from the row.
-            $amount = surplusPayableTotal($order);
+            $amount = BulkPayableTotal($order);
             if ($amount <= 0) fail('This order has no payable total.', 409, 'INVALID_AMOUNT');
 
             $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
@@ -193,7 +193,7 @@ switch ($action) {
                 // the transient 'pending_cash' status, which disappears the
                 // moment the rider confirms collection.
                 $stmt = $dbh->prepare("
-                    UPDATE surplus_orders
+                    UPDATE Bulk_orders
                        SET payment_status = 'pending_cash',
                            payment_method = 'cash',
                            status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
@@ -203,7 +203,7 @@ switch ($action) {
                 ");
                 $stmt->execute([$orderId, $userId]);
 
-                recordPaymentEvent($dbh, 'surplus', $orderId, 'cash_selected', [
+                recordPaymentEvent($dbh, 'Bulk', $orderId, 'cash_selected', [
                     'from_status' => $order['payment_status'] ?? null,
                     'to_status'   => 'pending_cash',
                     'method'      => 'cash',
@@ -225,14 +225,14 @@ switch ($action) {
 
             // Prefixed so pesapal-ipn.php can tell which table to look in when
             // it has to fall back to the merchant reference. A bare id would be
-            // ambiguous: shop order 41 and surplus order 41 both exist.
+            // ambiguous: shop order 41 and Bulk order 41 both exist.
             $merchantReference = 'SUR-' . $orderId . '-' . time();
 
             try {
                 $result = $pesapal->submitOrder(
                     $merchantReference,
                     $amount,
-                    'AfamFresh surplus order #' . $orderId,
+                    'AfamFresh Bulk order #' . $orderId,
                     [
                         'email'      => (string)param('email', '') ?: (string)$order['email'],
                         'phone'      => (string)param('phone', '') ?: (string)$order['mobile'],
@@ -243,14 +243,14 @@ switch ($action) {
                     ]
                 );
             } catch (PesapalException $e) {
-                error_log("Pesapal initiate failed for surplus order $orderId: " . $e->getMessage());
+                error_log("Pesapal initiate failed for Bulk order $orderId: " . $e->getMessage());
                 fail('We could not start the payment. Please try again in a moment.',
                      502, 'PESAPAL_UNAVAILABLE');
             }
 
             // Before replying, so an IPN that beats the response can be matched.
             $stmt = $dbh->prepare("
-                UPDATE surplus_orders
+                UPDATE Bulk_orders
                    SET pesapal_tracking_id = ?,
                        payment_status = 'authorization_pending',
                        updated_at = NOW()
@@ -393,19 +393,19 @@ switch ($action) {
             fail('transaction_id or order_id is required', 400, 'BAD_REQUEST');
         }
 
-        if ($orderType === 'surplus') {
+        if ($orderType === 'Bulk') {
             if ($orderId > 0) {
-                $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+                $order = loadOwnedBulkOrder($dbh, $orderId, (int)$userId);
                 if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
                 if ($trackingId === '') $trackingId = (string)$order['pesapal_tracking_id'];
             } else {
                 $stmt = $dbh->prepare(
-                    "SELECT id FROM surplus_orders WHERE pesapal_tracking_id = ? AND user_id = ?"
+                    "SELECT id FROM Bulk_orders WHERE pesapal_tracking_id = ? AND user_id = ?"
                 );
                 $stmt->execute([$trackingId, $userId]);
                 $orderId = (int)($stmt->fetchColumn() ?: 0);
                 if ($orderId === 0) fail('Order not found', 404, 'ORDER_NOT_FOUND');
-                $order = loadOwnedSurplusOrder($dbh, $orderId, (int)$userId);
+                $order = loadOwnedBulkOrder($dbh, $orderId, (int)$userId);
                 if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
             }
 
@@ -442,17 +442,17 @@ switch ($action) {
             try {
                 $status = $pesapal->getTransactionStatus($trackingId);
             } catch (PesapalException $e) {
-                error_log("Pesapal verify failed for surplus order $orderId: " . $e->getMessage());
+                error_log("Pesapal verify failed for Bulk order $orderId: " . $e->getMessage());
                 fail('We could not confirm the payment yet. Please try again shortly.',
                      502, 'VERIFY_UNAVAILABLE');
             }
 
             $mapped = $pesapal->mapStatus($status);
-            applySurplusPaymentStatus($dbh, $orderId, $mapped, $trackingId);
+            applyBulkPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
             if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0) {
                 require_once __DIR__ . '/../includes/loyalty.php';
-                settleLoyaltyRedemption($dbh, (int)$userId, 'surplus', $orderId, (int)$order['points_redeemed']);
+                settleLoyaltyRedemption($dbh, (int)$userId, 'Bulk', $orderId, (int)$order['points_redeemed']);
             }
 
             // Persist how it was paid. Pesapal's own wording was already being
@@ -461,18 +461,18 @@ switch ($action) {
             $channel = $status['payment_method'] ?? null;
             if ($mapped === 'paid') {
                 $dbh->prepare(
-                    "UPDATE surplus_orders
+                    "UPDATE Bulk_orders
                         SET payment_method = ?, payment_channel = ?
                       WHERE id = ? AND payment_method IN ('unknown','mobile_money','card')"
                 )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
             }
 
-            recordPaymentEvent($dbh, 'surplus', $orderId, 'verified', [
+            recordPaymentEvent($dbh, 'Bulk', $orderId, 'verified', [
                 'from_status' => $order['payment_status'] ?? null,
                 'to_status'   => $mapped,
                 'method'      => classifyPaymentChannel($channel),
                 'channel'     => $channel,
-                'amount'      => isset($status['amount']) ? (float)$status['amount'] : surplusPayableTotal($order),
+                'amount'      => isset($status['amount']) ? (float)$status['amount'] : BulkPayableTotal($order),
                 'tracking_id' => $trackingId,
                 'actor_type'  => 'customer',
                 'actor_id'    => (int)$userId,
@@ -487,7 +487,7 @@ switch ($action) {
                 'transaction_id' => $trackingId,
                 'amount'         => isset($status['amount'])
                                         ? (float)$status['amount']
-                                        : surplusPayableTotal($order),
+                                        : BulkPayableTotal($order),
                 'currency'       => $status['currency'] ?? CURRENCY,
                 'method'         => $status['payment_method'] ?? null,
                 'description'    => $status['payment_status_description'] ?? null,
@@ -582,7 +582,7 @@ switch ($action) {
             }
         }
 
-        // Same as the surplus branch: record the instrument rather than
+        // Same as the Bulk branch: record the instrument rather than
         // reporting it to the app and discarding it. The guard on
         // payment_method stops a verify overwriting a confirmed cash collection.
         $channel = $status['payment_method'] ?? null;

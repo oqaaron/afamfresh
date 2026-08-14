@@ -2,9 +2,9 @@
 -- Vendor-owned products
 -- =============================================================
 -- Lets a vendor create a product of their own, which an admin approves before
--- it can be listed as surplus. Until now `items` was purely the admin
--- catalogue, and surplus_listings.product_id has a hard foreign key to it, so
--- a vendor could only list surplus of something an admin had already created.
+-- it can be listed as Bulk. Until now `items` was purely the admin
+-- catalogue, and Bulk_listings.product_id has a hard foreign key to it, so
+-- a vendor could only list Bulk of something an admin had already created.
 --
 -- Two columns, both nullable/defaulted so the 72 existing rows are untouched
 -- and stay visible:
@@ -37,7 +37,7 @@ ALTER TABLE `items`
   ADD KEY `idx_vendor_status` (`vendor_id`, `status`);
 
 -- ON DELETE CASCADE would take the product with the vendor, and
--- surplus_listings cascades from products -- so removing one vendor could
+-- Bulk_listings cascades from products -- so removing one vendor could
 -- silently delete listings and order history referencing them. SET NULL keeps
 -- the product as an ownerless catalogue row instead.
 ALTER TABLE `items`

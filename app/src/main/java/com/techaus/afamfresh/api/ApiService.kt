@@ -177,7 +177,7 @@ interface ApiService {
     /**
      * How many of a customer's requested loyalty points can actually be
      * redeemed against a goods value, and the resulting discount — before
-     * committing to an order. Shared by shop and surplus checkout; see
+     * committing to an order. Shared by shop and Bulk checkout; see
      * LoyaltyQuoteRequest's own doc.
      */
     @POST("loyalty-quote.php")
@@ -238,44 +238,44 @@ interface ApiService {
     ): Call<BaseResponse>
 
     // ============================================================
-    // SURPLUS ENDPOINTS (Public)
+    // Bulk ENDPOINTS (Public)
     // ============================================================
     
-    // ✅ VERIFIED against api/surplus-listings.php.
+    // ✅ VERIFIED against api/Bulk-listings.php.
     //
     // There is no `action` parameter — this endpoint dispatches on HTTP method.
     // Note the server also hard-filters `remaining_quantity > 0` and
     // `expiry_date > NOW()`, so sold-out and expired listings are never
     // returned regardless of the status asked for.
-    @GET("surplus-listings.php")
-    fun getSurplusListings(
+    @GET("Bulk-listings.php")
+    fun getBulkListings(
         @Query("status") status: String = "approved",
         @Query("vendor_id") vendorId: Int? = null,
         @Query("listing_type") listingType: String? = null,
         @Query("limit") limit: Int = 20,
         @Query("offset") offset: Int = 0
-    ): Call<SurplusListingsResponse>
+    ): Call<BulkListingsResponse>
 
     /**
-     * Places a surplus order.
+     * Places a Bulk order.
      *
      * The order is created UNPAID and the listing's stock is decremented
      * immediately, so this call is a reservation as much as an order. Pay for it
-     * with [initiatePayment] passing `order_type = "surplus"`; an order left
+     * with [initiatePayment] passing `order_type = "Bulk"`; an order left
      * unpaid for 30 minutes is cancelled server-side and its stock returned.
      *
      * The server rejects orders under UGX 250,000, under 20 kg on weight-based
      * listings, and over 1000 kg. Those come back as {"error": "..."} with a
      * message written for the customer, so show it rather than replacing it.
      */
-    @POST("surplus-orders.php")
+    @POST("Bulk-orders.php")
     @Headers("Content-Type: application/json")
-    fun createSurplusOrder(
-        @Body request: CreateSurplusOrderRequest
-    ): Call<CreateSurplusOrderResponse>
+    fun createBulkOrder(
+        @Body request: CreateBulkOrderRequest
+    ): Call<CreateBulkOrderResponse>
 
     /**
-     * Prices a surplus order without placing it.
+     * Prices a Bulk order without placing it.
      *
      * Runs the identical calculation order creation will, so the total shown at
      * checkout and the amount charged cannot drift apart. The delivery fee
@@ -284,63 +284,63 @@ interface ApiService {
      *
      * Answers OUT_OF_SERVICE_AREA when the pin falls outside Greater Kampala.
      */
-    @POST("surplus-quote.php")
+    @POST("Bulk-quote.php")
     @Headers("Content-Type: application/json")
-    fun getSurplusQuote(
-        @Body request: SurplusQuoteRequest
-    ): Call<SurplusQuoteResponse>
+    fun getBulkQuote(
+        @Body request: BulkQuoteRequest
+    ): Call<BulkQuoteResponse>
 
     /**
-     * A customer's own surplus orders.
+     * A customer's own Bulk orders.
      *
      * user_id must be sent, but the server ignores what it says and uses the
      * session — asking for someone else's id returns yours, not theirs. Omitting
-     * it entirely used to return every surplus order on the platform.
+     * it entirely used to return every Bulk order on the platform.
      */
-    @GET("surplus-orders.php")
-    fun getMySurplusOrders(
+    @GET("Bulk-orders.php")
+    fun getMyBulkOrders(
         @Query("user_id") userId: Int,
         @Query("status") status: String? = null,
         @Query("limit") limit: Int = 50,
         @Query("offset") offset: Int = 0
-    ): Call<SurplusOrdersResponse>
+    ): Call<BulkOrdersResponse>
 
     // ============================================================
-    // VENDOR SURPLUS ENDPOINTS
+    // VENDOR Bulk ENDPOINTS
     // ============================================================
     //
-    // ⚠️ These previously pointed at `vendor/surplus/listings.php`, which does
-    // not exist — every call 404'd. There is no vendor-specific surplus file;
-    // vendors use the same surplus-listings.php, scoped by vendor_id/user_id.
+    // ⚠️ These previously pointed at `vendor/Bulk/listings.php`, which does
+    // not exist — every call 404'd. There is no vendor-specific Bulk file;
+    // vendors use the same Bulk-listings.php, scoped by vendor_id/user_id.
     //
     // `vendor-listings.php` is NOT this endpoint — it is a public directory of
     // verified vendors.
 
     /** A vendor's own listings are the public list scoped by vendor_id. */
-    @GET("surplus-listings.php")
-    fun getVendorSurplusListings(
+    @GET("Bulk-listings.php")
+    fun getVendorBulkListings(
         @Query("vendor_id") vendorId: Int,
         @Query("status") status: String = "approved",
         @Query("limit") limit: Int = 50
-    ): Call<SurplusListingsResponse>
+    ): Call<BulkListingsResponse>
 
     /** JSON body, keyed on user_id; server derives vendor_id and sets status=pending. */
-    @POST("surplus-listings.php")
+    @POST("Bulk-listings.php")
     @Headers("Content-Type: application/json")
-    fun createVendorSurplusListing(
-        @Body listing: CreateSurplusListingRequest
-    ): Call<SurplusListingResponse>
+    fun createVendorBulkListing(
+        @Body listing: CreateBulkListingRequest
+    ): Call<BulkListingResponse>
 
     /** Only status / remaining_quantity / admin_notes are updatable server-side. */
-    @PUT("surplus-listings.php")
+    @PUT("Bulk-listings.php")
     @Headers("Content-Type: application/json")
-    fun updateVendorSurplusListing(
-        @Body update: UpdateSurplusListingRequest
+    fun updateVendorBulkListing(
+        @Body update: UpdateBulkListingRequest
     ): Call<BaseResponse>
 
     /** Soft delete — sets status='cancelled'. listing_id is a QUERY param. */
-    @DELETE("surplus-listings.php")
-    fun deleteVendorSurplusListing(
+    @DELETE("Bulk-listings.php")
+    fun deleteVendorBulkListing(
         @Query("listing_id") listingId: Int
     ): Call<BaseResponse>
 
@@ -349,33 +349,33 @@ interface ApiService {
     // ============================================================
     //
     // ⚠️ `vendor/orders.php` does not exist and never did. The nearest real
-    // endpoint is surplus-orders.php scoped by vendor_id, which covers surplus
+    // endpoint is Bulk-orders.php scoped by vendor_id, which covers Bulk
     // orders only. Ordinary catalogue orders are not exposed per-vendor at all.
 
-    @GET("surplus-orders.php")
+    @GET("Bulk-orders.php")
     fun getVendorOrders(
         @Query("vendor_id") vendorId: Int,
         @Query("status") status: String? = null,
         @Query("limit") limit: Int = 50,
         @Query("offset") offset: Int = 0
-    ): Call<SurplusOrdersResponse>
+    ): Call<BulkOrdersResponse>
 
     /**
-     * Moves a surplus order along. The vendor who owns the listing may send it;
+     * Moves a Bulk order along. The vendor who owns the listing may send it;
      * so may an admin. Nobody else — before that check existed, anyone could
      * mark any order delivered, which now means anyone could pay a vendor.
      *
      * Reaching "delivered" credits the vendor's earnings ledger, idempotently.
      * The server refuses the transition on an unpaid order and answers 409.
      */
-    @PUT("surplus-orders.php")
+    @PUT("Bulk-orders.php")
     @Headers("Content-Type: application/json")
-    fun updateSurplusOrderStatus(
-        @Body request: UpdateSurplusOrderStatusRequest
+    fun updateBulkOrderStatus(
+        @Body request: UpdateBulkOrderStatusRequest
     ): Call<BaseResponse>
 
     /**
-     * The customer's confirm-and-rate step for a SURPLUS order. Mirrors
+     * The customer's confirm-and-rate step for a Bulk order. Mirrors
      * [confirmOrderReceipt]; kept as its own call because it hits a different
      * file and the server needs user_id to resolve which of the two id spaces
      * `order_id` (shared with `orders`) actually means.
@@ -385,8 +385,8 @@ interface ApiService {
      * a photo.
      */
     @Multipart
-    @POST("surplus-orders.php")
-    fun confirmSurplusReceipt(
+    @POST("Bulk-orders.php")
+    fun confirmBulkReceipt(
         @Query("action") action: String = "confirm_receipt",
         @Part("order_id") orderId: okhttp3.RequestBody,
         @Part("user_id") userId: okhttp3.RequestBody,
@@ -448,7 +448,7 @@ interface ApiService {
     // ============================================================
     //
     // Products the vendor creates themselves, which an admin approves before
-    // they can be listed as surplus. Distinct from vendor-products.php, which
+    // they can be listed as Bulk. Distinct from vendor-products.php, which
     // is "catalogue items I stock" — this is "products I own".
     //
     // No user_id on either call: the server takes the vendor from the session.
@@ -477,7 +477,7 @@ interface ApiService {
     //
     // Both of these existed server-side from the start and the app never called
     // either, which is why a vendor's inventory could only be filled by an
-    // admin, and why the surplus form had nothing to offer in its picker.
+    // admin, and why the Bulk form had nothing to offer in its picker.
     @POST("vendor-products.php")
     fun addVendorProduct(
         @Body body: AddVendorProductRequest
@@ -526,9 +526,9 @@ interface ApiService {
     // orders row and ignores anything the client sends. See PaymentRequest.
     //
     // `order_type` says which table order_id refers to: "shop" is the `orders`
-    // table, "surplus" is `surplus_orders`. It defaults to "shop" server-side,
+    // table, "Bulk" is `Bulk_orders`. It defaults to "shop" server-side,
     // so it is only ever sent explicitly. The two id spaces overlap — shop order
-    // 41 and surplus order 41 both exist — which is why this cannot be inferred.
+    // 41 and Bulk order 41 both exist — which is why this cannot be inferred.
     @POST("payment.php")
     @Headers("Content-Type: application/json")
     fun initiatePayment(
@@ -728,7 +728,7 @@ interface ApiService {
 
     //
     // `source` says which table order_id refers to — "order" for the shop,
-    // "surplus" for a bulk order collected from a vendor. It must come from the
+    // "Bulk" for a bulk order collected from a vendor. It must come from the
     // Delivery the rider tapped, never be assumed: the id spaces overlap, and
     // guessing would open a different customer's job.
     @GET("rider.php")
@@ -782,7 +782,7 @@ interface ApiService {
     // type and derives the stored extension from that, so the filename sent
     // here is not security-relevant.
     //
-    // Surplus deliveries are refused by the server here — surplus_orders has no
+    // Bulk deliveries are refused by the server here — Bulk_orders has no
     // delivery_photo column, so there is nowhere to file the proof. It says so
     // rather than accepting the upload and dropping it.
     @Multipart
@@ -872,8 +872,8 @@ interface ApiService {
         /** payment.php `order_type`: the `orders` table. The server's default. */
         const val ORDER_TYPE_SHOP = "shop"
 
-        /** payment.php `order_type`: the `surplus_orders` table. */
-        const val ORDER_TYPE_SURPLUS = "surplus"
+        /** payment.php `order_type`: the `Bulk_orders` table. */
+        const val ORDER_TYPE_Bulk = "Bulk"
 
         /**
          * tracking.php and rider.php use `source`, whose shop value is "order"

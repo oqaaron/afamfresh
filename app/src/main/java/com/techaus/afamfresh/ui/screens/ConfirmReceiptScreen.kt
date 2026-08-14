@@ -27,7 +27,7 @@ import com.techaus.afamfresh.ui.components.StarRating
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.prepareJpegBytes
 import com.techaus.afamfresh.viewmodel.OrderViewModel
-import com.techaus.afamfresh.viewmodel.SurplusViewModel
+import com.techaus.afamfresh.viewmodel.BulkViewModel
 import kotlinx.coroutines.launch
 
 private data class EmojiOption(val key: String, val glyph: String, val label: String)
@@ -44,12 +44,12 @@ private val emojiOptions = listOf(
  * The customer's confirm-and-rate step.
  *
  * Reached only once the rider has uploaded proof of delivery (order
- * .deliveryConfirmed / SurplusOrder.deliveryConfirmed) — the server refuses
+ * .deliveryConfirmed / BulkOrder.deliveryConfirmed) — the server refuses
  * the confirmation otherwise. Everything but tapping "Confirm" is optional:
  * a customer who just wants to close out the order without rating anything
  * can do that.
  *
- * `orderType` is "order" or "surplus" — the same vocabulary tracking.php and
+ * `orderType` is "order" or "Bulk" — the same vocabulary tracking.php and
  * the payment_retry route already use, so this fits the existing pattern
  * instead of inventing another word for the same distinction.
  */
@@ -59,16 +59,16 @@ fun ConfirmReceiptScreen(
     orderType: String,
     userId: Int?,
     orderViewModel: OrderViewModel,
-    surplusViewModel: SurplusViewModel,
+    BulkViewModel: BulkViewModel,
     onBack: () -> Unit,
     onDone: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val isSurplus = orderType == "surplus"
+    val isBulk = orderType == "Bulk"
 
-    val isLoading by if (isSurplus) {
-        surplusViewModel.ordersLoading.collectAsState()
+    val isLoading by if (isBulk) {
+        BulkViewModel.ordersLoading.collectAsState()
     } else {
         orderViewModel.isLoading.collectAsState()
     }
@@ -100,13 +100,13 @@ fun ConfirmReceiptScreen(
         val onResult: (Boolean, String?) -> Unit = { success, error ->
             if (success) onDone() else submitError = error ?: "Could not confirm receipt."
         }
-        if (isSurplus) {
+        if (isBulk) {
             val uid = userId
             if (uid == null) {
                 submitError = "Please sign in again."
                 return
             }
-            surplusViewModel.confirmReceipt(
+            BulkViewModel.confirmReceipt(
                 orderId = orderId.toIntOrNull() ?: 0,
                 userId = uid,
                 rating = overallRating.takeIf { it > 0 },

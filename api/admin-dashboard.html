@@ -55,16 +55,16 @@
                 <textarea id="maintenance_message" rows="2"></textarea>
             </div>
             <div class="form-group">
-                <label>Surplus Verification Protocol:</label>
-                <input type="checkbox" id="surplus_approval_required" value="1" />
+                <label>Bulk Verification Protocol:</label>
+                <input type="checkbox" id="Bulk_approval_required" value="1" />
             </div>
             <button type="button" class="btn btn-save" onclick="saveConfig()">💾 Push Changes Live</button>
         </form>
     </div>
 
-    <!-- Surplus Approvals Queue -->
+    <!-- Bulk Approvals Queue -->
     <div class="section">
-        <h2>📦 Pending Surplus Approval Queue</h2>
+        <h2>📦 Pending Bulk Approval Queue</h2>
         <table>
             <thead>
                 <tr>
@@ -131,7 +131,7 @@
             document.getElementById('current_version').value = data.current_version || '';
             document.getElementById('is_maintenance_mode').checked = (data.is_maintenance_mode === '1');
             document.getElementById('maintenance_message').value = data.maintenance_message || '';
-            document.getElementById('surplus_approval_required').checked = (data.surplus_approval_required === '1');
+            document.getElementById('Bulk_approval_required').checked = (data.Bulk_approval_required === '1');
         }
     }
 
@@ -141,7 +141,7 @@
             current_version: document.getElementById('current_version').value,
             is_maintenance_mode: document.getElementById('is_maintenance_mode').checked ? '1' : '0',
             maintenance_message: document.getElementById('maintenance_message').value,
-            surplus_approval_required: document.getElementById('surplus_approval_required').checked ? '1' : '0'
+            Bulk_approval_required: document.getElementById('Bulk_approval_required').checked ? '1' : '0'
         };
         const res = await apiRequest('api/config.php', {
             method: 'PUT',
@@ -152,8 +152,8 @@
         else showNotification(res.error, 'error');
     }
 
-    async function loadPendingSurplus() {
-        const res = await apiRequest('api/admin/surplus-approval.php?action=pending');
+    async function loadPendingBulk() {
+        const res = await apiRequest('api/admin/Bulk-approval.php?action=pending');
         const tbody = document.getElementById('pendingTableBody');
         if (res.success && res.listings) {
             if (res.listings.length === 0) {
@@ -166,29 +166,29 @@
                     <td>${item.product_name}</td>
                     <td>${item.business_name}</td>
                     <td>UGX ${Number(item.discounted_price).toLocaleString()}</td>
-                    <td>${item.surplus_quantity}</td>
+                    <td>${item.Bulk_quantity}</td>
                     <td>${item.expiry_date}</td>
                     <td>
-                        <button class="btn btn-approve" onclick="processSurplus(${item.id}, 'approve')">Approve</button>
-                        <button class="btn btn-reject" onclick="processSurplus(${item.id}, 'reject')">Reject</button>
+                        <button class="btn btn-approve" onclick="processBulk(${item.id}, 'approve')">Approve</button>
+                        <button class="btn btn-reject" onclick="processBulk(${item.id}, 'reject')">Reject</button>
                     </td>
                 </tr>
             `).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="error">Failed to synchronize surplus entries.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="error">Failed to synchronize Bulk entries.</td></tr>';
         }
     }
 
-    async function processSurplus(id, action) {
+    async function processBulk(id, action) {
         if (!confirm(`Confirm execution of item action: ${action.toUpperCase()}?`)) return;
-        const res = await apiRequest(`api/admin/surplus-approval.php?action=${action}`, {
+        const res = await apiRequest(`api/admin/Bulk-approval.php?action=${action}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res.success) {
             showNotification(`Record successfully marked as ${action}d.`);
-            loadPendingSurplus();
+            loadPendingBulk();
         } else {
             showNotification(res.error, 'error');
         }
@@ -238,7 +238,7 @@
 
     // Initialise
     loadConfig();
-    loadPendingSurplus();
+    loadPendingBulk();
     loadVendors();
 </script>
 </body>

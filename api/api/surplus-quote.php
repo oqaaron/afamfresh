@@ -1,8 +1,8 @@
 <?php
 // =============================================================
-// api/surplus-quote.php
+// api/Bulk-quote.php
 //
-// What a surplus order will cost, before placing it.
+// What a Bulk order will cost, before placing it.
 //
 // The checkout screen used to show "Delivery: added at checkout" and an
 // estimate that excluded it, because the fee depends on weight and distance
@@ -11,14 +11,14 @@
 // the listing.
 //
 // This runs exactly the same calculation the order will, through
-// calculateSurplusDeliveryFee(), so the quote and the charge cannot disagree.
+// calculateBulkDeliveryFee(), so the quote and the charge cannot disagree.
 // It writes nothing.
 // =============================================================
 
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/api_auth.php';
-require_once __DIR__ . '/../includes/surplus_delivery_fee.php';
+require_once __DIR__ . '/../includes/Bulk_delivery_fee.php';
 require_once __DIR__ . '/../includes/service_area.php';
 
 // Signed in, but nothing here is scoped to the user: a quote reveals only the
@@ -64,7 +64,7 @@ try {
         "SELECT sl.discounted_price, sl.weight_per_unit_kg, sl.pickup_only,
                 sl.remaining_quantity, sl.is_weight_based,
                 v.lat AS vendor_lat, v.lng AS vendor_lng, v.business_name
-           FROM surplus_listings sl
+           FROM Bulk_listings sl
            JOIN vendors v ON v.id = sl.vendor_id
           WHERE sl.id = ? AND sl.status = 'approved'"
     );
@@ -82,14 +82,14 @@ try {
 
     $distance = $pickupOnly
         ? null
-        : surplusDeliveryDistance(
+        : BulkDeliveryDistance(
             $listing['vendor_lat'] !== null ? (float)$listing['vendor_lat'] : null,
             $listing['vendor_lng'] !== null ? (float)$listing['vendor_lng'] : null,
             $destLat,
             $destLng
         );
 
-    $breakdown = calculateSurplusDeliveryFee($dbh, $goodsValue, $weightKg, $distance, $pickupOnly);
+    $breakdown = calculateBulkDeliveryFee($dbh, $goodsValue, $weightKg, $distance, $pickupOnly);
 
     echo json_encode([
         'success'        => true,
@@ -103,7 +103,7 @@ try {
         'exceeds_stock'  => $quantity > (float)$listing['remaining_quantity'],
     ]);
 } catch (PDOException $e) {
-    error_log('surplus-quote: ' . $e->getMessage());
+    error_log('Bulk-quote: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Could not price that order right now.']);
 }

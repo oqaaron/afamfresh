@@ -14,7 +14,7 @@ $placeholders = implode(',', array_fill(0, count($listingIds), '?'));
 $stmt = $dbh->prepare("
     SELECT sl.id, sl.discounted_price as price, sl.weight_per_unit_kg, sl.pickup_only,
            i.name as product_name, i.image
-    FROM surplus_listings sl
+    FROM Bulk_listings sl
     JOIN items i ON sl.product_id = i.id
     WHERE sl.id IN ($placeholders) AND sl.status = 'approved'
 ");

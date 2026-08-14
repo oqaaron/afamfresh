@@ -26,7 +26,7 @@
 /**
  * Appends one payment event.
  *
- * @param string $source 'order' | 'surplus' — which table $orderId points at.
+ * @param string $source 'order' | 'Bulk' — which table $orderId points at.
  *                       The two id spaces overlap, so this is never optional.
  * @param string $event  initiated | ipn | verified | cash_selected |
  *                       cash_collected | reversed | admin_adjust
@@ -36,7 +36,7 @@
 function recordPaymentEvent(PDO $dbh, string $source, int $orderId,
                             string $event, array $fields = []): void {
     try {
-        if (!in_array($source, ['order', 'surplus'], true)) {
+        if (!in_array($source, ['order', 'Bulk'], true)) {
             error_log("payment ledger: unknown source '$source' for order $orderId");
             return;
         }

@@ -16,7 +16,7 @@
 //   - orders the customer cancelled
 //   - cash orders where no cash was ever collected
 //
-// and excluded every surplus order, which is a whole sales channel. So the
+// and excluded every Bulk order, which is a whole sales channel. So the
 // headline number was simultaneously overstated and understated, and no two
 // people reading it would agree what it meant.
 //
@@ -33,9 +33,9 @@
 //                 operational number -- it was simply never revenue.
 //   lost          failed, reversed, invalid or cancelled.
 //
-// Surplus payable is total_price + delivery_fee, matching surplusPayableTotal()
-// in includes/surplus_payment.php. Charging total_price alone would report
-// every surplus delivery as free.
+// Bulk payable is total_price + delivery_fee, matching BulkPayableTotal()
+// in includes/Bulk_payment.php. Charging total_price alone would report
+// every Bulk delivery as free.
 // =============================================================
 
 /** payment_status values that mean the money is actually ours. */
@@ -51,7 +51,7 @@ const REVENUE_LOST = ['failed', 'reversed', 'invalid', 'cancelled'];
 /**
  * Builds the shared WHERE fragment and its bindings for a date window.
  *
- * @param string $dateColumn ordertime for orders, created_at for surplus.
+ * @param string $dateColumn ordertime for orders, created_at for Bulk.
  * @return array{0:string,1:array} SQL fragment and positional params.
  */
 function revenueDateClause(string $dateColumn, ?string $from, ?string $to): array {
@@ -74,7 +74,7 @@ function revenueDateClause(string $dateColumn, ?string $from, ?string $to): arra
 /**
  * One channel's figures.
  *
- * @param string $table       orders | surplus_orders
+ * @param string $table       orders | Bulk_orders
  * @param string $amountExpr  the payable total expression for that table
  * @param string $dateColumn  which column the date window applies to
  */
@@ -143,24 +143,24 @@ function revenueForTable(PDO $dbh, string $table, string $amountExpr,
  */
 function revenueSummary(PDO $dbh, ?string $from = null, ?string $to = null): array {
     $shop = revenueForTable($dbh, 'orders', 'total_amount', 'ordertime', $from, $to);
-    $surplus = revenueForTable(
-        $dbh, 'surplus_orders', '(total_price + delivery_fee)', 'created_at', $from, $to
+    $Bulk = revenueForTable(
+        $dbh, 'Bulk_orders', '(total_price + delivery_fee)', 'created_at', $from, $to
     );
 
     $add = fn(string $k) => [
-        'value' => $shop[$k]['value'] + $surplus[$k]['value'],
-        'count' => $shop[$k]['count'] + $surplus[$k]['count'],
+        'value' => $shop[$k]['value'] + $Bulk[$k]['value'],
+        'count' => $shop[$k]['count'] + $Bulk[$k]['count'],
     ];
 
     // Methods merged across channels. Null from either side means the migration
     // has not run; the whole thing then reports null rather than half a truth.
     $byMethod = null;
-    if ($shop['by_method'] !== null && $surplus['by_method'] !== null) {
+    if ($shop['by_method'] !== null && $Bulk['by_method'] !== null) {
         $byMethod = [];
         foreach (['cash', 'mobile_money', 'card', 'unknown'] as $m) {
             $byMethod[$m] = [
-                'value' => ($shop['by_method'][$m]['value'] ?? 0) + ($surplus['by_method'][$m]['value'] ?? 0),
-                'count' => ($shop['by_method'][$m]['count'] ?? 0) + ($surplus['by_method'][$m]['count'] ?? 0),
+                'value' => ($shop['by_method'][$m]['value'] ?? 0) + ($Bulk['by_method'][$m]['value'] ?? 0),
+                'count' => ($shop['by_method'][$m]['count'] ?? 0) + ($Bulk['by_method'][$m]['count'] ?? 0),
             ];
         }
     }
@@ -169,7 +169,7 @@ function revenueSummary(PDO $dbh, ?string $from = null, ?string $to = null): arr
         'from'      => $from,
         'to'        => $to,
         'shop'      => $shop,
-        'surplus'   => $surplus,
+        'Bulk'   => $Bulk,
         'total'     => [
             'settled'     => $add('settled'),
             'outstanding' => $add('outstanding'),
@@ -186,7 +186,7 @@ function revenueSummary(PDO $dbh, ?string $from = null, ?string $to = null): arr
  *
  * These are NOT part of a vendor's cut (includes/vendor_earnings.php credits
  * only on the goods total) and NOT part of a rider's cut since the
- * carriage-only fix (includes/rider_dispatch.php's surplusRiderFeeFor(),
+ * carriage-only fix (includes/rider_dispatch.php's BulkRiderFeeFor(),
  * includes/rider_earnings.php's mileageFeeFor()) — they are pure platform
  * revenue, and until now nothing anywhere totalled them up.
  *
@@ -195,10 +195,10 @@ function revenueSummary(PDO $dbh, ?string $from = null, ?string $to = null): arr
  * for was never collected.
  *
  * Shop orders persist these as their own columns (api/orders.php's create
- * action). Surplus orders keep them inside the delivery_fee_breakdown JSON;
+ * action). Bulk orders keep them inside the delivery_fee_breakdown JSON;
  * older ("weight_based") rows predate these fees existing at all and simply
  * have no such keys, which JSON_EXTRACT reports as NULL and SUM() ignores —
- * so this is accurate for both eras of surplus order without special-casing.
+ * so this is accurate for both eras of Bulk order without special-casing.
  */
 function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null): array {
     [$shopDateSql, $shopDateParams] = revenueDateClause('ordertime', $from, $to);
@@ -212,19 +212,19 @@ function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null)
     $shopStmt->execute($shopDateParams);
     $shop = array_map('floatval', $shopStmt->fetch(PDO::FETCH_ASSOC));
 
-    [$surplusDateSql, $surplusDateParams] = revenueDateClause('created_at', $from, $to);
-    $surplusStmt = $dbh->prepare(
+    [$BulkDateSql, $BulkDateParams] = revenueDateClause('created_at', $from, $to);
+    $BulkStmt = $dbh->prepare(
         "SELECT
             COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.service_fee')) AS DECIMAL(12,2))), 0)    AS service_fee,
             COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.insurance_fee')) AS DECIMAL(12,2))), 0)  AS insurance_fee,
             COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.processing_fee')) AS DECIMAL(12,2))), 0) AS processing_fee
-           FROM surplus_orders
-          WHERE payment_status = 'paid' $surplusDateSql"
+           FROM Bulk_orders
+          WHERE payment_status = 'paid' $BulkDateSql"
     );
-    $surplusStmt->execute($surplusDateParams);
-    $surplus = array_map('floatval', $surplusStmt->fetch(PDO::FETCH_ASSOC));
+    $BulkStmt->execute($BulkDateParams);
+    $Bulk = array_map('floatval', $BulkStmt->fetch(PDO::FETCH_ASSOC));
 
-    $add = fn(string $k) => $shop[$k] + $surplus[$k];
+    $add = fn(string $k) => $shop[$k] + $Bulk[$k];
 
     return [
         'service_fee'    => $add('service_fee'),
@@ -232,6 +232,6 @@ function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null)
         'processing_fee' => $add('processing_fee'),
         'total'          => $add('service_fee') + $add('insurance_fee') + $add('processing_fee'),
         'shop'           => $shop,
-        'surplus'        => $surplus,
+        'Bulk'        => $Bulk,
     ];
 }

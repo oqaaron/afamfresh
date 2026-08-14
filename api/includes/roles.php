@@ -378,7 +378,7 @@ function provisionRoleRecord($userId, $role) {
         //
         // The stages are: admin approves the role (this record appears,
         // unverified) -> the vendor fills in their real business details ->
-        // an admin verifies. api/surplus-listings.php already refuses to
+        // an admin verifies. api/Bulk-listings.php already refuses to
         // create a listing unless is_verified is TRUE, so the gate was there
         // all along with nothing behind it.
         $ins = $dbh->prepare(

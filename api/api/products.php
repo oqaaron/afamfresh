@@ -30,7 +30,7 @@ if ($action == 'list') {
     // Vendors can now create their own products, which exist in this same
     // table. They are deliberately NOT sold here: a vendor product has no
     // stock or fulfilment behind it in the main shop -- it exists so the
-    // vendor can put surplus of it up for sale, and that is where customers
+    // vendor can put Bulk of it up for sale, and that is where customers
     // meet it. Without this filter an approved vendor product would appear in
     // the catalogue as something nobody can actually deliver.
     //

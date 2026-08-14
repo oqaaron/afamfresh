@@ -72,7 +72,7 @@ function getLoyaltySettings(PDO $dbh): array {
  * Shop orders: total_amount already includes delivery_fee (which itself
  * already bundles service/insurance/processing/mileage into one number —
  * see api/orders.php's create action), so goods value is the difference.
- * Surplus orders: total_price is already goods-only; delivery_fee is a
+ * Bulk orders: total_price is already goods-only; delivery_fee is a
  * separate column there from the start.
  */
 function goodsValueForOrder(PDO $dbh, string $source, int $orderId): ?float {
@@ -84,8 +84,8 @@ function goodsValueForOrder(PDO $dbh, string $source, int $orderId): ?float {
         return max(0.0, (float)$row['total_amount'] - (float)$row['delivery_fee']);
     }
 
-    if ($source === 'surplus') {
-        $stmt = $dbh->prepare("SELECT total_price FROM surplus_orders WHERE id = ?");
+    if ($source === 'Bulk') {
+        $stmt = $dbh->prepare("SELECT total_price FROM Bulk_orders WHERE id = ?");
         $stmt->execute([$orderId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
@@ -141,8 +141,8 @@ function quoteLoyaltyRedemption(PDO $dbh, int $userId, int $requestedPoints, flo
 
 /**
  * Awards points for a delivered order. Idempotent per (source, order_id) —
- * safe to call from more than one code path (a surplus order can reach
- * 'delivered' via api/rider.php or api/surplus-orders.php's PUT action) and
+ * safe to call from more than one code path (a Bulk order can reach
+ * 'delivered' via api/rider.php or api/Bulk-orders.php's PUT action) and
  * safe to retry.
  *
  * Unlike a failed rider/vendor credit, a failed earn must NEVER fail the
@@ -153,7 +153,7 @@ function quoteLoyaltyRedemption(PDO $dbh, int $userId, int $requestedPoints, flo
  * @return array{ok:bool, points_awarded:int, error:?string}
  */
 function earnLoyaltyPoints(PDO $dbh, int $userId, string $source, int $orderId, float $goodsValue): array {
-    if (!in_array($source, ['order', 'surplus'], true)) {
+    if (!in_array($source, ['order', 'Bulk'], true)) {
         return ['ok' => false, 'points_awarded' => 0, 'error' => 'Unknown order source.'];
     }
 
@@ -229,7 +229,7 @@ function settleLoyaltyRedemption(PDO $dbh, int $userId, string $source, int $ord
     }
 
     try {
-        if (!in_array($source, ['order', 'surplus'], true)) {
+        if (!in_array($source, ['order', 'Bulk'], true)) {
             error_log("settleLoyaltyRedemption: unknown source '$source' for order $orderId");
             return ['ok' => false, 'points_settled' => 0];
         }

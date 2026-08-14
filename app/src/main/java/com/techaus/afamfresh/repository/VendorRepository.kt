@@ -3,21 +3,21 @@ package com.techaus.afamfresh.repository
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.AddVendorProductRequest
 import com.techaus.afamfresh.models.BaseResponse
-import com.techaus.afamfresh.models.CreateSurplusListingRequest
+import com.techaus.afamfresh.models.CreateBulkListingRequest
 import com.techaus.afamfresh.models.CreateVendorProductResponse
 import com.techaus.afamfresh.models.VendorCatalogueProduct
 import com.techaus.afamfresh.models.VendorCatalogueResponse
-import com.techaus.afamfresh.models.SurplusListing
-import com.techaus.afamfresh.models.SurplusListingResponse
-import com.techaus.afamfresh.models.SurplusListingsResponse
-import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.BulkListing
+import com.techaus.afamfresh.models.BulkListingResponse
+import com.techaus.afamfresh.models.BulkListingsResponse
+import com.techaus.afamfresh.models.BulkOrder
 import com.techaus.afamfresh.models.RequestVendorPayoutResponse
-import com.techaus.afamfresh.models.UpdateSurplusListingRequest
-import com.techaus.afamfresh.models.UpdateSurplusOrderStatusRequest
+import com.techaus.afamfresh.models.UpdateBulkListingRequest
+import com.techaus.afamfresh.models.UpdateBulkOrderStatusRequest
 import com.techaus.afamfresh.models.VendorEarningsResponse
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.UpdateVendorProfileResponse
-import com.techaus.afamfresh.models.SurplusOrdersResponse
+import com.techaus.afamfresh.models.BulkOrdersResponse
 import com.techaus.afamfresh.models.VendorProduct
 import com.techaus.afamfresh.models.VendorProfile
 import com.techaus.afamfresh.models.VendorProfileResponse
@@ -40,7 +40,7 @@ import com.techaus.afamfresh.utils.enqueueApi
  * decides whose records come back.
  *
  * Previously this class called `vendor/products.php`, `vendor/orders.php` and
- * `vendor/surplus/listings.php`, none of which exist — every vendor screen was
+ * `vendor/Bulk/listings.php`, none of which exist — every vendor screen was
  * silently 404ing.
  */
 class VendorRepository(
@@ -171,7 +171,7 @@ class VendorRepository(
     }
 
     /**
-     * A vendor's own surplus listings.
+     * A vendor's own Bulk listings.
      *
      * Note the server also filters out anything sold out or past its expiry, so
      * this cannot show a vendor their expired listings — and `status` selects
@@ -180,10 +180,10 @@ class VendorRepository(
     fun getListings(
         vendorId: Int,
         status: String = "approved",
-        callback: (List<SurplusListing>?, ApiError?) -> Unit
+        callback: (List<BulkListing>?, ApiError?) -> Unit
     ) {
-        apiService.getVendorSurplusListings(vendorId = vendorId, status = status)
-            .enqueueApi<SurplusListingsResponse>("VendorRepo", "getListings") { body, error ->
+        apiService.getVendorBulkListings(vendorId = vendorId, status = status)
+            .enqueueApi<BulkListingsResponse>("VendorRepo", "getListings") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.listings ?: emptyList(), null)
@@ -193,27 +193,27 @@ class VendorRepository(
     }
 
     /**
-     * Submits a new surplus listing. The server sets status='pending' and
+     * Submits a new Bulk listing. The server sets status='pending' and
      * computes the discounted price itself, so no price is sent.
      *
      * Rejects locally on the 30–70% discount rule rather than making a round
      * trip to be told the same thing.
      */
     fun createListing(
-        request: CreateSurplusListingRequest,
-        callback: (SurplusListing?, ApiError?) -> Unit
+        request: CreateBulkListingRequest,
+        callback: (BulkListing?, ApiError?) -> Unit
     ) {
-        if (request.discountPercent !in CreateSurplusListingRequest.DISCOUNT_RANGE) {
+        if (request.discountPercent !in CreateBulkListingRequest.DISCOUNT_RANGE) {
             callback(null, ApiError.Reported("Discount must be between 30% and 70%."))
             return
         }
 
-        apiService.createVendorSurplusListing(listing = request)
-            .enqueueApi<SurplusListingResponse>("VendorRepo", "createListing") { body, error ->
+        apiService.createVendorBulkListing(listing = request)
+            .enqueueApi<BulkListingResponse>("VendorRepo", "createListing") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     // The server re-selects and returns the new row, but as a
-                    // bare `surplus_listings` record with no joins — so
+                    // bare `Bulk_listings` record with no joins — so
                     // productName/businessName are null here even though the
                     // list endpoint populates them.
                     body?.success == true -> callback(body.listing, null)
@@ -232,8 +232,8 @@ class VendorRepository(
         remainingQuantity: Int,
         callback: (Boolean, ApiError?) -> Unit
     ) {
-        apiService.updateVendorSurplusListing(
-            UpdateSurplusListingRequest(
+        apiService.updateVendorBulkListing(
+            UpdateBulkListingRequest(
                 listingId = listingId,
                 remainingQuantity = remainingQuantity
             )
@@ -248,7 +248,7 @@ class VendorRepository(
 
     /** Soft delete — the server sets status='cancelled'. */
     fun deleteListing(listingId: Int, callback: (Boolean, ApiError?) -> Unit) {
-        apiService.deleteVendorSurplusListing(listingId = listingId)
+        apiService.deleteVendorBulkListing(listingId = listingId)
             .enqueueApi<BaseResponse>("VendorRepo", "deleteListing") { body, error ->
                 when {
                     error != null -> callback(false, error)
@@ -259,13 +259,13 @@ class VendorRepository(
     }
 
     /**
-     * Surplus orders for this vendor. These are [SurplusOrder]s, not catalogue
+     * Bulk orders for this vendor. These are [BulkOrder]s, not catalogue
      * [com.techaus.afamfresh.models.Order]s — the backend exposes no per-vendor
      * view of ordinary orders.
      */
-    fun getVendorOrders(vendorId: Int, callback: (List<SurplusOrder>?, ApiError?) -> Unit) {
+    fun getVendorOrders(vendorId: Int, callback: (List<BulkOrder>?, ApiError?) -> Unit) {
         apiService.getVendorOrders(vendorId = vendorId)
-            .enqueueApi<SurplusOrdersResponse>("VendorRepo", "getVendorOrders") { body, error ->
+            .enqueueApi<BulkOrdersResponse>("VendorRepo", "getVendorOrders") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.orders ?: emptyList(), null)
@@ -275,21 +275,21 @@ class VendorRepository(
     }
 
     /**
-     * Moves one surplus order to a new status.
+     * Moves one Bulk order to a new status.
      *
      * The failure message is passed through rather than replaced: the server's
      * refusals here are specific and actionable — "This order has not been paid
      * for yet", "That order is not yours" — and a generic message would hide
      * which of them happened.
      */
-    fun updateSurplusOrderStatus(
+    fun updateBulkOrderStatus(
         orderId: Int,
         status: String,
         callback: (Boolean, ApiError?) -> Unit
     ) {
-        apiService.updateSurplusOrderStatus(
-            UpdateSurplusOrderStatusRequest(orderId = orderId, status = status)
-        ).enqueueApi<BaseResponse>("VendorRepo", "updateSurplusOrderStatus") { body, error ->
+        apiService.updateBulkOrderStatus(
+            UpdateBulkOrderStatusRequest(orderId = orderId, status = status)
+        ).enqueueApi<BaseResponse>("VendorRepo", "updateBulkOrderStatus") { body, error ->
             when {
                 error != null -> callback(false, error)
                 body?.success == true -> callback(true, null)

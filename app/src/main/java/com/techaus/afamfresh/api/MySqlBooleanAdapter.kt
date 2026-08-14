@@ -38,7 +38,7 @@ internal fun afamFreshGson(): Gson = GsonBuilder()
  *
  * and because the exception aborts the whole document, ONE tinyint column makes
  * the entire response unparseable — the notification list, the vendor profile
- * and every surplus listing would come back as a network error with no clue why.
+ * and every Bulk listing would come back as a network error with no clue why.
  *
  * The string case is worse than an error: PDO returns some columns as strings
  * depending on driver settings, and Gson's fallback there is

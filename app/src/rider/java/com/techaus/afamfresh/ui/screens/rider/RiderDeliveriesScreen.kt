@@ -31,7 +31,7 @@ import com.techaus.afamfresh.viewmodel.RiderViewModel
 fun RiderDeliveriesScreen(
     riderViewModel: RiderViewModel,
     // (orderId, source) — the source has to travel with the id, since the
-    // shop and surplus id spaces overlap.
+    // shop and Bulk id spaces overlap.
     onDeliveryClick: (Int, String) -> Unit,
     onBack: () -> Unit
 ) {

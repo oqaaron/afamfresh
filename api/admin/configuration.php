@@ -4,8 +4,8 @@
 //
 // Business-tunable numbers that, until this page existed, could only be
 // changed by editing code and deploying: delivery pricing
-// (delivery_pricing table), surplus delivery settings
-// (surplus_delivery_settings table), and loyalty settings
+// (delivery_pricing table), Bulk delivery settings
+// (Bulk_delivery_settings table), and loyalty settings
 // (loyalty_settings table). All three tables already existed — nothing in
 // admin/ ever read or wrote to the first two.
 //
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Could not save delivery pricing.';
             }
         }
-    } elseif ($section === 'surplus_delivery') {
+    } elseif ($section === 'Bulk_delivery') {
         $fields = ['base_fee', 'fee_per_kg', 'max_weight_kg', 'free_delivery_threshold'];
         $values = [];
         $ok = true;
@@ -115,13 +115,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$ok) {
-            $error = 'Surplus delivery settings: please enter valid, non-negative numbers.';
+            $error = 'Bulk delivery settings: please enter valid, non-negative numbers.';
         } else {
             try {
-                $existing = $dbh->query("SELECT id FROM surplus_delivery_settings ORDER BY id LIMIT 1")->fetchColumn();
+                $existing = $dbh->query("SELECT id FROM Bulk_delivery_settings ORDER BY id LIMIT 1")->fetchColumn();
                 if ($existing) {
                     $dbh->prepare(
-                        "UPDATE surplus_delivery_settings SET
+                        "UPDATE Bulk_delivery_settings SET
                             base_fee = ?, fee_per_kg = ?, max_weight_kg = ?, free_delivery_threshold = ?
                           WHERE id = ?"
                     )->execute([
@@ -130,17 +130,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 } else {
                     $dbh->prepare(
-                        "INSERT INTO surplus_delivery_settings (base_fee, fee_per_kg, max_weight_kg, free_delivery_threshold)
+                        "INSERT INTO Bulk_delivery_settings (base_fee, fee_per_kg, max_weight_kg, free_delivery_threshold)
                          VALUES (?, ?, ?, ?)"
                     )->execute([
                         $values['base_fee'], $values['fee_per_kg'], $values['max_weight_kg'],
                         $values['free_delivery_threshold'],
                     ]);
                 }
-                $success = 'Surplus delivery settings updated.';
+                $success = 'Bulk delivery settings updated.';
             } catch (PDOException $e) {
-                error_log('configuration.php surplus_delivery save failed: ' . $e->getMessage());
-                $error = 'Could not save surplus delivery settings.';
+                error_log('configuration.php Bulk_delivery save failed: ' . $e->getMessage());
+                $error = 'Could not save Bulk delivery settings.';
             }
         }
     } elseif ($section === 'loyalty') {
@@ -186,7 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $deliveryPricing = $dbh->query("SELECT * FROM delivery_pricing ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
-$surplusSettings = $dbh->query("SELECT * FROM surplus_delivery_settings ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+$BulkSettings = $dbh->query("SELECT * FROM Bulk_delivery_settings ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
 $loyaltySettings = $dbh->query("SELECT * FROM loyalty_settings ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
 
 function field($arr, $key, $default = '') {
@@ -268,31 +268,31 @@ function field($arr, $key, $default = '') {
                 </form>
             </div>
 
-            <!-- ===== Surplus delivery settings ===== -->
+            <!-- ===== Bulk delivery settings ===== -->
             <div class="bg-white p-8 rounded-xl shadow mb-6">
-                <h2 class="text-lg font-bold text-gray-800 mb-1">Surplus delivery settings</h2>
-                <p class="text-gray-400 text-xs mb-4">Weight-based delivery fee for bulk surplus orders.</p>
+                <h2 class="text-lg font-bold text-gray-800 mb-1">Bulk delivery settings</h2>
+                <p class="text-gray-400 text-xs mb-4">Weight-based delivery fee for bulk Bulk orders.</p>
                 <form method="POST">
-                    <input type="hidden" name="section" value="surplus_delivery">
+                    <input type="hidden" name="section" value="Bulk_delivery">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Base fee (UGX)</label>
-                            <input type="number" step="0.01" min="0" name="base_fee" value="<?= field($surplusSettings, 'base_fee', '5000') ?>" class="w-full px-4 py-2 border rounded">
+                            <input type="number" step="0.01" min="0" name="base_fee" value="<?= field($BulkSettings, 'base_fee', '5000') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Fee per kg (UGX)</label>
-                            <input type="number" step="0.01" min="0" name="fee_per_kg" value="<?= field($surplusSettings, 'fee_per_kg', '500') ?>" class="w-full px-4 py-2 border rounded">
+                            <input type="number" step="0.01" min="0" name="fee_per_kg" value="<?= field($BulkSettings, 'fee_per_kg', '500') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Max weight per order (kg)</label>
-                            <input type="number" step="0.01" min="0" name="max_weight_kg" value="<?= field($surplusSettings, 'max_weight_kg', '1000') ?>" class="w-full px-4 py-2 border rounded">
+                            <input type="number" step="0.01" min="0" name="max_weight_kg" value="<?= field($BulkSettings, 'max_weight_kg', '1000') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Free delivery threshold (UGX)</label>
-                            <input type="number" step="0.01" min="0" name="free_delivery_threshold" value="<?= field($surplusSettings, 'free_delivery_threshold', '500000') ?>" class="w-full px-4 py-2 border rounded">
+                            <input type="number" step="0.01" min="0" name="free_delivery_threshold" value="<?= field($BulkSettings, 'free_delivery_threshold', '500000') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                     </div>
-                    <button type="submit" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Save surplus delivery settings</button>
+                    <button type="submit" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Save Bulk delivery settings</button>
                 </form>
             </div>
 

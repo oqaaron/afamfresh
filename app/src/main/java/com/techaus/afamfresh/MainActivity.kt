@@ -48,13 +48,13 @@ class MainActivity : ComponentActivity() {
 
     // `by viewModels` scopes these to the Activity's ViewModelStore, which
     // Android preserves across configuration changes. Rotating the device no
-    // longer rebuilds them, so ProductViewModel / SurplusViewModel /
+    // longer rebuilds them, so ProductViewModel / BulkViewModel /
     // VendorViewModel no longer re-run their init-block network calls and
     // discard already-loaded data.
     private val authViewModel: AuthViewModel by viewModels { viewModelFactory }
     private val productViewModel: ProductViewModel by viewModels { viewModelFactory }
     private val orderViewModel: OrderViewModel by viewModels { viewModelFactory }
-    private val surplusViewModel: SurplusViewModel by viewModels { viewModelFactory }
+    private val BulkViewModel: BulkViewModel by viewModels { viewModelFactory }
     private val cartViewModel: CartViewModel by viewModels { viewModelFactory }
     private val checkoutViewModel: CheckoutViewModel by viewModels { viewModelFactory }
     private val paymentViewModel: PaymentViewModel by viewModels { viewModelFactory }
@@ -289,7 +289,7 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
                                             authViewModel = authViewModel,
                                             productViewModel = productViewModel,
                                             orderViewModel = orderViewModel,
-                                            surplusViewModel = surplusViewModel,
+                                            BulkViewModel = BulkViewModel,
                                             cartViewModel = cartViewModel,
                                             checkoutViewModel = checkoutViewModel,
                                             paymentViewModel = paymentViewModel,

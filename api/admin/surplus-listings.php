@@ -1,8 +1,8 @@
 <?php
 // =============================================================
-// admin/surplus-listings.php
+// admin/Bulk-listings.php
 //
-// Review the surplus listings vendors submit: approve, reject, or correct
+// Review the Bulk listings vendors submit: approve, reject, or correct
 // before approving.
 //
 // The dashboard's JS panel could only approve or reject a pending listing.
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // vendor's user id, and the recalculation needs original_price.
     $cur = $dbh->prepare(
         "SELECT sl.*, v.user_id, i.name AS product_name
-           FROM surplus_listings sl
+           FROM Bulk_listings sl
            JOIN vendors v ON v.id = sl.vendor_id
            LEFT JOIN items i ON i.id = sl.product_id
           WHERE sl.id = ?"
@@ -45,11 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$listing) {
         $flashError = 'No such listing.';
     } else {
-        $productName = $listing['product_name'] ?: 'your surplus listing';
+        $productName = $listing['product_name'] ?: 'your Bulk listing';
 
         // ---- Adjustments, applied whichever decision follows ----
         $discount = $_POST['discount_percent'] !== '' ? (float)$_POST['discount_percent'] : (float)$listing['discount_percent'];
-        $quantity = $_POST['surplus_quantity'] !== '' ? (int)$_POST['surplus_quantity'] : (int)$listing['surplus_quantity'];
+        $quantity = $_POST['Bulk_quantity'] !== '' ? (int)$_POST['Bulk_quantity'] : (int)$listing['Bulk_quantity'];
         $expiry   = trim($_POST['expiry_date'] ?? '') ?: $listing['expiry_date'];
 
         if ($discount < 30 || $discount > 70) {
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Shift remaining by the same delta rather than overwriting it:
             // some of the original quantity may already be sold, and setting
             // remaining = quantity would silently resurrect sold stock.
-            $delta = $quantity - (int)$listing['surplus_quantity'];
+            $delta = $quantity - (int)$listing['Bulk_quantity'];
             $remaining = max(0, (int)$listing['remaining_quantity'] + $delta);
 
             $status = $listing['status'];
@@ -74,9 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flashError = 'Give a reason when rejecting — the vendor sees it, and a rejection with no explanation just gets resubmitted.';
             } else {
                 $upd = $dbh->prepare(
-                    "UPDATE surplus_listings
+                    "UPDATE Bulk_listings
                         SET discount_percent = ?, discounted_price = ?,
-                            surplus_quantity = ?, remaining_quantity = ?,
+                            Bulk_quantity = ?, remaining_quantity = ?,
                             expiry_date = ?, admin_notes = ?, status = ?
                       WHERE id = ?"
                 );
@@ -87,11 +87,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $changed = [];
                 if ((float)$listing['discount_percent'] !== $discount) $changed[] = 'discount';
-                if ((int)$listing['surplus_quantity'] !== $quantity)   $changed[] = 'quantity';
+                if ((int)$listing['Bulk_quantity'] !== $quantity)   $changed[] = 'quantity';
                 if ($listing['expiry_date'] !== $expiry)               $changed[] = 'expiry date';
 
                 if ($decision === 'approve') {
-                    $body = 'Your surplus listing for "' . $productName . '" has been approved and is now on sale.';
+                    $body = 'Your Bulk listing for "' . $productName . '" has been approved and is now on sale.';
                     if ($changed) {
                         // Says what was altered. A vendor who finds a
                         // different discount live than the one they submitted,
@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     addNotification(
                         (int)$listing['user_id'],
                         'Listing not approved: ' . $productName,
-                        'Your surplus listing for "' . $productName . '" was not approved. Reason: ' . $notes,
+                        'Your Bulk listing for "' . $productName . '" was not approved. Reason: ' . $notes,
                         'system', null, ['push', 'email']
                     );
                     $flash = 'Rejected. The vendor has been told why.';
@@ -123,7 +123,7 @@ if (!in_array($statusFilter, ['pending', 'approved', 'rejected', 'cancelled', 'a
 }
 
 $sql = "SELECT sl.*, v.business_name, i.name AS product_name
-          FROM surplus_listings sl
+          FROM Bulk_listings sl
           LEFT JOIN vendors v ON v.id = sl.vendor_id
           LEFT JOIN items i ON i.id = sl.product_id";
 $params = [];
@@ -136,14 +136,14 @@ $stmt = $dbh->prepare($sql);
 $stmt->execute($params);
 $listings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM surplus_listings WHERE status = 'pending'")->fetchColumn();
+$pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending'")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Surplus Listings — AfamFresh Admin</title>
+    <title>Bulk Listings — AfamFresh Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -152,7 +152,7 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM surplus_listings WHERE st
 <?php include __DIR__ . '/includes/nav.php'; ?>
 <div class="flex-1 overflow-auto">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h1 class="text-2xl font-bold text-green-800 mb-1">Surplus Listings</h1>
+        <h1 class="text-2xl font-bold text-green-800 mb-1">Bulk Listings</h1>
         <p class="text-gray-600 mb-6">
             Approving a listing puts it on sale. You can correct the discount, quantity
             or expiry first — the customer price is recalculated from the discount.
@@ -221,8 +221,8 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM surplus_listings WHERE st
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-600">Quantity</label>
-                            <input type="number" min="0" name="surplus_quantity"
-                                   value="<?= (int)$l['surplus_quantity'] ?>"
+                            <input type="number" min="0" name="Bulk_quantity"
+                                   value="<?= (int)$l['Bulk_quantity'] ?>"
                                    class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                             <div class="text-xs text-gray-500 mt-1"><?= (int)$l['remaining_quantity'] ?> remaining</div>
                         </div>

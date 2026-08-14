@@ -46,8 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dbh->beginTransaction();
 
                 // Same source='order' scoping as orders.php — the id space is
-                // shared with surplus_orders, so an unscoped lookup could
-                // reassign a different customer's surplus delivery.
+                // shared with Bulk_orders, so an unscoped lookup could
+                // reassign a different customer's Bulk delivery.
                 $existing = $dbh->prepare(
                     "SELECT id FROM rider_assignments WHERE order_id = ? AND source = 'order' LIMIT 1"
                 );

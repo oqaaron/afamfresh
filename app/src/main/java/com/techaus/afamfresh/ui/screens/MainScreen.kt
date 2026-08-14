@@ -28,7 +28,7 @@ import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.ui.nav.FlavorRouteDeps
 import com.techaus.afamfresh.ui.nav.flavorRoutes
 import com.techaus.afamfresh.models.Product
-import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.BulkListing
 import com.techaus.afamfresh.ui.screens.SettingsScreen
 import com.techaus.afamfresh.viewmodel.*
 
@@ -37,7 +37,7 @@ fun MainScreen(
     authViewModel: AuthViewModel,
     productViewModel: ProductViewModel,
     orderViewModel: OrderViewModel,
-    surplusViewModel: SurplusViewModel,
+    BulkViewModel: BulkViewModel,
     cartViewModel: CartViewModel,
     checkoutViewModel: CheckoutViewModel,
     paymentViewModel: PaymentViewModel,
@@ -51,7 +51,7 @@ fun MainScreen(
     deliveryRepository: DeliveryRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
     pendingOrderId: String? = null,
-    /** "order" or "surplus" — which table [pendingOrderId] means. The two id
+    /** "order" or "Bulk" — which table [pendingOrderId] means. The two id
      *  spaces overlap, so this decides where a tap navigates; null (legacy
      *  payloads with no source) is treated the same as "order". */
     pendingOrderSource: String? = null,
@@ -132,13 +132,13 @@ fun MainScreen(
             // exist throws, so an order push landing on a rider's phone would
             // have crashed the app rather than being ignored.
             if (isCustomerApp) {
-                if (pendingOrderSource == "surplus") {
-                    // No per-item surplus deep link exists. "edit_order" is
-                    // the SHOP order table — sending a surplus id there would
+                if (pendingOrderSource == "Bulk") {
+                    // No per-item Bulk deep link exists. "edit_order" is
+                    // the SHOP order table — sending a Bulk id there would
                     // either find nothing or, worse, silently open an
                     // unrelated shop order that happens to share the number.
                     // The list is the closest correct destination.
-                    navController.navigate("surplus_orders")
+                    navController.navigate("Bulk_orders")
                 } else {
                     navController.navigate("edit_order/$it")
                 }
@@ -163,7 +163,7 @@ fun MainScreen(
             if (hideBottomBar) return@bottomBar
             NavigationBar {
                 // Each app gets its own tabs. A rider has no cart and a vendor
-                // has no surplus basket, so showing the customer bar in those
+                // has no Bulk basket, so showing the customer bar in those
                 // builds would offer screens their role cannot use.
                 //
                 // Labels are written out rather than derived from the route
@@ -190,7 +190,7 @@ fun MainScreen(
                         Triple("home", Icons.Default.Home, "Home"),
                         Triple("orders", Icons.Default.List, "Orders"),
                         Triple("cart", Icons.Default.ShoppingCart, "Cart"),
-                        Triple("surplus", Icons.Default.ShoppingCart, "Surplus"),
+                        Triple("Bulk", Icons.Default.ShoppingCart, "Bulk"),
                         Triple("profile", Icons.Default.Person, "Profile")
                     )
                 }
@@ -233,7 +233,7 @@ fun MainScreen(
                     },
                     onOrdersClick = { navController.navigate("orders") },
                     onProfileClick = { navController.navigate("profile") },
-                    onSurplusClick = { navController.navigate("surplus") },
+                    onBulkClick = { navController.navigate("Bulk") },
                     onCartClick = { navController.navigate("cart") },
                     productViewModel = productViewModel,
                     cartViewModel = cartViewModel,
@@ -296,28 +296,28 @@ fun MainScreen(
                 )
             }
 
-            // ===== SURPLUS =====
-            if (isCustomerApp) composable("surplus") {
-                SurplusScreen(
-                    surplusViewModel = surplusViewModel,
+            // ===== Bulk =====
+            if (isCustomerApp) composable("Bulk") {
+                BulkScreen(
+                    BulkViewModel = BulkViewModel,
                     onBack = { navController.navigate("home") },
                     onListingClick = { listing ->
-                        navController.navigate("surplus_checkout/${listing.id}")
+                        navController.navigate("Bulk_checkout/${listing.id}")
                     },
-                    onMyOrdersClick = { navController.navigate("surplus_orders") }
+                    onMyOrdersClick = { navController.navigate("Bulk_orders") }
                 )
             }
 
-            // ===== SURPLUS CHECKOUT =====
+            // ===== Bulk CHECKOUT =====
             //
             // Only the listing ID travels in the route. The listing itself is
             // looked up from the ViewModel, because a route argument survives
             // process death while an object reference does not — and passing a
             // whole listing through a URL means encoding a price the customer
             // could then edit.
-            if (isCustomerApp) composable("surplus_checkout/{listingId}") { backStackEntry ->
+            if (isCustomerApp) composable("Bulk_checkout/{listingId}") { backStackEntry ->
                 val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
-                val listings by surplusViewModel.listings.collectAsState()
+                val listings by BulkViewModel.listings.collectAsState()
                 val addresses by addressViewModel.addresses.collectAsState()
 
                 // Held once resolved, rather than re-derived from the list on
@@ -326,18 +326,18 @@ fun MainScreen(
                 // which would replace the screen with "no longer available" in
                 // the instant between placing the order and opening the payment
                 // page.
-                val listing = remember(listingId) { mutableStateOf<SurplusListing?>(null) }
+                val listing = remember(listingId) { mutableStateOf<BulkListing?>(null) }
                 if (listing.value == null && listingId != null) {
                     listing.value = listings.find { it.id == listingId }
                 }
 
                 // The pin comes back through DeliveryResultViewModel, the same
                 // channel the shop checkout uses. Only the drop-off half is
-                // read: the pickup point for surplus is the vendor's premises,
+                // read: the pickup point for Bulk is the vendor's premises,
                 // which the server knows and the map does not.
                 val pinned by deliveryResultViewModel.deliveryResult.collectAsState()
 
-                SurplusCheckoutScreen(
+                BulkCheckoutScreen(
                     listing = listing.value,
                     userId = user?.id?.toIntOrNull(),
                     userEmail = user?.email,
@@ -346,15 +346,15 @@ fun MainScreen(
                     pinnedLat = pinned?.dropoffLat,
                     pinnedLng = pinned?.dropoffLng,
                     pinnedAddress = pinned?.dropoffAddress,
-                    surplusViewModel = surplusViewModel,
+                    BulkViewModel = BulkViewModel,
                     paymentViewModel = paymentViewModel,
                     onBack = { navController.popBackStack() },
                     onPickLocation = {
-                        navController.navigate("surplus_delivery_map/${listingId ?: 0}")
+                        navController.navigate("Bulk_delivery_map/${listingId ?: 0}")
                     },
                     onPaymentRedirect = { paymentUrl, transactionId ->
                         navController.navigate(
-                            "surplus_payment_webview/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
+                            "Bulk_payment_webview/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
                         )
                     },
                     // Cash on delivery: there is no payment page, and the order
@@ -362,21 +362,21 @@ fun MainScreen(
                     // place to land — going back to checkout would look like it
                     // had not worked.
                     onOrderPlacedUnpaid = {
-                        navController.navigate("surplus_orders") {
-                            popUpTo("surplus") { inclusive = false }
+                        navController.navigate("Bulk_orders") {
+                            popUpTo("Bulk") { inclusive = false }
                         }
                     },
                     availableLoyaltyPoints = user?.loyaltyPoints ?: 0
                 )
             }
 
-            // ===== SURPLUS PAYMENT =====
+            // ===== Bulk PAYMENT =====
             //
             // Separate routes from the shop's rather than a shared one with a
             // parameter: these differ in where they send the customer afterwards,
             // and in the order_type the verify call must carry. The screens
             // themselves are the same two composables.
-            if (isCustomerApp) composable("surplus_payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
+            if (isCustomerApp) composable("Bulk_payment_webview/{paymentUrl}/{transactionId}") { backStackEntry ->
                 val paymentUrl = Uri.decode(backStackEntry.arguments?.getString("paymentUrl") ?: "")
                 val transactionId = backStackEntry.arguments?.getString("transactionId") ?: ""
 
@@ -388,54 +388,54 @@ fun MainScreen(
                     // so the customer is returned to the marketplace rather than
                     // to a checkout form that would place a second one.
                     onBack = {
-                        navController.navigate("surplus") {
-                            popUpTo("surplus") { inclusive = true }
+                        navController.navigate("Bulk") {
+                            popUpTo("Bulk") { inclusive = true }
                         }
                     },
                     onCheckoutFinished = { trackingId ->
-                        navController.navigate("surplus_payment_confirming/$trackingId") {
-                            popUpTo("surplus") { inclusive = false }
+                        navController.navigate("Bulk_payment_confirming/$trackingId") {
+                            popUpTo("Bulk") { inclusive = false }
                         }
                     }
                 )
             }
 
-            if (isCustomerApp) composable("surplus_payment_confirming/{trackingId}") { backStackEntry ->
+            if (isCustomerApp) composable("Bulk_payment_confirming/{trackingId}") { backStackEntry ->
                 val trackingId = backStackEntry.arguments?.getString("trackingId") ?: ""
                 PaymentConfirmingScreen(
                     trackingId = trackingId,
                     paymentViewModel = paymentViewModel,
-                    orderType = ApiService.ORDER_TYPE_SURPLUS,
+                    orderType = ApiService.ORDER_TYPE_Bulk,
                     onPaid = {
-                        navController.navigate("surplus_orders") {
-                            popUpTo("surplus") { inclusive = false }
+                        navController.navigate("Bulk_orders") {
+                            popUpTo("Bulk") { inclusive = false }
                         }
                     },
                     // Reuses this same order rather than sending the customer
                     // back to the marketplace, where buying again would create
-                    // a second surplus_orders row — a fresh reservation against
+                    // a second Bulk_orders row — a fresh reservation against
                     // the listing while the first one sits dead until
-                    // releaseStaleSurplusReservations() eventually cleans it up.
+                    // releaseStaleBulkReservations() eventually cleans it up.
                     onFailed = { orderId, amount ->
                         navController.navigate(
-                            "payment_retry/surplus/${orderId ?: ""}/${amount ?: 0.0}"
+                            "payment_retry/Bulk/${orderId ?: ""}/${amount ?: 0.0}"
                         ) {
-                            popUpTo("surplus") { inclusive = false }
+                            popUpTo("Bulk") { inclusive = false }
                         }
                     },
                     // Unknown outcome sends them to their orders, never back to
                     // checkout: telling someone who HAS paid that it failed is
                     // how you get paid twice.
                     onUnconfirmed = {
-                        navController.navigate("surplus_orders") {
-                            popUpTo("surplus") { inclusive = false }
+                        navController.navigate("Bulk_orders") {
+                            popUpTo("Bulk") { inclusive = false }
                         }
                     }
                 )
             }
 
             // Retries payment on an order that already exists. Shared between
-            // shop and surplus, keyed by orderType, since both hit the same
+            // shop and Bulk, keyed by orderType, since both hit the same
             // "failed mobile money → wants to pay differently" situation and
             // the fix is identical: call api/payment.php?action=initiate again
             // on the SAME order id, never api/orders.php?action=create again.
@@ -443,7 +443,7 @@ fun MainScreen(
                 val orderType = backStackEntry.arguments?.getString("orderType") ?: ApiService.ORDER_TYPE_SHOP
                 val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
                 val amount = backStackEntry.arguments?.getString("amount")?.toDoubleOrNull()
-                val isSurplus = orderType == ApiService.ORDER_TYPE_SURPLUS
+                val isBulk = orderType == ApiService.ORDER_TYPE_Bulk
 
                 PaymentRetryScreen(
                     orderId = orderId,
@@ -451,22 +451,22 @@ fun MainScreen(
                     amount = amount,
                     paymentViewModel = paymentViewModel,
                     onBack = {
-                        if (isSurplus) {
-                            navController.navigate("surplus_orders") { popUpTo("surplus") { inclusive = false } }
+                        if (isBulk) {
+                            navController.navigate("Bulk_orders") { popUpTo("Bulk") { inclusive = false } }
                         } else {
                             navController.navigate("orders") { popUpTo("home") { inclusive = false } }
                         }
                     },
                     onCashAccepted = {
-                        if (isSurplus) {
-                            navController.navigate("surplus_orders") { popUpTo("surplus") { inclusive = false } }
+                        if (isBulk) {
+                            navController.navigate("Bulk_orders") { popUpTo("Bulk") { inclusive = false } }
                         } else {
                             cartViewModel.clearCart()
                             navController.navigate("orders") { popUpTo("home") { inclusive = false } }
                         }
                     },
                     onRedirect = { paymentUrl, transactionId ->
-                        val webviewRoute = if (isSurplus) "surplus_payment_webview" else "payment_webview"
+                        val webviewRoute = if (isBulk) "Bulk_payment_webview" else "payment_webview"
                         navController.navigate(
                             "$webviewRoute/${Uri.encode(paymentUrl)}/${Uri.encode(transactionId)}"
                         )
@@ -474,24 +474,24 @@ fun MainScreen(
                 )
             }
 
-            // ===== SURPLUS ORDERS =====
-            if (isCustomerApp) composable("surplus_orders") {
-                SurplusOrdersScreen(
-                    surplusViewModel = surplusViewModel,
+            // ===== Bulk ORDERS =====
+            if (isCustomerApp) composable("Bulk_orders") {
+                BulkOrdersScreen(
+                    BulkViewModel = BulkViewModel,
                     userId = user?.id?.toIntOrNull(),
-                    onBack = { navController.navigate("surplus") },
-                    onTrackOrder = { orderId -> navController.navigate("track/$orderId/surplus") },
+                    onBack = { navController.navigate("Bulk") },
+                    onTrackOrder = { orderId -> navController.navigate("track/$orderId/Bulk") },
                     onConfirmReceipt = { orderId ->
-                        navController.navigate("confirm_receipt/surplus/$orderId")
+                        navController.navigate("confirm_receipt/Bulk/$orderId")
                     }
                 )
             }
 
-            // ===== CONFIRM RECEIPT (shop and surplus) =====
+            // ===== CONFIRM RECEIPT (shop and Bulk) =====
             //
             // Reached from a "Confirm & Rate" button offered once the rider has
             // uploaded proof of delivery — see Order.needsReceiptConfirmation /
-            // SurplusOrder.needsReceiptConfirmation. "order" / "surplus" is
+            // BulkOrder.needsReceiptConfirmation. "order" / "Bulk" is
             // tracking.php's vocabulary already used by the track/... route.
             if (isCustomerApp) composable("confirm_receipt/{orderType}/{orderId}") { backStackEntry ->
                 val orderType = backStackEntry.arguments?.getString("orderType") ?: "order"
@@ -501,7 +501,7 @@ fun MainScreen(
                     orderType = orderType,
                     userId = user?.id?.toIntOrNull(),
                     orderViewModel = orderViewModel,
-                    surplusViewModel = surplusViewModel,
+                    BulkViewModel = BulkViewModel,
                     onBack = { navController.popBackStack() },
                     onDone = { navController.popBackStack() }
                 )

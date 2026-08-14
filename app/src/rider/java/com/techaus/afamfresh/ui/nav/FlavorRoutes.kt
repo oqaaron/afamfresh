@@ -51,7 +51,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     }
 
     // The source is part of the route, not an assumption made at the far end.
-    // rider_assignments now covers both shop and surplus orders and their ids
+    // rider_assignments now covers both shop and Bulk orders and their ids
     // overlap, so "rider_delivery/41" alone is ambiguous — it could be either
     // customer's job.
     composable("rider_delivery/{orderId}/{source}") { backStackEntry ->

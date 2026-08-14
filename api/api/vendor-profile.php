@@ -9,7 +9,7 @@ require_once '../admin/includes/config.php';
 // creates a vendors row from what a user account can supply: the
 // person's own name as the business name, and a blank phone. This
 // is where that becomes a real business record, before an admin
-// verifies it and api/surplus-listings.php starts accepting
+// verifies it and api/Bulk-listings.php starts accepting
 // listings.
 //
 // Unlike the read below, this identifies the vendor from the
@@ -52,11 +52,11 @@ if (($_GET['action'] ?? '') === 'update') {
         $businessType = 'market_vendor';
     }
 
-    // Where the vendor's premises are, for pricing a surplus delivery.
+    // Where the vendor's premises are, for pricing a Bulk delivery.
     //
-    // A surplus load is collected here and driven to the customer, so this is
+    // A Bulk load is collected here and driven to the customer, so this is
     // one end of the journey being charged for. Optional: a vendor who has not
-    // pinned yet keeps trading, and surplusDeliveryDistance() falls back to the
+    // pinned yet keeps trading, and BulkDeliveryDistance() falls back to the
     // depot and flags the quote as estimated.
     //
     // Range-checked rather than trusted. A swapped pair or a stray zero puts

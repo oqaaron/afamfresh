@@ -68,7 +68,7 @@ fun SkeletonBlock(
 }
 
 /**
- * Placeholder for a vertical list of cards — orders, surplus deals, vendor
+ * Placeholder for a vertical list of cards — orders, Bulk deals, vendor
  * listings, notifications.
  */
 @Composable

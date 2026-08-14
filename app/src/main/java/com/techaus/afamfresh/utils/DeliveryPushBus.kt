@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 object DeliveryPushBus {
 
-    /** (orderId, source) — source is tracking.php's vocabulary: "order" or "surplus". */
+    /** (orderId, source) — source is tracking.php's vocabulary: "order" or "Bulk". */
     private val _transitions = MutableSharedFlow<Pair<Int, String>>(extraBufferCapacity = 4)
     val transitions: SharedFlow<Pair<Int, String>> = _transitions.asSharedFlow()
 

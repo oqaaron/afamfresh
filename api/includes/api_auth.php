@@ -5,7 +5,7 @@
 // A family of endpoints took user_id straight from the query
 // string and answered for whoever was named, with no session
 // check: vendor-profile, vendor-earnings, vendor-products,
-// vendor-notifications and surplus-orders. Incrementing that
+// vendor-notifications and Bulk-orders. Incrementing that
 // number walked through the platform's vendors and returned
 // their revenue, commission rates and net earnings. All of it was
 // reachable from the open internet.

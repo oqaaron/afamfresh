@@ -77,8 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Product</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-<body class="bg-gray-100 p-6">
+<body class="bg-gray-100">
+<div class="flex h-screen">
+    <?php include __DIR__ . "/includes/nav.php"; ?>
+
+    <div class="flex-1 overflow-y-auto">
+    <div class="p-6">
     <div class="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow">
         <h1 class="text-2xl font-bold text-green-800 mb-6">Edit Product</h1>
 
@@ -142,5 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </form>
     </div>
+    </div>
+    </div>
+</div>
 </body>
 </html>

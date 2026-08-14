@@ -6,7 +6,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 try {
     if ($method === 'GET') {
-        // Fetch approved surplus listings (public)
+        // Fetch approved Bulk listings (public)
         $vendor_id = isset($_GET['vendor_id']) ? intval($_GET['vendor_id']) : 0;
         $status = isset($_GET['status']) ? trim($_GET['status']) : 'approved'; // default to approved
         $listing_type = isset($_GET['listing_type']) ? trim($_GET['listing_type']) : '';
@@ -29,7 +29,7 @@ try {
             SELECT sl.*, v.business_name, v.location as vendor_location,
                    i.name as product_name, i.category, i.image,
                    u.fname as vendor_fname, u.lname as vendor_lname
-            FROM surplus_listings sl
+            FROM Bulk_listings sl
             JOIN vendors v ON sl.vendor_id = v.id
             JOIN items i ON sl.product_id = i.id
             JOIN users u ON v.user_id = u.id
@@ -45,7 +45,7 @@ try {
         echo json_encode(['success' => true, 'listings' => $listings]);
         
     } elseif ($method === 'POST') {
-        // Create new surplus listing (vendor submits, sets status = 'pending')
+        // Create new Bulk listing (vendor submits, sets status = 'pending')
         $input = json_decode(file_get_contents('php://input'), true);
         
         // Whoever is signed in is the vendor listing this. Taken from the body
@@ -56,7 +56,7 @@ try {
         $product_id = intval($input['product_id'] ?? 0);
         $original_price = floatval($input['original_price'] ?? 0);
         $discount_percent = floatval($input['discount_percent'] ?? 0);
-        $surplus_quantity = floatval($input['surplus_quantity'] ?? 0);
+        $Bulk_quantity = floatval($input['Bulk_quantity'] ?? 0);
         $expiry_date = trim($input['expiry_date'] ?? '');
         $listing_type = trim($input['listing_type'] ?? 'goodie_bag');
         $description = trim($input['description'] ?? '');
@@ -78,7 +78,7 @@ try {
             : 1;
         
         // Validate
-        if ($user_id === 0 || $product_id === 0 || $original_price === 0 || $discount_percent === 0 || $surplus_quantity === 0 || empty($expiry_date)) {
+        if ($user_id === 0 || $product_id === 0 || $original_price === 0 || $discount_percent === 0 || $Bulk_quantity === 0 || empty($expiry_date)) {
             echo json_encode(['error' => 'Missing required fields']);
             exit;
         }
@@ -102,7 +102,7 @@ try {
         // product_id was previously taken on trust and only the foreign key
         // checked it — so any id in `items` was listable, including another
         // vendor's product and one still awaiting approval. That would have
-        // let a vendor sell surplus "of" a product they do not own, and let
+        // let a vendor sell Bulk "of" a product they do not own, and let
         // anyone bypass the approval this whole flow exists to enforce.
         $ownProduct = $dbh->prepare(
             "SELECT status FROM items WHERE id = ? AND vendor_id = ?"
@@ -124,34 +124,34 @@ try {
         $discounted_price = $original_price * (1 - ($discount_percent / 100));
         
         $stmt = $dbh->prepare("
-            INSERT INTO surplus_listings 
+            INSERT INTO Bulk_listings 
             (vendor_id, product_id, original_price, discount_percent, discounted_price, 
-             surplus_quantity, remaining_quantity, expiry_date, listing_type, description, 
+             Bulk_quantity, remaining_quantity, expiry_date, listing_type, description, 
              condition_rating, pickup_only, weight_per_unit_kg, is_weight_based, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         ");
         $result = $stmt->execute([
             $vendor_id, $product_id, $original_price, $discount_percent, $discounted_price,
-            $surplus_quantity, $surplus_quantity, $expiry_date, $listing_type, $description,
+            $Bulk_quantity, $Bulk_quantity, $expiry_date, $listing_type, $description,
             $condition_rating, $pickup_only, $weight_per_unit_kg, $is_weight_based
         ]);
         
         if ($result) {
             $listing_id = $dbh->lastInsertId();
-            $fetchStmt = $dbh->prepare("SELECT * FROM surplus_listings WHERE id = ?");
+            $fetchStmt = $dbh->prepare("SELECT * FROM Bulk_listings WHERE id = ?");
             $fetchStmt->execute([$listing_id]);
             $listing = $fetchStmt->fetch(PDO::FETCH_ASSOC);
             echo json_encode([
                 'success' => true,
-                'message' => 'Surplus listing submitted for approval',
+                'message' => 'Bulk listing submitted for approval',
                 'listing' => $listing
             ]);
         } else {
-            echo json_encode(['error' => 'Failed to create surplus listing']);
+            echo json_encode(['error' => 'Failed to create Bulk listing']);
         }
         
     } elseif ($method === 'PUT') {
-        // Update surplus listing (status, quantity, admin notes) – admin only in practice
+        // Update Bulk listing (status, quantity, admin notes) – admin only in practice
         $input = json_decode(file_get_contents('php://input'), true);
         $listing_id = intval($input['listing_id'] ?? 0);
         $status = isset($input['status']) ? trim($input['status']) : null;
@@ -182,19 +182,19 @@ try {
         }
         $updateFields[] = "updated_at = NOW()";
         $params[] = $listing_id;
-        $sql = "UPDATE surplus_listings SET " . implode(', ', $updateFields) . " WHERE id = ?";
+        $sql = "UPDATE Bulk_listings SET " . implode(', ', $updateFields) . " WHERE id = ?";
         $stmt = $dbh->prepare($sql);
         $stmt->execute($params);
         echo json_encode(['success' => true, 'message' => 'Listing updated successfully']);
         
     } elseif ($method === 'DELETE') {
-        // Cancel surplus listing (soft delete = set status to 'cancelled')
+        // Cancel Bulk listing (soft delete = set status to 'cancelled')
         $listing_id = intval($_GET['listing_id'] ?? 0);
         if ($listing_id === 0) {
             echo json_encode(['error' => 'listing_id is required']);
             exit;
         }
-        $stmt = $dbh->prepare("UPDATE surplus_listings SET status = 'cancelled', updated_at = NOW() WHERE id = ?");
+        $stmt = $dbh->prepare("UPDATE Bulk_listings SET status = 'cancelled', updated_at = NOW() WHERE id = ?");
         $stmt->execute([$listing_id]);
         echo json_encode(['success' => true, 'message' => 'Listing cancelled successfully']);
         

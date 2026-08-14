@@ -28,7 +28,7 @@ import com.techaus.afamfresh.utils.GkmaBounds
  *
  * WHY A VENDOR PINS ANYTHING
  *
- * A surplus load is picked up at the vendor's premises and driven to the
+ * A Bulk load is picked up at the vendor's premises and driven to the
  * customer, and the delivery fee charges for that journey. Vendors carry only a
  * free-text `location` — "Nakawa market", "near the stage" — which nothing can
  * measure a distance from. Until a vendor pins, their listings are priced from
@@ -78,7 +78,7 @@ fun VendorLocationPickerScreen(
                 }
                 Column {
                     Text("Pickup point", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Where riders collect your surplus", fontSize = 12.sp, color = InkMuted)
+                    Text("Where riders collect your Bulk", fontSize = 12.sp, color = InkMuted)
                 }
             }
         }

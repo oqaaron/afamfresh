@@ -58,6 +58,14 @@ fun DeliveryMapScreen(
      */
     cartSubtotal: Double,
     deliveryRepository: DeliveryRepository,
+    /**
+     * False for the Bulk flow: that fee comes from api/Bulk-quote.php, priced
+     * against the listing's own goods value once this screen hands back
+     * coordinates — never from this screen's shop-order fee quote, which
+     * would otherwise be asked to price a cartSubtotal of 0 and refuse with
+     * "Add something to your cart before choosing a delivery point."
+     */
+    requiresFeeQuote: Boolean = true,
     onLocationSelected: (
         pickupAddress: String,
         dropoffAddress: String,
@@ -122,6 +130,16 @@ fun DeliveryMapScreen(
             // Reverse-geocode for display only; the fee comes from the server.
             val address = reverseGeocode(point)
             dropoffAddress = address
+
+            if (!requiresFeeQuote) {
+                // Bulk: nothing to price here. The checkout screen quotes
+                // this exact point against the listing's own goods value via
+                // api/Bulk-quote.php once it gets these coordinates back.
+                isCalculating = false
+                quotedFee = 0.0
+                totalCost = 0.0
+                return@launch
+            }
 
             deliveryRepository.quote(
                 orderValue = cartSubtotal,
@@ -258,27 +276,35 @@ fun DeliveryMapScreen(
                         HorizontalDivider(color = DividerGray)
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Distance", color = InkMuted, fontSize = 14.sp)
-                            Text("${"%.1f".format(distanceKm)} km", color = Ink, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Delivery fee", fontWeight = FontWeight.Bold, color = Ink)
-                            Text(
-                                if (isFreeDelivery) "FREE" else formatUgx(totalCost),
-                                fontWeight = FontWeight.Bold,
-                                color = Forest
-                            )
-                        }
+                        if (requiresFeeQuote) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Distance", color = InkMuted, fontSize = 14.sp)
+                                Text("${"%.1f".format(distanceKm)} km", color = Ink, fontSize = 14.sp)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Delivery fee", fontWeight = FontWeight.Bold, color = Ink)
+                                Text(
+                                    if (isFreeDelivery) "FREE" else formatUgx(totalCost),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Forest
+                                )
+                            }
 
-                        // The server explains its own decision, e.g. "Free
-                        // delivery for orders above 100,000 UGX". Showing it
-                        // tells the customer why, and nudges toward the
-                        // threshold when they are close.
-                        quoteReason?.let { reason ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(reason, fontSize = 11.sp, color = InkMuted)
+                            // The server explains its own decision, e.g. "Free
+                            // delivery for orders above 100,000 UGX". Showing it
+                            // tells the customer why, and nudges toward the
+                            // threshold when they are close.
+                            quoteReason?.let { reason ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(reason, fontSize = 11.sp, color = InkMuted)
+                            }
+                        } else {
+                            Text(
+                                "Delivery fee is priced on the next screen, based on weight and distance.",
+                                fontSize = 12.sp,
+                                color = InkMuted
+                            )
                         }
                     }
 

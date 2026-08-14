@@ -27,7 +27,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  *   1. an admin approves the role request, which creates the `vendors` row
  *   2. the vendor fills in their real business details  <- here
  *   3. an admin verifies the record, and only then does
- *      api/surplus-listings.php accept a listing
+ *      api/Bulk-listings.php accept a listing
  *
  * Step 1 can only infer what a user account holds, so it writes the person's
  * own name as the business name and leaves the phone blank. Until this form is
@@ -212,7 +212,7 @@ fun VendorBusinessDetailsScreen(
 
             // The pickup pin.
             //
-            // Typed text cannot be measured from, and a surplus delivery is
+            // Typed text cannot be measured from, and a Bulk delivery is
             // charged partly by the distance from here to the customer. Without
             // a pin, quotes on this vendor's listings are computed from the
             // depot and flagged as estimated — sellable, but approximate.

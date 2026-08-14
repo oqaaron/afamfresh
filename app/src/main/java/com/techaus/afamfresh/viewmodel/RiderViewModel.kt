@@ -93,7 +93,7 @@ class RiderViewModel(
     }
 
     // `source` says which table orderId belongs to. It travels with every call
-    // about a delivery because the shop and surplus id spaces overlap — an id
+    // about a delivery because the shop and Bulk id spaces overlap — an id
     // on its own can resolve to a different customer's job entirely.
     fun loadDelivery(orderId: Int, source: String = "order") {
         _selected.value = null

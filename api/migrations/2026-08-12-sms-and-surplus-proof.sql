@@ -1,5 +1,5 @@
 -- =============================================================
--- SMS as a notification channel, and proof photos for surplus
+-- SMS as a notification channel, and proof photos for Bulk
 -- =============================================================
 -- Two unrelated gaps, both blocked on a column that does not exist yet.
 --
@@ -15,9 +15,9 @@
 --    'email'/'push'/'both', would match none of them, and the job would be
 --    marked sent having done nothing at all. Silent, and invisible in the logs.
 --
--- 2. Proof of delivery on surplus orders
---    `orders` has carried delivery_photo all along; surplus_orders never did,
---    so api/rider.php refuses the upload for a surplus job. For a delivery with
+-- 2. Proof of delivery on Bulk orders
+--    `orders` has carried delivery_photo all along; Bulk_orders never did,
+--    so api/rider.php refuses the upload for a Bulk job. For a delivery with
 --    a 250,000-shilling minimum, no proof is the wrong default.
 --
 -- Run against Cloud SQL from Cloud Shell:
@@ -40,11 +40,11 @@ ALTER TABLE `user_notifications`
   ADD COLUMN `sms_error` TEXT DEFAULT NULL AFTER `sms_sent_at`;
 
 -- -------------------------------------------------------------
--- 2. Proof of delivery for surplus orders
+-- 2. Proof of delivery for Bulk orders
 -- -------------------------------------------------------------
 -- Same three columns `orders` carries, with the same meanings, so
 -- includes/rider_dispatch.php can return one shape for both.
-ALTER TABLE `surplus_orders`
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `delivery_photo` VARCHAR(255) DEFAULT NULL
     COMMENT 'Filename under proof/ in storage; see includes/storage.php',
   ADD COLUMN `delivery_confirmed` TINYINT(1) NOT NULL DEFAULT 0,
@@ -66,4 +66,4 @@ SELECT COLUMN_NAME FROM information_schema.COLUMNS
 -- Expect the three delivery_ columns.
 SELECT COLUMN_NAME FROM information_schema.COLUMNS
  WHERE TABLE_SCHEMA = DATABASE()
-   AND TABLE_NAME = 'surplus_orders' AND COLUMN_NAME LIKE 'delivery_%';
+   AND TABLE_NAME = 'Bulk_orders' AND COLUMN_NAME LIKE 'delivery_%';

@@ -34,7 +34,7 @@ class BackendContractTest {
             "is_maintenance_mode": "0",
             "maintenance_message": "We are updating our stock. Back soon!",
             "min_version_required": "1.0",
-            "surplus_approval_required": "1"
+            "Bulk_approval_required": "1"
           }
         }
     """.trimIndent()
@@ -47,7 +47,7 @@ class BackendContractTest {
         assertFalse("is_maintenance_mode is \"0\"", config.maintenanceMode)
         assertEquals("We are updating our stock. Back soon!", config.maintenanceMessage)
         assertEquals("1.0", config.minVersionRequired)
-        assertTrue(config.surplusApprovalRequired)
+        assertTrue(config.BulkApprovalRequired)
     }
 
     @Test
@@ -372,11 +372,11 @@ class BackendContractTest {
     }
 
     // ==================================================================
-    // surplus-listings.php â€” joined surplus_listings row
+    // Bulk-listings.php â€” joined Bulk_listings row
     // ==================================================================
 
     @Test
-    fun `surplus listing parses the joined shape`() {
+    fun `Bulk listing parses the joined shape`() {
         val json = """
             {
               "success": true,
@@ -388,7 +388,7 @@ class BackendContractTest {
                   "original_price": "9500.00",
                   "discount_percent": "40.00",
                   "discounted_price": "5700.00",
-                  "surplus_quantity": 10,
+                  "Bulk_quantity": 10,
                   "remaining_quantity": 4,
                   "expiry_date": "2026-08-04 18:00:00",
                   "listing_type": "goodie_bag",
@@ -404,7 +404,7 @@ class BackendContractTest {
             }
         """.trimIndent()
 
-        val listing = gson.fromJson(json, SurplusListingsResponse::class.java).listings!!.single()
+        val listing = gson.fromJson(json, BulkListingsResponse::class.java).listings!!.single()
 
         assertEquals("Apples Red 500g", listing.displayTitle)
         assertEquals("Afam Farm", listing.vendorDisplayName)
@@ -417,14 +417,14 @@ class BackendContractTest {
     }
 
     @Test
-    fun `surplus create request uses the field names the endpoint reads`() {
+    fun `Bulk create request uses the field names the endpoint reads`() {
         val json = gson.toJson(
-            CreateSurplusListingRequest(
+            CreateBulkListingRequest(
                 userId = 100,
                 productId = 30,
                 originalPrice = 9500.0,
                 discountPercent = 40.0,
-                surplusQuantity = 10,
+                BulkQuantity = 10,
                 expiryDate = "2026-08-04 18:00:00"
             )
         )
@@ -433,7 +433,7 @@ class BackendContractTest {
         assertTrue("expected user_id in $json", json.contains("\"user_id\""))
         assertTrue(json.contains("\"product_id\""))
         assertTrue(json.contains("\"discount_percent\""))
-        assertTrue(json.contains("\"surplus_quantity\""))
+        assertTrue(json.contains("\"Bulk_quantity\""))
         assertTrue(json.contains("\"expiry_date\""))
         // The server derives the discounted price; sending one would be ignored.
         assertFalse("must not send a price: $json", json.contains("\"discounted_price\""))
@@ -441,7 +441,7 @@ class BackendContractTest {
 
     @Test
     fun `the discount range matches the server's validation`() {
-        val range = CreateSurplusListingRequest.DISCOUNT_RANGE
+        val range = CreateBulkListingRequest.DISCOUNT_RANGE
 
         assertTrue(30.0 in range)
         assertTrue(70.0 in range)
@@ -534,11 +534,11 @@ class BackendContractTest {
     }
 
     // ==================================================================
-    // surplus-orders.php
+    // Bulk-orders.php
     // ==================================================================
 
     @Test
-    fun `surplus order parses the joined vendor view`() {
+    fun `Bulk order parses the joined vendor view`() {
         val json = """
             {
               "success": true,
@@ -556,7 +556,7 @@ class BackendContractTest {
             }
         """.trimIndent()
 
-        val order = gson.fromJson(json, SurplusOrdersResponse::class.java).orders!!.single()
+        val order = gson.fromJson(json, BulkOrdersResponse::class.java).orders!!.single()
 
         assertEquals(5, order.id)
         assertEquals(11400.0, order.totalPrice, 0.001)
@@ -566,10 +566,10 @@ class BackendContractTest {
     }
 
     @Test
-    fun `delivered surplus order is terminal`() {
-        assertTrue(SurplusOrder(status = "delivered").isTerminal)
-        assertTrue(SurplusOrder(status = "cancelled").isTerminal)
-        assertFalse(SurplusOrder(status = "processing").isTerminal)
+    fun `delivered Bulk order is terminal`() {
+        assertTrue(BulkOrder(status = "delivered").isTerminal)
+        assertTrue(BulkOrder(status = "cancelled").isTerminal)
+        assertFalse(BulkOrder(status = "processing").isTerminal)
     }
 }
 

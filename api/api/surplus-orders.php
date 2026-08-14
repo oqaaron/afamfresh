@@ -2,8 +2,8 @@
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/api_auth.php';
-require_once __DIR__ . '/../includes/surplus_payment.php';
-require_once __DIR__ . '/../includes/surplus_delivery_fee.php';
+require_once __DIR__ . '/../includes/Bulk_payment.php';
+require_once __DIR__ . '/../includes/Bulk_delivery_fee.php';
 require_once __DIR__ . '/../includes/service_area.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
@@ -14,13 +14,13 @@ $sessionUserId  = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
 try {
     if ($method === 'GET') {
-        // Fetch surplus orders (same as before)
+        // Fetch Bulk orders (same as before)
         $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
         $vendor_id = isset($_GET['vendor_id']) ? intval($_GET['vendor_id']) : 0;
 
         // Both filters were optional and neither was checked, so a request
         // with no parameters at all fell through to "WHERE 1=1" and returned
-        // every surplus order on the platform -- addresses, phone numbers and
+        // every Bulk order on the platform -- addresses, phone numbers and
         // all -- to anyone who asked. Unauthenticated.
         //
         // A caller must now say whose orders they mean, and prove it is
@@ -74,8 +74,8 @@ try {
                    i.name as product_name, i.image, sl.is_weight_based,
                    v.business_name, v.location as vendor_location,
                    u.fname as customer_fname, u.lname as customer_lname
-            FROM surplus_orders so
-            JOIN surplus_listings sl ON so.listing_id = sl.id
+            FROM Bulk_orders so
+            JOIN Bulk_listings sl ON so.listing_id = sl.id
             JOIN items i ON sl.product_id = i.id
             JOIN vendors v ON sl.vendor_id = v.id
             JOIN users u ON so.user_id = u.id
@@ -92,7 +92,7 @@ try {
         
     } elseif ($method === 'POST' && ($_GET['action'] ?? '') === 'confirm_receipt') {
         // The customer's confirm-and-rate step. Kept as a plain POST rather
-        // than PUT/PATCH (which is what updateSurplusOrderStatus above uses)
+        // than PUT/PATCH (which is what updateBulkOrderStatus above uses)
         // because PHP does not auto-populate $_FILES for those methods, and
         // this action optionally takes a photo. Gated on the action query
         // param specifically so it does not fall into "create order" below,
@@ -112,7 +112,7 @@ try {
             exit;
         }
 
-        $target = loadFeedbackTarget($dbh, 'surplus', $orderId, $userId);
+        $target = loadFeedbackTarget($dbh, 'Bulk', $orderId, $userId);
         if (!$target) {
             echo json_encode(['success' => false, 'error' => 'Order not found']);
             exit;
@@ -152,7 +152,7 @@ try {
             return $v === null || $v === '' ? null : (int)$v;
         };
 
-        saveCustomerReceiptConfirmation($dbh, 'surplus', $orderId, [
+        saveCustomerReceiptConfirmation($dbh, 'Bulk', $orderId, [
             'rating'                 => $ratingRaw,
             'rating_speed'           => $intOrNull($_POST['rating_speed'] ?? null),
             'rating_professionalism' => $intOrNull($_POST['rating_professionalism'] ?? null),
@@ -166,7 +166,7 @@ try {
         exit;
 
     } elseif ($method === 'POST') {
-        // Create new surplus order with weight-based delivery
+        // Create new Bulk order with weight-based delivery
         $input = json_decode(file_get_contents('php://input'), true);
         
         $listing_id = intval($input['listing_id'] ?? 0);
@@ -201,8 +201,8 @@ try {
         // Hand back stock held by checkouts that were abandoned on the payment
         // page. Done here because this is the moment the numbers have to be
         // right — a customer being told "sold out" by an order nobody paid for
-        // is the failure this prevents. See includes/surplus_payment.php.
-        releaseStaleSurplusReservations($dbh);
+        // is the failure this prevents. See includes/Bulk_payment.php.
+        releaseStaleBulkReservations($dbh);
 
         // From here to the commit is one transaction.
         //
@@ -219,10 +219,10 @@ try {
         // is_weight_based comes from sl.*, not from items.
         //
         // This selected `i.is_weight_based` and there is no such column on
-        // `items` — it lives on surplus_listings, set when the vendor creates
+        // `items` — it lives on Bulk_listings, set when the vendor creates
         // the listing. Every order creation therefore died with SQLSTATE 42S22
         // before touching a row. It went unnoticed because nothing in any app
-        // could reach this endpoint until surplus checkout was built.
+        // could reach this endpoint until Bulk checkout was built.
         //
         // 'approved', not 'active'. The status enum is
         // ('pending','approved','rejected','cancelled') and an admin approval
@@ -232,7 +232,7 @@ try {
             SELECT sl.*, i.category, i.name AS product_name,
                    v.user_id AS vendor_user_id, v.business_name,
                    v.lat AS vendor_lat, v.lng AS vendor_lng
-            FROM surplus_listings sl
+            FROM Bulk_listings sl
             JOIN items i ON sl.product_id = i.id
             JOIN vendors v ON v.id = sl.vendor_id
             WHERE sl.id = ? AND sl.status = 'approved'
@@ -269,14 +269,14 @@ try {
         $total_price = $listing['discounted_price'] * $quantity;
         if ($total_price < 250000) {
             $dbh->rollBack();
-            echo json_encode(['error' => 'Minimum order value for surplus is UGX 250,000. Current total: UGX ' . number_format($total_price, 0)]);
+            echo json_encode(['error' => 'Minimum order value for Bulk is UGX 250,000. Current total: UGX ' . number_format($total_price, 0)]);
             exit;
         }
 
         // Check minimum quantity for weight-based products
         if (($listing['is_weight_based'] || $listing['is_weight_based'] === 1) && $quantity < 20) {
             $dbh->rollBack();
-            echo json_encode(['error' => 'Minimum order for bulk/weight-based surplus items is 20 kg']);
+            echo json_encode(['error' => 'Minimum order for bulk/weight-based Bulk items is 20 kg']);
             exit;
         }
         
@@ -289,10 +289,10 @@ try {
         //
         // Computed by the same function the quote endpoint uses, so what the
         // customer was shown at checkout and what they are charged here cannot
-        // drift apart. See includes/surplus_delivery_fee.php.
+        // drift apart. See includes/Bulk_delivery_fee.php.
         $distance = null;
         if (!$listing['pickup_only'] && !empty($delivery_address)) {
-            $distance = surplusDeliveryDistance(
+            $distance = BulkDeliveryDistance(
                 isset($listing['vendor_lat']) ? (float)$listing['vendor_lat'] : null,
                 isset($listing['vendor_lng']) ? (float)$listing['vendor_lng'] : null,
                 $delivery_lat,
@@ -300,7 +300,7 @@ try {
             );
         }
 
-        $feeBreakdown = calculateSurplusDeliveryFee(
+        $feeBreakdown = calculateBulkDeliveryFee(
             $dbh,
             (float)$total_price,
             (float)$totalWeightKg,
@@ -313,11 +313,11 @@ try {
         $delivery_distance_km = $feeBreakdown['distance'];
 
         // Loyalty redemption, if requested. Quoted against total_price,
-        // which is already goods-only for a surplus order. The discount is
+        // which is already goods-only for a Bulk order. The discount is
         // stored SEPARATELY (loyalty_discount), never subtracted from
         // total_price or delivery_fee themselves — those feed the vendor's
         // and rider's payouts, and a loyalty discount is the platform's
-        // cost, not theirs. surplusPayableTotal() (includes/surplus_payment.php)
+        // cost, not theirs. BulkPayableTotal() (includes/Bulk_payment.php)
         // is what actually nets it out of the Pesapal charge. The point
         // DEBIT itself waits for payment to confirm — see
         // settleLoyaltyRedemption(), called from api/payment.php's verify
@@ -335,7 +335,7 @@ try {
         
         // Insert order
         $stmt = $dbh->prepare("
-            INSERT INTO surplus_orders
+            INSERT INTO Bulk_orders
             (listing_id, user_id, quantity, total_price, total_weight_kg, status,
              delivery_address, delivery_area, delivery_lat, delivery_lng,
              delivery_fee, delivery_fee_breakdown, delivery_distance_km, pickup_code,
@@ -367,7 +367,7 @@ try {
         
         if (!$result) {
             $dbh->rollBack();
-            echo json_encode(['error' => 'Failed to create surplus order']);
+            echo json_encode(['error' => 'Failed to create Bulk order']);
             exit;
         }
 
@@ -375,7 +375,7 @@ try {
 
         // Update listing remaining quantity
         $updateStmt = $dbh->prepare("
-            UPDATE surplus_listings
+            UPDATE Bulk_listings
             SET remaining_quantity = remaining_quantity - ?
             WHERE id = ?
         ");
@@ -389,12 +389,12 @@ try {
         // ended up with NO status at all — invisible to every query that
         // filters on one, and unrecoverable by an admin looking at the page.
         //
-        // Nothing is needed instead: api/surplus-listings.php already hides
+        // Nothing is needed instead: api/Bulk-listings.php already hides
         // sold-out listings with `remaining_quantity > 0`, so the quantity is
         // the single source of truth and the status stays meaningful.
 
         // Fetch created order
-        $fetchStmt = $dbh->prepare("SELECT * FROM surplus_orders WHERE id = ?");
+        $fetchStmt = $dbh->prepare("SELECT * FROM Bulk_orders WHERE id = ?");
         $fetchStmt->execute([$order_id]);
         $order = $fetchStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -407,13 +407,13 @@ try {
         // real and paid-for regardless of whether the message went out.
         $grand_total = $total_price + $delivery_fee;
         // What the customer is actually asked to pay — mirrors
-        // surplusPayableTotal() so this message and the real Pesapal charge
+        // BulkPayableTotal() so this message and the real Pesapal charge
         // never disagree.
         $payable_total = $grand_total - $loyalty_discount;
         try {
             addNotification(
                 (int)$listing['vendor_user_id'],
-                'New surplus order #' . $order_id,
+                'New Bulk order #' . $order_id,
                 'Someone ordered ' . rtrim(rtrim(number_format((float)$quantity, 2, '.', ''), '0'), '.')
                     . ' of "' . $listing['product_name'] . '". Total UGX '
                     . number_format($grand_total, 0) . '. It is not yours to pack until it is paid.',
@@ -430,7 +430,7 @@ try {
             addNotification(
                 (int)$user_id,
                 'Order placed: ' . $listing['product_name'],
-                'Your surplus order #' . $order_id . ' from ' . $listing['business_name']
+                'Your Bulk order #' . $order_id . ' from ' . $listing['business_name']
                     . ' totals UGX ' . number_format($payable_total, 0)
                     . ($delivery_fee > 0 ? ' including UGX ' . number_format($delivery_fee, 0) . ' delivery' : '')
                     . '. We will confirm once payment is received.',
@@ -439,12 +439,12 @@ try {
                 ['push', 'email', 'sms']
             );
         } catch (Throwable $e) {
-            error_log("Surplus order $order_id created but notifications failed: " . $e->getMessage());
+            error_log("Bulk order $order_id created but notifications failed: " . $e->getMessage());
         }
 
         echo json_encode([
             'success' => true,
-            'message' => 'Surplus order created successfully',
+            'message' => 'Bulk order created successfully',
             'order' => $order,
             'delivery_fee' => $delivery_fee,
             'total_weight_kg' => $totalWeightKg,
@@ -455,7 +455,7 @@ try {
         ]);
 
     } elseif ($method === 'PUT') {
-        // Update surplus order status (same as before)
+        // Update Bulk order status (same as before)
         $input = json_decode(file_get_contents('php://input'), true);
         
         $order_id = intval($input['order_id'] ?? 0);
@@ -483,8 +483,8 @@ try {
         // may move any.
         $owner = $dbh->prepare(
             "SELECT sl.vendor_id, v.user_id
-               FROM surplus_orders so
-               JOIN surplus_listings sl ON sl.id = so.listing_id
+               FROM Bulk_orders so
+               JOIN Bulk_listings sl ON sl.id = so.listing_id
                JOIN vendors v ON v.id = sl.vendor_id
               WHERE so.id = ?"
         );
@@ -511,7 +511,7 @@ try {
         //
         // Admins are exempt: they need to be able to fix a payment that
         // succeeded at Pesapal but never reconciled here.
-        $payment = $dbh->prepare("SELECT payment_status FROM surplus_orders WHERE id = ?");
+        $payment = $dbh->prepare("SELECT payment_status FROM Bulk_orders WHERE id = ?");
         $payment->execute([$order_id]);
         $paymentStatus = (string)$payment->fetchColumn();
         $isPaidOrCash = in_array($paymentStatus, ['paid', 'pending_cash'], true);
@@ -535,7 +535,7 @@ try {
             $updateFields[] = "delivered_at = NOW()";
         }
 
-        $sql = "UPDATE surplus_orders SET " . implode(', ', $updateFields) . " WHERE id = ?";
+        $sql = "UPDATE Bulk_orders SET " . implode(', ', $updateFields) . " WHERE id = ?";
         $stmt = $dbh->prepare($sql);
         $stmt->execute($params);
 
@@ -549,23 +549,23 @@ try {
             require_once __DIR__ . '/../includes/vendor_earnings.php';
             $credit = creditVendorEarnings($dbh, $order_id);
             if (!$credit['ok']) {
-                error_log("Surplus order $order_id delivered but vendor not credited: " . $credit['error']);
+                error_log("Bulk order $order_id delivered but vendor not credited: " . $credit['error']);
             }
 
             // Customer loyalty points — idempotent per (source, order_id),
             // see earnLoyaltyPoints()'s own doc, so this is a safe no-op if
             // api/rider.php already awarded them for the same order (a
-            // surplus order can reach 'delivered' via either path).
+            // Bulk order can reach 'delivered' via either path).
             require_once __DIR__ . '/../includes/loyalty.php';
-            $customerIdStmt = $dbh->prepare("SELECT user_id FROM surplus_orders WHERE id = ?");
+            $customerIdStmt = $dbh->prepare("SELECT user_id FROM Bulk_orders WHERE id = ?");
             $customerIdStmt->execute([$order_id]);
             $customerId = (int)($customerIdStmt->fetchColumn() ?: 0);
             if ($customerId > 0) {
-                $goodsValue = goodsValueForOrder($dbh, 'surplus', $order_id);
+                $goodsValue = goodsValueForOrder($dbh, 'Bulk', $order_id);
                 if ($goodsValue !== null) {
-                    $earn = earnLoyaltyPoints($dbh, $customerId, 'surplus', $order_id, $goodsValue);
+                    $earn = earnLoyaltyPoints($dbh, $customerId, 'Bulk', $order_id, $goodsValue);
                     if (!$earn['ok']) {
-                        error_log("surplus-orders.php: loyalty earn failed for order $order_id: " . ($earn['error'] ?? ''));
+                        error_log("Bulk-orders.php: loyalty earn failed for order $order_id: " . ($earn['error'] ?? ''));
                     }
                 }
             }
@@ -590,8 +590,8 @@ try {
             try {
                 $who = $dbh->prepare(
                     "SELECT so.user_id, so.pickup_code, i.name AS product_name, v.business_name
-                       FROM surplus_orders so
-                       JOIN surplus_listings sl ON sl.id = so.listing_id
+                       FROM Bulk_orders so
+                       JOIN Bulk_listings sl ON sl.id = so.listing_id
                        JOIN items i ON i.id = sl.product_id
                        JOIN vendors v ON v.id = sl.vendor_id
                       WHERE so.id = ?"
@@ -625,7 +625,7 @@ try {
                     );
                 }
             } catch (Throwable $e) {
-                error_log("Surplus order $order_id moved to $status but customer not notified: " . $e->getMessage());
+                error_log("Bulk order $order_id moved to $status but customer not notified: " . $e->getMessage());
             }
         }
 
@@ -643,7 +643,7 @@ try {
     if ($dbh->inTransaction()) {
         $dbh->rollBack();
     }
-    error_log('surplus-orders: ' . $e->getMessage());
+    error_log('Bulk-orders: ' . $e->getMessage());
     echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
 }
 ?>

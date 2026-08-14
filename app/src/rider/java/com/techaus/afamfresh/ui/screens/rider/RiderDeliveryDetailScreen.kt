@@ -44,7 +44,7 @@ import com.techaus.afamfresh.viewmodel.RiderViewModel
 @Composable
 fun RiderDeliveryDetailScreen(
     orderId: Int,
-    // "order" or "surplus" — which table orderId belongs to. Passed in from the
+    // "order" or "Bulk" — which table orderId belongs to. Passed in from the
     // route rather than assumed: the two id spaces overlap, so the wrong value
     // loads a different customer's delivery.
     source: String = "order",
@@ -118,18 +118,18 @@ fun RiderDeliveryDetailScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Where to COLLECT. Only surplus jobs have one: a shop order leaves
-            // the warehouse, which every rider already knows, but a surplus load
+            // Where to COLLECT. Only Bulk jobs have one: a shop order leaves
+            // the warehouse, which every rider already knows, but a Bulk load
             // sits at the vendor's premises and a rider who is not told that
             // drives to the wrong place.
             if (!d.pickupAddress.isNullOrBlank()) {
                 Card {
                     Text("Collect from", fontSize = 11.sp, color = InkMuted)
                     Text(d.pickupAddress, fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 15.sp)
-                    if (d.isSurplus) {
+                    if (d.isBulk) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Bulk surplus order — check the weight before you set off.",
+                            "Bulk Bulk order — check the weight before you set off.",
                             fontSize = 11.sp,
                             color = InkMuted
                         )
@@ -179,7 +179,7 @@ fun RiderDeliveryDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                // quantityLabel, not the raw value: a surplus
+                                // quantityLabel, not the raw value: a Bulk
                                 // line is decimal kilograms and would otherwise
                                 // render as "20.0 ×".
                                 "${item.quantityLabel} × ${item.name.orEmpty()}",

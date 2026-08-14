@@ -20,31 +20,31 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.NetworkImage
-import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.BulkListing
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
-import com.techaus.afamfresh.viewmodel.SurplusViewModel
+import com.techaus.afamfresh.viewmodel.BulkViewModel
 
-// ⚠️ INFERRED screen. Signature matches MainScreen.kt's composable("surplus")
-// call exactly. This is the public "rescue surplus produce at a discount"
+// ⚠️ INFERRED screen. Signature matches MainScreen.kt's composable("Bulk")
+// call exactly. This is the public "rescue Bulk produce at a discount"
 // marketplace — separate from the vendor-facing screens in ui/screens/vendor/.
 @Composable
-fun SurplusScreen(
-    surplusViewModel: SurplusViewModel,
+fun BulkScreen(
+    BulkViewModel: BulkViewModel,
     onBack: () -> Unit,
-    onListingClick: (SurplusListing) -> Unit,
-    // Surplus orders are not in the ordinary order list — different table,
+    onListingClick: (BulkListing) -> Unit,
+    // Bulk orders are not in the ordinary order list — different table,
     // different lifecycle — so without this the only route to them is having
     // just paid for one.
     onMyOrdersClick: () -> Unit = {}
 ) {
-    val listings by surplusViewModel.listings.collectAsState()
-    val isLoading by surplusViewModel.isLoading.collectAsState()
-    val error by surplusViewModel.error.collectAsState()
-    val canRetry by surplusViewModel.canRetry.collectAsState()
+    val listings by BulkViewModel.listings.collectAsState()
+    val isLoading by BulkViewModel.isLoading.collectAsState()
+    val error by BulkViewModel.error.collectAsState()
+    val canRetry by BulkViewModel.canRetry.collectAsState()
 
     Scaffold(
         containerColor = Cream,
@@ -54,7 +54,7 @@ fun SurplusScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Surplus Deals", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Bulk Deals", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                     Text("Rescue fresh produce at a discount", fontSize = 12.sp, color = InkMuted)
                 }
                 TextButton(onClick = onMyOrdersClick) {
@@ -71,16 +71,16 @@ fun SurplusScreen(
                 error != null && listings.isEmpty() -> {
                     ErrorState(
                         message = error ?: "",
-                        onRetry = if (canRetry) ({ surplusViewModel.loadListings() }) else null
+                        onRetry = if (canRetry) ({ BulkViewModel.loadListings() }) else null
                     )
                 }
                 listings.isEmpty() -> {
                     EmptyState(
                         icon = Icons.Default.LocalFlorist,
-                        title = "No surplus deals right now",
+                        title = "No Bulk deals right now",
                         detail = "Vendors post discounted produce here when they have extra. Check back soon.",
                         actionLabel = "REFRESH",
-                        onAction = { surplusViewModel.loadListings() }
+                        onAction = { BulkViewModel.loadListings() }
                     )
                 }
                 else -> {
@@ -89,7 +89,7 @@ fun SurplusScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(listings, key = { it.id }) { listing ->
-                            SurplusCard(listing = listing, onClick = { onListingClick(listing) })
+                            BulkCard(listing = listing, onClick = { onListingClick(listing) })
                         }
                     }
                 }
@@ -99,7 +99,7 @@ fun SurplusScreen(
 }
 
 @Composable
-private fun SurplusCard(listing: SurplusListing, onClick: () -> Unit) {
+private fun BulkCard(listing: BulkListing, onClick: () -> Unit) {
     // The server stores and validates discount_percent itself (30-70%), so use
     // it rather than recomputing it from the two prices.
     val discountPercent = listing.discountPercent.toInt()

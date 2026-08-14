@@ -35,12 +35,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * Create a product of the vendor's own.
  *
  * The vendor half of vendor-owned products. Before this, `items` was the admin
- * catalogue alone and surplus_listings.product_id has a hard foreign key to it,
- * so a vendor could only list surplus of something an admin had already
+ * catalogue alone and Bulk_listings.product_id has a hard foreign key to it,
+ * so a vendor could only list Bulk of something an admin had already
  * entered.
  *
  * What is created here is NOT on sale. It goes in as `pending`, an admin
- * approves it, and only then can the vendor attach a surplus listing to it. It
+ * approves it, and only then can the vendor attach a Bulk listing to it. It
  * never appears in the main shop either way — api/products.php filters
  * vendor-owned rows out, because a vendor product has no stock or fulfilment
  * path there.
@@ -121,7 +121,7 @@ fun NewProductScreen(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Once approved you can list surplus of it for customers to buy. " +
+                        "Once approved you can list Bulk of it for customers to buy. " +
                             "Adding it here does not put it on sale by itself.",
                         color = InkMuted,
                         fontSize = 13.sp

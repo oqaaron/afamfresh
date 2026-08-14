@@ -1,20 +1,20 @@
 -- =============================================================
--- Dispatching surplus orders to riders
+-- Dispatching Bulk orders to riders
 -- =============================================================
 -- The rider system was built when `orders` was the only kind of order there
 -- was, so rider_assignments.order_id and rider_earnings.order_id both point at
--- it implicitly. Surplus orders live in surplus_orders, and the two id spaces
--- OVERLAP -- shop order 41 and surplus order 41 both exist today.
+-- it implicitly. Bulk orders live in Bulk_orders, and the two id spaces
+-- OVERLAP -- shop order 41 and Bulk order 41 both exist today.
 --
--- Without a discriminator, dispatching surplus would produce two silent
+-- Without a discriminator, dispatching Bulk would produce two silent
 -- failures, neither of which raises an error anywhere:
 --
 --   1. api/rider.php joins `JOIN orders o ON o.orderid = ra.order_id`. A
---      surplus assignment would resolve to an unrelated shop order and show a
+--      Bulk assignment would resolve to an unrelated shop order and show a
 --      rider the wrong customer's name, phone and address.
 --
 --   2. rider_earnings has UNIQUE(order_id). Credit a rider for shop order 41
---      and a later surplus order 41 is treated as ALREADY CREDITED -- the
+--      and a later Bulk order 41 is treated as ALREADY CREDITED -- the
 --      rider does the work and is never paid, and nothing logs a problem.
 --
 -- Both tables therefore gain a `source` column, and rider_earnings' uniqueness
@@ -23,7 +23,7 @@
 --
 -- Run against Cloud SQL:
 --   mysql -h 127.0.0.1 -P 9470 -u aokwi -p --get-server-public-key kitchen \
---     < migrations/2026-08-12-surplus-dispatch.sql
+--     < migrations/2026-08-12-Bulk-dispatch.sql
 -- =============================================================
 
 -- -------------------------------------------------------------
@@ -36,9 +36,9 @@
 --
 -- A foreign key can reference only ONE table, so neither can coexist with an
 -- order_id that points at either of two. Left in place they would not merely
--- be untidy: every surplus insert would be REJECTED, because no row with that
+-- be untidy: every Bulk insert would be REJECTED, because no row with that
 -- id exists in `orders`. Dispatch would fail on the first assignment, and no
--- rider could ever be credited for a surplus delivery.
+-- rider could ever be credited for a Bulk delivery.
 --
 -- WHAT IS GIVEN UP, STATED PLAINLY
 --
@@ -64,7 +64,7 @@ ALTER TABLE `rider_earnings`    DROP FOREIGN KEY `fk_rider_earnings_order`;
 -- -------------------------------------------------------------
 -- Defaults to 'order' so every existing assignment keeps its current meaning.
 ALTER TABLE `rider_assignments`
-  ADD COLUMN `source` ENUM('order','surplus') NOT NULL DEFAULT 'order'
+  ADD COLUMN `source` ENUM('order','Bulk') NOT NULL DEFAULT 'order'
     COMMENT 'Which table order_id points at'
     AFTER `order_id`,
   ADD KEY `idx_source_order` (`source`, `order_id`);
@@ -73,13 +73,13 @@ ALTER TABLE `rider_assignments`
 -- 2. Same for the earnings ledger
 -- -------------------------------------------------------------
 ALTER TABLE `rider_earnings`
-  ADD COLUMN `source` ENUM('order','surplus') NOT NULL DEFAULT 'order'
+  ADD COLUMN `source` ENUM('order','Bulk') NOT NULL DEFAULT 'order'
     COMMENT 'Which table order_id points at'
     AFTER `order_id`;
 
 -- Replace UNIQUE(order_id) with UNIQUE(source, order_id).
 --
--- The old index has to go or a surplus delivery can never be credited when the
+-- The old index has to go or a Bulk delivery can never be credited when the
 -- same-numbered shop order already has been. Its NAME is not known in advance
 -- -- it depends on how the table was originally created -- so it is looked up
 -- rather than guessed. Guessing wrong would either error out or, worse, drop a
@@ -124,13 +124,13 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- -------------------------------------------------------------
--- 3. Where a surplus order is going
+-- 3. Where a Bulk order is going
 -- -------------------------------------------------------------
--- surplus_orders already has delivery_lat/delivery_lng, but nothing to record
+-- Bulk_orders already has delivery_lat/delivery_lng, but nothing to record
 -- that a rider has been dispatched. The assignment itself lives in
 -- rider_assignments; this is only the denormalised flag the admin list and the
 -- vendor's screen read, so neither has to join.
-ALTER TABLE `surplus_orders`
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `rider_assigned_at` DATETIME DEFAULT NULL
     COMMENT 'Set when an admin dispatches this to a rider'
     AFTER `payment_captured_at`;

@@ -10,7 +10,7 @@
 // the customer agreeing they received it. This file is the other half.
 //
 // `completed_at` already existed on `orders` with nothing setting it; this
-// is what it was for. surplus_orders gained the same column, and the six
+// is what it was for. Bulk_orders gained the same column, and the six
 // rating columns alongside it, in the 2026-08-13 migration this file was
 // added with.
 // =============================================================
@@ -31,10 +31,10 @@ function loadFeedbackTarget(PDO $dbh, string $source, int $orderId, int $userId)
             "SELECT orderid AS id, delivery_confirmed, completed_at
                FROM orders WHERE orderid = ? AND user_id = ?"
         );
-    } elseif ($source === 'surplus') {
+    } elseif ($source === 'Bulk') {
         $stmt = $dbh->prepare(
             "SELECT id, delivery_confirmed, completed_at
-               FROM surplus_orders WHERE id = ? AND user_id = ?"
+               FROM Bulk_orders WHERE id = ? AND user_id = ?"
         );
     } else {
         return null;
@@ -53,7 +53,7 @@ function loadFeedbackTarget(PDO $dbh, string $source, int $orderId, int $userId)
  * even though it cannot be a bound parameter.
  */
 function saveCustomerReceiptConfirmation(PDO $dbh, string $source, int $orderId, array $fields): void {
-    $table = $source === 'order' ? 'orders' : 'surplus_orders';
+    $table = $source === 'order' ? 'orders' : 'Bulk_orders';
     $pk    = $source === 'order' ? 'orderid' : 'id';
 
     $stmt = $dbh->prepare(

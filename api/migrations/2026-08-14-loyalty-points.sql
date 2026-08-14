@@ -28,7 +28,7 @@
 --    only a trailing add is -- so section 3 below copies the table if it's
 --    large. If the count is big, delete the `AFTER small_order_surcharge`
 --    clause (its only effect is column ordering in DESCRIBE) to get
---    ALGORITHM=INSTANT. surplus_orders is much smaller and unlikely to
+--    ALGORITHM=INSTANT. Bulk_orders is much smaller and unlikely to
 --    matter either way.
 --
 -- Run from Cloud Shell:
@@ -44,12 +44,12 @@
 -- index, so admin_adjust rows (no order) never collide with each other,
 -- while a real order can have at most one 'earned' row and at most one
 -- 'redeemed' row. Same shape rider_earnings/vendor_earnings already use for
--- the identical dual-write-path risk (a surplus order can reach 'delivered'
+-- the identical dual-write-path risk (a Bulk order can reach 'delivered'
 -- via two different files).
 CREATE TABLE IF NOT EXISTS `loyalty_ledger` (
   `id`            BIGINT(20) NOT NULL AUTO_INCREMENT,
   `user_id`       INT(11) NOT NULL,
-  `source`        ENUM('order','surplus') DEFAULT NULL
+  `source`        ENUM('order','Bulk') DEFAULT NULL
                   COMMENT 'NULL for admin_adjust rows, which have no order',
   `order_id`      INT(11) DEFAULT NULL,
   `event`         ENUM('earned','redeemed','admin_adjust') NOT NULL,
@@ -98,17 +98,17 @@ INSERT INTO `loyalty_settings` (`id`) VALUES (1);
 -- Shop orders: the discount is folded straight into total_amount at
 -- creation, since nothing else derives a payout FROM total_amount.
 --
--- Surplus orders are different: total_price feeds the VENDOR's payout and
+-- Bulk orders are different: total_price feeds the VENDOR's payout and
 -- delivery_fee feeds the RIDER's carriage pay (creditVendorEarnings() /
--- surplusRiderFeeFor()) -- reducing either to apply a loyalty discount would
--- silently underpay whichever one it came out of. So surplus orders get a
+-- BulkRiderFeeFor()) -- reducing either to apply a loyalty discount would
+-- silently underpay whichever one it came out of. So Bulk orders get a
 -- SEPARATE loyalty_discount column instead, left out of both total_price and
--- delivery_fee, and surplusPayableTotal() (includes/surplus_payment.php) is
+-- delivery_fee, and BulkPayableTotal() (includes/Bulk_payment.php) is
 -- updated to subtract it from what Pesapal is actually asked to charge.
 ALTER TABLE `orders`
   ADD COLUMN `points_redeemed` INT(11) NOT NULL DEFAULT 0 AFTER `small_order_surcharge`;
 
-ALTER TABLE `surplus_orders`
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `points_redeemed` INT(11) NOT NULL DEFAULT 0 AFTER `delivery_fee`,
   ADD COLUMN `loyalty_discount` DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER `points_redeemed`;
 
@@ -129,5 +129,5 @@ SELECT COUNT(*) AS loyalty_settings_rows FROM `loyalty_settings`;
 
 SELECT COLUMN_NAME FROM information_schema.COLUMNS
  WHERE TABLE_SCHEMA = DATABASE()
-   AND TABLE_NAME IN ('orders', 'surplus_orders')
+   AND TABLE_NAME IN ('orders', 'Bulk_orders')
    AND COLUMN_NAME = 'points_redeemed';

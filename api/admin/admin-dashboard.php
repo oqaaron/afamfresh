@@ -44,7 +44,7 @@ require_once __DIR__ . '/includes/config.php';
         <div class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-3xl font-bold text-green-800">🛠️ AfamFresh Admin</h1>
-                <p class="text-gray-600 mt-1">Manage your platform settings, surplus approvals, and vendor accounts.</p>
+                <p class="text-gray-600 mt-1">Manage your platform settings, Bulk approvals, and vendor accounts.</p>
             </div>
             <div class="flex items-center space-x-4">
                 <span class="text-sm text-gray-600">Welcome, <strong><?= htmlspecialchars($_SESSION['admin_name'] ?? 'Admin') ?></strong></span>
@@ -72,8 +72,8 @@ require_once __DIR__ . '/includes/config.php';
                     <label for="is_maintenance_mode" class="text-sm font-medium text-gray-700">Maintenance Mode (active)</label>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="surplus_approval_required" value="1" class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                    <label for="surplus_approval_required" class="text-sm font-medium text-gray-700">Surplus Approval Required</label>
+                    <input type="checkbox" id="Bulk_approval_required" value="1" class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                    <label for="Bulk_approval_required" class="text-sm font-medium text-gray-700">Bulk Approval Required</label>
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700">Maintenance Message</label>
@@ -85,9 +85,9 @@ require_once __DIR__ . '/includes/config.php';
             </form>
         </div>
 
-        <!-- ====== SURPLUS APPROVALS ====== -->
+        <!-- ====== Bulk APPROVALS ====== -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-8 card">
-            <h2 class="text-xl font-semibold text-green-800 border-b border-gray-200 pb-3 mb-6">📦 Pending Surplus Approvals</h2>
+            <h2 class="text-xl font-semibold text-green-800 border-b border-gray-200 pb-3 mb-6">📦 Pending Bulk Approvals</h2>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
@@ -169,7 +169,7 @@ require_once __DIR__ . '/includes/config.php';
                 document.getElementById('current_version').value = data.current_version || '';
                 document.getElementById('is_maintenance_mode').checked = data.is_maintenance_mode === '1';
                 document.getElementById('maintenance_message').value = data.maintenance_message || '';
-                document.getElementById('surplus_approval_required').checked = data.surplus_approval_required === '1';
+                document.getElementById('Bulk_approval_required').checked = data.Bulk_approval_required === '1';
             } else {
                 showNotification('Failed to load configuration: ' + (res.error || 'Unknown error'), 'error');
             }
@@ -181,7 +181,7 @@ require_once __DIR__ . '/includes/config.php';
                 current_version: document.getElementById('current_version').value.trim(),
                 is_maintenance_mode: document.getElementById('is_maintenance_mode').checked ? '1' : '0',
                 maintenance_message: document.getElementById('maintenance_message').value.trim(),
-                surplus_approval_required: document.getElementById('surplus_approval_required').checked ? '1' : '0'
+                Bulk_approval_required: document.getElementById('Bulk_approval_required').checked ? '1' : '0'
             };
             const res = await apiRequest('../api/config.php', {
                 method: 'PUT',
@@ -194,11 +194,11 @@ require_once __DIR__ . '/includes/config.php';
             }
         }
 
-        // ---- SURPLUS APPROVALS ----
-        async function loadPendingSurplus() {
+        // ---- Bulk APPROVALS ----
+        async function loadPendingBulk() {
             const tbody = document.getElementById('pendingTableBody');
             tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
-            const res = await apiRequest('../api/admin/surplus-approval.php?action=pending');
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=pending');
             if (res.success && res.listings) {
                 if (res.listings.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">✅ No pending approvals.</td></tr>';
@@ -210,11 +210,11 @@ require_once __DIR__ . '/includes/config.php';
                         <td class="px-4 py-3 text-sm font-medium">${escapeHtml(item.product_name)}</td>
                         <td class="px-4 py-3 text-sm">${escapeHtml(item.business_name)}</td>
                         <td class="px-4 py-3 text-sm">${Number(item.discounted_price).toLocaleString()}</td>
-                        <td class="px-4 py-3 text-sm">${item.surplus_quantity}</td>
+                        <td class="px-4 py-3 text-sm">${item.Bulk_quantity}</td>
                         <td class="px-4 py-3 text-sm">${item.expiry_date}</td>
                         <td class="px-4 py-3 text-sm space-x-2">
-                            <button onclick="processSurplus(${item.id}, 'approve')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Approve</button>
-                            <button onclick="processSurplus(${item.id}, 'reject')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Reject</button>
+                            <button onclick="processBulk(${item.id}, 'approve')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Approve</button>
+                            <button onclick="processBulk(${item.id}, 'reject')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Reject</button>
                         </td>
                     </tr>
                 `).join('');
@@ -223,15 +223,15 @@ require_once __DIR__ . '/includes/config.php';
             }
         }
 
-        async function processSurplus(id, action) {
+        async function processBulk(id, action) {
             if (!confirm(`Are you sure you want to ${action} this listing?`)) return;
-            const res = await apiRequest(`../api/admin/surplus-approval.php?action=${action}`, {
+            const res = await apiRequest(`../api/admin/Bulk-approval.php?action=${action}`, {
                 method: 'POST',
                 body: JSON.stringify({ id })
             });
             if (res.success) {
                 showNotification(`Listing ${action}d successfully.`);
-                loadPendingSurplus();
+                loadPendingBulk();
             } else {
                 showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
             }
@@ -296,7 +296,7 @@ require_once __DIR__ . '/includes/config.php';
         // ---- INIT ----
         document.addEventListener('DOMContentLoaded', function() {
             loadConfig();
-            loadPendingSurplus();
+            loadPendingBulk();
             loadVendors();
         });
     </script>

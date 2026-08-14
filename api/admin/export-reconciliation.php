@@ -66,9 +66,9 @@ try {
                    payment_method, payment_channel, cash_collected_by
               FROM orders WHERE payment_status='paid' $shopDate
             UNION ALL
-            SELECT 'surplus', id, created_at, total_price + delivery_fee,
+            SELECT 'Bulk', id, created_at, total_price + delivery_fee,
                    payment_method, payment_channel, cash_collected_by
-              FROM surplus_orders WHERE payment_status='paid' $surDate
+              FROM Bulk_orders WHERE payment_status='paid' $surDate
             ORDER BY at DESC");
         $stmt->execute(array_merge($shopParams, $surParams));
 

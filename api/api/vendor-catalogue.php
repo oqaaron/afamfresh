@@ -3,14 +3,14 @@
 // api/vendor-catalogue.php — a vendor's own products.
 // =============================================================
 // Vendors create products here; an admin approves them; only then can they be
-// listed as surplus. Before this, `items` was the admin catalogue alone and
-// surplus_listings.product_id has a hard foreign key to it, so a vendor could
-// only ever list surplus of something an admin had already entered.
+// listed as Bulk. Before this, `items` was the admin catalogue alone and
+// Bulk_listings.product_id has a hard foreign key to it, so a vendor could
+// only ever list Bulk of something an admin had already entered.
 //
 // These rows live in `items` alongside the catalogue, distinguished by
 // vendor_id. api/products.php filters them out of the shop: a vendor product
 // has no stock or fulfilment path there, and exists so the vendor can sell
-// surplus of it.
+// Bulk of it.
 //
 // Actions
 //   GET  ?action=mine     the signed-in vendor's own products, any status
@@ -70,7 +70,7 @@ if ($action === 'mine' || ($action === '' && $_SERVER['REQUEST_METHOD'] === 'GET
 // =============================================================
 if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verification gates creating products the same way it gates listing
-    // surplus. An unverified vendor filling the catalogue with pending rows an
+    // Bulk. An unverified vendor filling the catalogue with pending rows an
     // admin then has to sift is the thing verification exists to prevent.
     if ((int)$vendor['is_verified'] !== 1) {
         echo json_encode([
@@ -149,7 +149,7 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode([
             'success' => true,
             'product_id' => (int)$dbh->lastInsertId(),
-            'message' => 'Sent for approval. You can list surplus of it once an administrator approves it.',
+            'message' => 'Sent for approval. You can list Bulk of it once an administrator approves it.',
         ]);
     } catch (PDOException $e) {
         error_log("vendor-catalogue create failed for vendor $vendorId: " . $e->getMessage());

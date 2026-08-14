@@ -18,18 +18,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.BulkOrder
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
-import com.techaus.afamfresh.viewmodel.SurplusViewModel
+import com.techaus.afamfresh.viewmodel.BulkViewModel
 
 /**
- * A customer's surplus orders.
+ * A customer's Bulk orders.
  *
- * Kept separate from the ordinary order list because surplus orders live in a
+ * Kept separate from the ordinary order list because Bulk orders live in a
  * different table with a different lifecycle: they carry a payment status that
  * can sit at "awaiting payment" for half an hour before being cancelled, and a
  * pickup code the customer has to be able to find again.
@@ -40,8 +40,8 @@ import com.techaus.afamfresh.viewmodel.SurplusViewModel
  * folding it into a single "status" word.
  */
 @Composable
-fun SurplusOrdersScreen(
-    surplusViewModel: SurplusViewModel,
+fun BulkOrdersScreen(
+    BulkViewModel: BulkViewModel,
     userId: Int?,
     onBack: () -> Unit,
     /** Opens live tracking. Only offered while the order is actually moving. */
@@ -50,15 +50,15 @@ fun SurplusOrdersScreen(
      *  of delivery and the customer has not yet confirmed it. */
     onConfirmReceipt: (Int) -> Unit = {}
 ) {
-    val orders by surplusViewModel.myOrders.collectAsState()
-    val isLoading by surplusViewModel.ordersLoading.collectAsState()
-    val error by surplusViewModel.ordersError.collectAsState()
+    val orders by BulkViewModel.myOrders.collectAsState()
+    val isLoading by BulkViewModel.ordersLoading.collectAsState()
+    val error by BulkViewModel.ordersError.collectAsState()
 
     // Reloaded on every visit, not cached: the most common way to arrive here is
     // straight from a payment, and a stale list would show the order the app saw
     // before the money was confirmed.
     LaunchedEffect(userId) {
-        userId?.let { surplusViewModel.loadMyOrders(it) }
+        userId?.let { BulkViewModel.loadMyOrders(it) }
     }
 
     Scaffold(
@@ -72,7 +72,7 @@ fun SurplusOrdersScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Column {
-                    Text("Surplus orders", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Bulk orders", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                     Text("Bulk deals you have bought", fontSize = 12.sp, color = InkMuted)
                 }
             }
@@ -86,15 +86,15 @@ fun SurplusOrdersScreen(
                 error != null && orders.isEmpty() ->
                     ErrorState(
                         message = error ?: "",
-                        onRetry = userId?.let { id -> { surplusViewModel.loadMyOrders(id) } }
+                        onRetry = userId?.let { id -> { BulkViewModel.loadMyOrders(id) } }
                     )
 
                 orders.isEmpty() ->
                     EmptyState(
                         icon = Icons.Default.Inventory2,
-                        title = "No surplus orders yet",
-                        detail = "Bulk deals you buy from the surplus marketplace show up here.",
-                        actionLabel = "BROWSE SURPLUS",
+                        title = "No Bulk orders yet",
+                        detail = "Bulk deals you buy from the Bulk marketplace show up here.",
+                        actionLabel = "BROWSE Bulk",
                         onAction = onBack
                     )
 
@@ -118,7 +118,7 @@ fun SurplusOrdersScreen(
 
 @Composable
 private fun OrderCard(
-    order: SurplusOrder,
+    order: BulkOrder,
     onTrack: () -> Unit = {},
     onConfirmReceipt: () -> Unit = {}
 ) {
@@ -132,7 +132,7 @@ private fun OrderCard(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    order.productName ?: "Surplus order",
+                    order.productName ?: "Bulk order",
                     fontWeight = FontWeight.SemiBold,
                     color = Ink
                 )

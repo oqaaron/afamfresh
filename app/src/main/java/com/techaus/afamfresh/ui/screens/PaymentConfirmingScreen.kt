@@ -55,7 +55,7 @@ import com.techaus.afamfresh.viewmodel.PaymentViewModel
 fun PaymentConfirmingScreen(
     trackingId: String,
     paymentViewModel: PaymentViewModel,
-    // Which table the tracking id belongs to. Surplus orders are a separate
+    // Which table the tracking id belongs to. Bulk orders are a separate
     // table; verifying one as a shop order finds nothing and the customer is
     // told their payment could not be confirmed when it went through fine.
     orderType: String = ApiService.ORDER_TYPE_SHOP,

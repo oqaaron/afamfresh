@@ -133,7 +133,7 @@ data class OrderDetailResponse(
 )
 
 /**
- * Body for `loyalty-quote.php` — shared by shop and surplus checkout, since
+ * Body for `loyalty-quote.php` — shared by shop and Bulk checkout, since
  * the calculation is identical once you have a goods value: how many of the
  * REQUESTED points can actually be redeemed, and the resulting discount.
  * Read-only; writes nothing.

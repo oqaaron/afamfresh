@@ -1,8 +1,8 @@
 package com.techaus.afamfresh.viewmodel
 
-import com.techaus.afamfresh.models.CreateSurplusListingRequest
-import com.techaus.afamfresh.models.SurplusListing
-import com.techaus.afamfresh.models.SurplusOrder
+import com.techaus.afamfresh.models.CreateBulkListingRequest
+import com.techaus.afamfresh.models.BulkListing
+import com.techaus.afamfresh.models.BulkOrder
 import com.techaus.afamfresh.models.UpdateVendorProfileRequest
 import com.techaus.afamfresh.models.VendorCatalogueProduct
 import com.techaus.afamfresh.models.VendorEarning
@@ -25,8 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * about WHICH id:
  *
  *   vendor-products.php     -> user_id
- *   surplus-listings.php    -> vendor_id (GET), user_id (POST)
- *   surplus-orders.php      -> vendor_id
+ *   Bulk-listings.php    -> vendor_id (GET), user_id (POST)
+ *   Bulk-orders.php      -> vendor_id
  *
  * Nothing in the auth response carries the vendor id, so [start] must be called
  * with the signed-in user's id first; it resolves the vendor record and only
@@ -44,11 +44,11 @@ class VendorViewModel(
     private val vendorRepository: VendorRepository
 ) : ViewModel() {
 
-    private val _listings = MutableStateFlow<List<SurplusListing>>(emptyList())
-    val listings: StateFlow<List<SurplusListing>> = _listings.asStateFlow()
+    private val _listings = MutableStateFlow<List<BulkListing>>(emptyList())
+    val listings: StateFlow<List<BulkListing>> = _listings.asStateFlow()
 
-    private val _vendorOrders = MutableStateFlow<List<SurplusOrder>>(emptyList())
-    val vendorOrders: StateFlow<List<SurplusOrder>> = _vendorOrders.asStateFlow()
+    private val _vendorOrders = MutableStateFlow<List<BulkOrder>>(emptyList())
+    val vendorOrders: StateFlow<List<BulkOrder>> = _vendorOrders.asStateFlow()
 
     private val _vendorProducts = MutableStateFlow<List<VendorProduct>>(emptyList())
     val vendorProducts: StateFlow<List<VendorProduct>> = _vendorProducts.asStateFlow()
@@ -171,7 +171,7 @@ class VendorViewModel(
      *
      * Distinct from [vendorProducts], which is catalogue items the vendor
      * stocks. These are products the vendor created, and only the approved ones
-     * can carry a surplus listing.
+     * can carry a Bulk listing.
      */
     fun loadMyProducts() {
         _isLoading.value = true
@@ -224,7 +224,7 @@ class VendorViewModel(
      * shared and admin-owned, which is what stops five vendors inventing five
      * spellings of the same tomato.
      *
-     * Reloads the inventory afterwards so the surplus form's product picker
+     * Reloads the inventory afterwards so the Bulk form's product picker
      * sees the addition without the screen being reopened.
      */
     fun addProductToInventory(
@@ -276,17 +276,17 @@ class VendorViewModel(
     }
 
     /**
-     * Submits a surplus listing.
+     * Submits a Bulk listing.
      *
      * A listing must reference an existing catalogue product — the server joins
-     * `surplus_listings.product_id` onto `items` — so callers pass a productId
+     * `Bulk_listings.product_id` onto `items` — so callers pass a productId
      * rather than a free-text title.
      */
     fun createListing(
         productId: Int,
         originalPrice: Double,
         discountPercent: Double,
-        surplusQuantity: Int,
+        BulkQuantity: Int,
         expiryDate: String,
         listingType: String = "goodie_bag",
         description: String = "",
@@ -310,12 +310,12 @@ class VendorViewModel(
 
         _isLoading.value = true
         vendorRepository.createListing(
-            CreateSurplusListingRequest(
+            CreateBulkListingRequest(
                 userId = uid,
                 productId = productId,
                 originalPrice = originalPrice,
                 discountPercent = discountPercent,
-                surplusQuantity = surplusQuantity,
+                BulkQuantity = BulkQuantity,
                 expiryDate = expiryDate,
                 listingType = listingType,
                 description = description,
@@ -418,7 +418,7 @@ class VendorViewModel(
         _updatingOrders.value = _updatingOrders.value + orderId
         _error.value = null
 
-        vendorRepository.updateSurplusOrderStatus(orderId, status) { ok, error ->
+        vendorRepository.updateBulkOrderStatus(orderId, status) { ok, error ->
             _updatingOrders.value = _updatingOrders.value - orderId
             if (ok) {
                 loadVendorOrders()

@@ -31,7 +31,7 @@ import com.techaus.afamfresh.viewmodel.PaymentViewModel
  * CheckoutScreen with the cart still in hand. Tapping "Place order" again ran
  * `api/orders.php?action=create` a second time — a brand-new order id, while
  * the first stayed behind forever at `payment_status = 'failed'` (shop orders
- * have no cleanup job; surplus ones self-release stock after 30 minutes, but
+ * have no cleanup job; Bulk ones self-release stock after 30 minutes, but
  * still leave a dead order row). A customer whose mobile money bounced and who
  * then chose cash ended up with two orders: one dead, one real.
  *

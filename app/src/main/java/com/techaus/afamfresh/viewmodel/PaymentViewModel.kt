@@ -70,7 +70,7 @@ class PaymentViewModel(
         paymentMethod: String = PaymentRequest.METHOD_MOBILE_MONEY,
         email: String? = null,
         phone: String? = null,
-        // Which table orderId refers to. Surplus orders are a separate table
+        // Which table orderId refers to. Bulk orders are a separate table
         // whose ids overlap with the shop's, so this cannot be inferred.
         orderType: String = ApiService.ORDER_TYPE_SHOP,
         onCashAccepted: () -> Unit = {},

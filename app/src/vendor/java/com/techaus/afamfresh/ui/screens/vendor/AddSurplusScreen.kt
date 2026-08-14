@@ -20,16 +20,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.models.CreateSurplusListingRequest
-import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.CreateBulkListingRequest
+import com.techaus.afamfresh.models.BulkListing
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
 
 /**
- * Create or adjust a surplus listing.
+ * Create or adjust a Bulk listing.
  *
- * ✅ Rewritten against api/surplus-listings.php. The previous version collected
+ * ✅ Rewritten against api/Bulk-listings.php. The previous version collected
  * a free-text title, a discounted price, a decimal quantity and a "unit" — none
  * of which the endpoint accepts. What it actually requires is:
  *
@@ -38,7 +38,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  *                       name; the server joins on `items` to render the listing
  *   - discount_percent  30-70 inclusive, rejected outside that range. The
  *                       server computes discounted_price itself
- *   - surplus_quantity  an integer
+ *   - Bulk_quantity  an integer
  *   - expiry_date       "YYYY-MM-DD HH:MM:SS"
  *
  * Edit mode is deliberately reduced to the remaining quantity: PUT on that
@@ -47,9 +47,9 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSurplusScreen(
+fun AddBulkScreen(
     vendorViewModel: VendorViewModel,
-    existingListing: SurplusListing? = null,
+    existingListing: BulkListing? = null,
     onSave: () -> Unit,
     /** Route to the inventory screen, offered when there is nothing to list. */
     onAddInventory: () -> Unit,
@@ -76,8 +76,8 @@ fun AddSurplusScreen(
     var discountPercent by remember(existingListing) {
         mutableStateOf(existingListing?.discountPercent?.takeIf { it > 0 }?.toInt()?.toString() ?: "")
     }
-    var surplusQuantity by remember(existingListing) {
-        mutableStateOf(existingListing?.surplusQuantity?.takeIf { it > 0 }?.toString() ?: "")
+    var BulkQuantity by remember(existingListing) {
+        mutableStateOf(existingListing?.BulkQuantity?.takeIf { it > 0 }?.toString() ?: "")
     }
     var expiryDate by remember(existingListing) {
         mutableStateOf(existingListing?.expiryDate ?: "")
@@ -98,7 +98,7 @@ fun AddSurplusScreen(
     // listing went out as 1 kg per unit. Delivery is priced by weight, so a
     // sack of potatoes was quoted to the customer as if it weighed a kilo.
     var unitIndex by remember(existingListing) { mutableStateOf(0) }
-    val unit = SURPLUS_UNITS[unitIndex]
+    val unit = Bulk_UNITS[unitIndex]
     var weightPerUnit by remember(existingListing) { mutableStateOf("1") }
 
     var showDatePicker by remember { mutableStateOf(false) }
@@ -124,7 +124,7 @@ fun AddSurplusScreen(
         val productId = selectedProductId
         val originalPriceVal = originalPrice.toDoubleOrNull()
         val discountVal = discountPercent.toDoubleOrNull()
-        val quantityVal = surplusQuantity.toIntOrNull()
+        val quantityVal = BulkQuantity.toIntOrNull()
 
         if (productId == null) {
             // Told apart deliberately. "Choose which product" is useless advice
@@ -133,7 +133,7 @@ fun AddSurplusScreen(
             formError = if (vendorProducts.isEmpty()) {
                 "Add a product and get it approved first — there is nothing to list yet."
             } else {
-                "Choose which product this surplus is for"
+                "Choose which product this Bulk is for"
             }
             return
         }
@@ -147,7 +147,7 @@ fun AddSurplusScreen(
         }
         // Checked here as well as server-side so the vendor is told immediately
         // rather than after a round trip.
-        if (discountVal !in CreateSurplusListingRequest.DISCOUNT_RANGE) {
+        if (discountVal !in CreateBulkListingRequest.DISCOUNT_RANGE) {
             formError = "Discount must be between 30% and 70%"
             return
         }
@@ -156,7 +156,7 @@ fun AddSurplusScreen(
             return
         }
         if (expiryDate.isBlank()) {
-            formError = "Enter when this surplus expires"
+            formError = "Enter when this Bulk expires"
             return
         }
 
@@ -164,7 +164,7 @@ fun AddSurplusScreen(
             productId = productId,
             originalPrice = originalPriceVal,
             discountPercent = discountVal,
-            surplusQuantity = quantityVal,
+            BulkQuantity = quantityVal,
             expiryDate = expiryDate.trim(),
             listingType = listingType,
             description = description.trim(),
@@ -203,7 +203,7 @@ fun AddSurplusScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text(
-                    if (isEditing) "Update Listing" else "New Surplus Listing",
+                    if (isEditing) "Update Listing" else "New Bulk Listing",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = Ink
@@ -275,9 +275,9 @@ fun AddSurplusScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                "A surplus listing has to point at one of your approved " +
+                                "A Bulk listing has to point at one of your approved " +
                                     "products. Add what you sell and an administrator will " +
-                                    "approve it, then you can list surplus of it here.",
+                                    "approve it, then you can list Bulk of it here.",
                                 fontSize = 13.sp,
                                 color = InkMuted
                             )
@@ -347,7 +347,7 @@ fun AddSurplusScreen(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SURPLUS_UNITS.forEachIndexed { i, u ->
+                    Bulk_UNITS.forEachIndexed { i, u ->
                         val selected = i == unitIndex
                         Box(
                             modifier = Modifier
@@ -440,8 +440,8 @@ fun AddSurplusScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 OutlinedTextField(
-                    value = surplusQuantity,
-                    onValueChange = { surplusQuantity = it.filter { c -> c.isDigit() } },
+                    value = BulkQuantity,
+                    onValueChange = { BulkQuantity = it.filter { c -> c.isDigit() } },
                     // Names the unit chosen above, so "12" is unambiguous.
                     label = { Text("How many ${unit.plural} available") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -565,7 +565,7 @@ fun AddSurplusScreen(
     }
 
     if (showDatePicker) {
-        // Bounded to today onwards: surplus that expired yesterday is not a
+        // Bounded to today onwards: Bulk that expired yesterday is not a
         // listing, and the server does no such check.
         val today = remember { System.currentTimeMillis() }
         val state = rememberDatePickerState(
@@ -593,7 +593,7 @@ fun AddSurplusScreen(
 }
 
 /** One unit of sale, and what it means for weight-based delivery pricing. */
-private data class SurplusUnit(
+private data class BulkUnit(
     val label: String,
     val plural: String,
     /** True only for kilograms, where the unit IS the weight. */
@@ -603,14 +603,14 @@ private data class SurplusUnit(
 
 // Ordinary Ugandan market units. Kilogram first because it is both the most
 // common and the only one that needs no weight estimate.
-private val SURPLUS_UNITS = listOf(
-    SurplusUnit("Kilogram", "kilograms", true, 1.0),
-    SurplusUnit("Piece", "pieces", false, 0.2),
-    SurplusUnit("Bunch", "bunches", false, 1.0),
-    SurplusUnit("Tray", "trays", false, 2.0),
-    SurplusUnit("Basket", "baskets", false, 10.0),
-    SurplusUnit("Crate", "crates", false, 12.0),
-    SurplusUnit("Sack", "sacks", false, 50.0)
+private val Bulk_UNITS = listOf(
+    BulkUnit("Kilogram", "kilograms", true, 1.0),
+    BulkUnit("Piece", "pieces", false, 0.2),
+    BulkUnit("Bunch", "bunches", false, 1.0),
+    BulkUnit("Tray", "trays", false, 2.0),
+    BulkUnit("Basket", "baskets", false, 10.0),
+    BulkUnit("Crate", "crates", false, 12.0),
+    BulkUnit("Sack", "sacks", false, 50.0)
 )
 
 private const val ONE_DAY_MS = 24L * 60 * 60 * 1000

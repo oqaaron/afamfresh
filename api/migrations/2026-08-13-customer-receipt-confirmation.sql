@@ -1,5 +1,5 @@
 -- =============================================================
--- Give surplus_orders the same customer-facing columns `orders` already has
+-- Give Bulk_orders the same customer-facing columns `orders` already has
 -- =============================================================
 -- `orders` has carried customer_rating, customer_feedback, rating_speed,
 -- rating_professionalism, rating_packaging, emoji_reaction and
@@ -13,9 +13,9 @@
 -- This is the other half: the customer's own acknowledgement. completed_at
 -- is reused for exactly the purpose its name and NULL default already
 -- implied — it is set the moment the customer confirms, `orders` and
--- `surplus_orders` alike.
+-- `Bulk_orders` alike.
 --
--- surplus_orders never had the rating columns at all, so it gets the same
+-- Bulk_orders never had the rating columns at all, so it gets the same
 -- seven `orders` already carries, mirrored exactly.
 --
 -- Run against Cloud SQL from Cloud Shell:
@@ -23,7 +23,7 @@
 -- then paste this file's statements.
 -- =============================================================
 
-ALTER TABLE `surplus_orders`
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `customer_rating` INT(11) DEFAULT NULL,
   ADD COLUMN `customer_feedback` TEXT DEFAULT NULL,
   ADD COLUMN `rating_speed` TINYINT(1) DEFAULT NULL COMMENT 'Rating for delivery speed (1-5)',
@@ -38,7 +38,7 @@ ALTER TABLE `surplus_orders`
 -- -------------------------------------------------------------
 SELECT COLUMN_NAME FROM information_schema.COLUMNS
  WHERE TABLE_SCHEMA = DATABASE()
-   AND TABLE_NAME = 'surplus_orders'
+   AND TABLE_NAME = 'Bulk_orders'
    AND COLUMN_NAME IN ('customer_rating', 'customer_feedback', 'rating_speed',
                         'rating_professionalism', 'rating_packaging',
                         'emoji_reaction', 'delivery_confirmed_photo', 'completed_at');

@@ -5,10 +5,10 @@
 // Approve or reject the products vendors create for themselves.
 //
 // A vendor product lands in `items` with status='pending' and cannot be listed
-// as surplus until approved here. It is never sold in the main shop either way
+// as Bulk until approved here. It is never sold in the main shop either way
 // — api/products.php filters vendor-owned rows out, because a vendor product
 // has no stock or fulfilment behind it there. Approval means "this may be sold
-// as surplus", not "this is now in the catalogue".
+// as Bulk", not "this is now in the catalogue".
 // =============================================================
 
 require_once __DIR__ . '/auth_check.php';
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         addNotification(
             (int)$row['user_id'],
             'Product approved: ' . $row['name'],
-            'Your product "' . $row['name'] . '" has been approved. You can now list surplus of it.',
+            'Your product "' . $row['name'] . '" has been approved. You can now list Bulk of it.',
             'system',
             null,
             ['push', 'email']
@@ -108,7 +108,7 @@ $pendingCount = (int)$dbh->query(
         <h1 class="text-2xl font-bold text-green-800 mb-1">Vendor Products</h1>
         <p class="text-gray-600 mb-6">
             Products vendors created themselves. Approving one lets that vendor list
-            surplus of it; it is not added to the customer shop.
+            Bulk of it; it is not added to the customer shop.
         </p>
 
         <?php if ($flash): ?>

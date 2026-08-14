@@ -29,7 +29,7 @@ session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/user_payload.php';
 require_once __DIR__ . '/../includes/rider_earnings.php';
-// Surplus orders are dispatched to riders too. They live in a different table
+// Bulk orders are dispatched to riders too. They live in a different table
 // with different column names, normalised to one shape here.
 require_once __DIR__ . '/../includes/rider_dispatch.php';
 require_once __DIR__ . '/../includes/payment_ledger.php';
@@ -125,7 +125,7 @@ $STATUS_MAP = [
 /**
  * The assignment row for one order, scoped to this rider.
  *
- * `source` is part of the key, not an extra filter: shop order 41 and surplus
+ * `source` is part of the key, not an extra filter: shop order 41 and Bulk
  * order 41 both exist, so an id alone can match the wrong job and hand a rider
  * a different customer's address.
  */
@@ -141,9 +141,9 @@ function assignmentFor($dbh, $riderId, $orderId, $source = 'order') {
 /**
  * Appends one entry to orders.status_history, which holds a JSON array.
  *
- * Shop orders only — surplus_orders has no status_history column. The surplus
+ * Shop orders only — Bulk_orders has no status_history column. The Bulk
  * side keeps its audit trail through the customer notifications that
- * api/surplus-orders.php sends on each transition.
+ * api/Bulk-orders.php sends on each transition.
  */
 function appendStatusHistory($dbh, $orderId, $status, $note) {
     $stmt = $dbh->prepare("SELECT status_history FROM orders WHERE orderid = ?");
@@ -204,7 +204,7 @@ if ($action === 'deliveries') {
     // The assignments are read first and each order resolved afterwards,
     // rather than joined.
     //
-    // A join cannot work here any more: `orders` and `surplus_orders` share no
+    // A join cannot work here any more: `orders` and `Bulk_orders` share no
     // column names, and a UNION would have to invent NULL columns for whichever
     // table lacks each one — at which point the query is doing the normalising
     // that loadDeliverable() does in one place, and doing it invisibly.
@@ -244,7 +244,7 @@ if ($action === 'deliveries') {
             'area'            => $row['area'],
             'address'         => $row['delivery_address'] ?: $row['address'],
             // Where the rider COLLECTS. Null for shop orders, which all leave
-            // from the warehouse; a surplus job starts at the vendor instead,
+            // from the warehouse; a Bulk job starts at the vendor instead,
             // and a rider sent to the warehouse for one would find nothing.
             'pickup_address'  => $row['pickup_address'],
             'dest_lat'        => $row['dest_lat'] !== null ? (float)$row['dest_lat'] : null,
@@ -277,7 +277,7 @@ if ($action === 'delivery_detail') {
     $orderId = (int)param('order_id', 0);
     // Older rider builds send no source. Defaulting to 'order' keeps them
     // working against shop deliveries, which is all they can be assigned in a
-    // version that does not know surplus exists.
+    // version that does not know Bulk exists.
     $source  = (string)param('source', 'order');
     if (!$orderId) fail('No order was specified.');
     if (!isDispatchSource($source)) fail('That is not a kind of delivery.');
@@ -424,7 +424,7 @@ if ($action === 'update_status') {
                     )->execute([$rider['id'], $orderId]);
                 } else {
                     $dbh->prepare(
-                        "UPDATE surplus_orders
+                        "UPDATE Bulk_orders
                             SET payment_status = 'paid', payment_method = 'cash',
                                 cash_collected_by = ?, cash_collected_at = NOW(),
                                 payment_captured_at = COALESCE(payment_captured_at, NOW()),
@@ -442,11 +442,11 @@ if ($action === 'update_status') {
                 throw new RuntimeException($credit['error']);
             }
 
-            // A delivered surplus order also pays the VENDOR. Same transaction
+            // A delivered Bulk order also pays the VENDOR. Same transaction
             // for the same reason: the delivery, the rider's pay and the
             // vendor's pay are one event, and a partial commit would leave a
             // vendor uncredited for goods that have demonstrably arrived.
-            if ($source === 'surplus') {
+            if ($source === 'Bulk') {
                 require_once __DIR__ . '/../includes/vendor_earnings.php';
                 $vendorCredit = creditVendorEarnings($dbh, $orderId);
                 // NOT_PAID is not a fault to abort on. The rider is at the
@@ -466,7 +466,7 @@ if ($action === 'update_status') {
             require_once __DIR__ . '/../includes/loyalty.php';
             $customerIdStmt = $source === 'order'
                 ? $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?")
-                : $dbh->prepare("SELECT user_id FROM surplus_orders WHERE id = ?");
+                : $dbh->prepare("SELECT user_id FROM Bulk_orders WHERE id = ?");
             $customerIdStmt->execute([$orderId]);
             $customerId = (int)($customerIdStmt->fetchColumn() ?: 0);
             if ($customerId > 0) {
@@ -485,7 +485,7 @@ if ($action === 'update_status') {
             applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
 
             // Normally already cached at dispatch time by
-            // cacheAssignmentRoute() (admin/orders.php, admin/surplus-orders.php).
+            // cacheAssignmentRoute() (admin/orders.php, admin/Bulk-orders.php).
             // This is the safety net: an assignment created before that
             // existed, or one where Google was briefly unreachable at
             // dispatch, still gets a route here rather than never. The
@@ -495,7 +495,7 @@ if ($action === 'update_status') {
             }
         }
 
-        // Shop orders only — surplus_orders has no status_history column.
+        // Shop orders only — Bulk_orders has no status_history column.
         if ($source === 'order') {
             appendStatusHistory($dbh, $orderId, $map['label'], 'Updated by rider ' . $rider['name']);
         }
@@ -505,7 +505,7 @@ if ($action === 'update_status') {
         // After the commit, so a ledger row never claims a collection that
         // rolled back.
         if ($requiresCashConfirm) {
-            recordPaymentEvent($dbh, $source === 'order' ? 'order' : 'surplus', $orderId,
+            recordPaymentEvent($dbh, $source === 'order' ? 'order' : 'Bulk', $orderId,
                 'cash_collected', [
                     'from_status' => 'pending_cash',
                     'to_status'   => 'paid',
@@ -534,8 +534,8 @@ if ($action === 'update_status') {
     if ($next === 'picked_up') {
         try {
             require_once __DIR__ . '/../includes/brevo-sms.php';
-            // Via loadDeliverable so a surplus customer is texted too. Reading
-            // `orders` directly here would have found nothing for a surplus
+            // Via loadDeliverable so a Bulk customer is texted too. Reading
+            // `orders` directly here would have found nothing for a Bulk
             // job and silently sent no message.
             $row = loadDeliverable($dbh, $source, $orderId);
             if ($row && !empty($row['mobile'])) {
@@ -549,18 +549,18 @@ if ($action === 'update_status') {
         }
     }
 
-    // A rider completing a surplus delivery writes surplus_orders.status
+    // A rider completing a Bulk delivery writes Bulk_orders.status
     // straight to 'delivered', which means the vendor never marks it and
-    // api/surplus-orders.php's own notification never fires. Without this, the
+    // api/Bulk-orders.php's own notification never fires. Without this, the
     // customer is told their order is on its way and then never told it
     // arrived. Sent here so the same message reaches them either way.
-    if ($next === 'delivered' && $source === 'surplus') {
+    if ($next === 'delivered' && $source === 'Bulk') {
         try {
             require_once __DIR__ . '/../includes/notifications.php';
             $who = $dbh->prepare(
                 "SELECT so.user_id, i.name AS product_name, v.business_name
-                   FROM surplus_orders so
-                   JOIN surplus_listings sl ON sl.id = so.listing_id
+                   FROM Bulk_orders so
+                   JOIN Bulk_listings sl ON sl.id = so.listing_id
                    JOIN items i ON i.id = sl.product_id
                    JOIN vendors v ON v.id = sl.vendor_id
                   WHERE so.id = ?"
@@ -570,7 +570,7 @@ if ($action === 'update_status') {
                 addNotification(
                     (int)$row['user_id'],
                     'Order delivered',
-                    'Your surplus order #' . $orderId . ' (' . $row['product_name']
+                    'Your Bulk order #' . $orderId . ' (' . $row['product_name']
                         . ' from ' . $row['business_name'] . ') has been delivered.',
                     'order',
                     null,
@@ -578,7 +578,7 @@ if ($action === 'update_status') {
                 );
             }
         } catch (Throwable $e) {
-            error_log("Surplus order $orderId delivered but the customer was not notified: " . $e->getMessage());
+            error_log("Bulk order $orderId delivered but the customer was not notified: " . $e->getMessage());
         }
     }
 
@@ -638,7 +638,7 @@ if ($action === 'location') {
     // trail to draw.
     //
     // `source` is selected and stored: order_tracking_logs used to hold a bare
-    // order_id, and shop order 41 and surplus order 41 both exist — so the two
+    // order_id, and shop order 41 and Bulk order 41 both exist — so the two
     // trails interleaved into one stream and a customer tracking either would
     // have been shown the other rider's position.
     $active = $dbh->prepare(
@@ -705,7 +705,7 @@ if ($action === 'upload_proof') {
     // accumulates; the helper only unlinks names it generated itself.
     //
     // Read through loadDeliverable so this works for both kinds of order.
-    // surplus_orders gained delivery_photo alongside the columns `orders` has
+    // Bulk_orders gained delivery_photo alongside the columns `orders` has
     // carried all along, which is what makes one path serve both.
     $existing = loadDeliverable($dbh, $source, $orderId);
     if (!$existing) fail('Order not found.');
@@ -754,13 +754,13 @@ if ($action === 'earnings') {
 
     // LEFT JOIN, and joined on source as well as id.
     //
-    // As an INNER JOIN on order_id alone this had two faults the moment surplus
-    // deliveries began being credited: a surplus earning would either vanish
+    // As an INNER JOIN on order_id alone this had two faults the moment Bulk
+    // deliveries began being credited: a Bulk earning would either vanish
     // from the ledger entirely (no matching orders row) or, worse, match the
     // same-numbered SHOP order and attribute the money to a customer who had
     // nothing to do with it. A rider's pay record is not a place for either.
     //
-    // The surplus customer's name is filled in afterwards, from users.
+    // The Bulk customer's name is filled in afterwards, from users.
     $rows = $dbh->prepare(
         "SELECT re.id, re.order_id, re.source, re.mileage_fee, re.commission_rate,
                 re.commission_amount, re.net_earnings, re.is_estimated, re.is_paid,
@@ -774,28 +774,28 @@ if ($action === 'earnings') {
     $rows->execute([$rider['id']]);
     $earningRows = $rows->fetchAll(PDO::FETCH_ASSOC);
 
-    // One lookup for the surplus rows, rather than a query each.
-    $surplusIds = array_values(array_unique(array_map(
+    // One lookup for the Bulk rows, rather than a query each.
+    $BulkIds = array_values(array_unique(array_map(
         fn($r) => (int)$r['order_id'],
-        array_filter($earningRows, fn($r) => $r['source'] === 'surplus')
+        array_filter($earningRows, fn($r) => $r['source'] === 'Bulk')
     )));
-    $surplusNames = [];
-    if ($surplusIds) {
-        $in = implode(',', array_fill(0, count($surplusIds), '?'));
+    $BulkNames = [];
+    if ($BulkIds) {
+        $in = implode(',', array_fill(0, count($BulkIds), '?'));
         $namesStmt = $dbh->prepare(
             "SELECT so.id, u.fname, u.lname
-               FROM surplus_orders so JOIN users u ON u.id = so.user_id
+               FROM Bulk_orders so JOIN users u ON u.id = so.user_id
               WHERE so.id IN ($in)"
         );
-        $namesStmt->execute($surplusIds);
+        $namesStmt->execute($BulkIds);
         foreach ($namesStmt->fetchAll(PDO::FETCH_ASSOC) as $n) {
-            $surplusNames[(int)$n['id']] = trim($n['fname'] . ' ' . $n['lname']);
+            $BulkNames[(int)$n['id']] = trim($n['fname'] . ' ' . $n['lname']);
         }
     }
 
-    $history = array_map(function ($r) use ($surplusNames) {
-        $name = $r['source'] === 'surplus'
-            ? ($surplusNames[(int)$r['order_id']] ?? '')
+    $history = array_map(function ($r) use ($BulkNames) {
+        $name = $r['source'] === 'Bulk'
+            ? ($BulkNames[(int)$r['order_id']] ?? '')
             : trim($r['fname'] . ' ' . $r['lname']);
 
         return [

@@ -11,7 +11,7 @@
 //
 // 2. IT HELD A BYTE-IDENTICAL COPY of the dashboard's revenue query, which was
 //    `SUM(total_amount) FROM orders` with no WHERE clause: unpaid, failed,
-//    reversed and cancelled orders all counted as revenue, and no surplus order
+//    reversed and cancelled orders all counted as revenue, and no Bulk order
 //    counted at all. Both now call revenueSummary(), so they cannot disagree
 //    again. See includes/revenue.php for what each figure means.
 // =============================================================
@@ -32,7 +32,7 @@ try {
         (SELECT COUNT(*) FROM orders) as total_orders,
         (SELECT COUNT(*) FROM users) as total_users,
         (SELECT COUNT(*) FROM items) as total_products,
-        (SELECT COUNT(*) FROM surplus_listings WHERE status = 'pending') as pending_surplus,
+        (SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending') as pending_Bulk,
         (SELECT COUNT(*) FROM orders WHERE status IN ('Received','Pending')) as pending_orders
     ")->fetch(PDO::FETCH_ASSOC);
 

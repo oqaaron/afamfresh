@@ -1,28 +1,28 @@
 <?php
 // =============================================================
-// includes/surplus_delivery_fee.php
+// includes/Bulk_delivery_fee.php
 //
-// What a surplus delivery costs, itemised.
+// What a Bulk delivery costs, itemised.
 //
 // WHY NOT calculateDeliveryFee()
 //
 // The shop's fee is tiered by order value: above the free threshold, currently
-// UGX 100,000, the distance component is waived entirely. Every surplus order
+// UGX 100,000, the distance component is waived entirely. Every Bulk order
 // is at least 250,000 by rule, so reusing those tiers would make distance free
 // on every single one -- for loads up to a tonne, driven anywhere in the
 // country. The tiers encode "a big shopping basket deserves free delivery",
 // which is a sensible retail idea and a ruinous wholesale one.
 //
-// So surplus keeps its own thresholds from `surplus_delivery_settings` and
+// So Bulk keeps its own thresholds from `Bulk_delivery_settings` and
 // borrows only the two components that are genuinely the same business cost
 // wherever they appear -- the service fee and the insurance rate -- from
 // `delivery_pricing`. An admin edits those once and both channels follow.
 //
 // WHAT MAKES UP THE FEE
 //
-//   base            flat, per delivery                 surplus_delivery_settings
-//   weight          per kg of the load                 surplus_delivery_settings
-//   distance        per km, vendor -> customer         surplus_delivery_settings
+//   base            flat, per delivery                 Bulk_delivery_settings
+//   weight          per kg of the load                 Bulk_delivery_settings
+//   distance        per km, vendor -> customer         Bulk_delivery_settings
 //   service         flat, platform handling            delivery_pricing
 //   insurance       % of goods value                   delivery_pricing
 //   processing      % of goods value                   PROCESSING_FEE_PERCENT
@@ -35,8 +35,8 @@
 require_once __DIR__ . '/delivery-fee.php';    // getDeliveryPricingConfig()
 require_once __DIR__ . '/google_routes.php';  // roadDistanceBetween()
 
-/** Falls back to these only if surplus_delivery_settings is empty. */
-const SURPLUS_FEE_DEFAULTS = [
+/** Falls back to these only if Bulk_delivery_settings is empty. */
+const Bulk_FEE_DEFAULTS = [
     'base_fee'                => 5000.0,
     'fee_per_kg'              => 500.0,
     'free_delivery_threshold' => 500000.0,
@@ -44,30 +44,30 @@ const SURPLUS_FEE_DEFAULTS = [
 ];
 
 /**
- * Per-km rate for surplus, and the cap.
+ * Per-km rate for Bulk, and the cap.
  *
- * Not in surplus_delivery_settings, which predates distance pricing. Defined
+ * Not in Bulk_delivery_settings, which predates distance pricing. Defined
  * here rather than added to the table so this ships without a second migration;
  * move them into the table when an admin needs to tune them without a deploy.
  */
-const SURPLUS_RATE_PER_KM = 900.0;
-const SURPLUS_MAX_FEE     = 120000.0;
+const Bulk_RATE_PER_KM = 900.0;
+const Bulk_MAX_FEE     = 120000.0;
 
 /**
- * Reads the surplus settings row, with defaults for anything missing.
+ * Reads the Bulk settings row, with defaults for anything missing.
  */
-function surplusDeliverySettings(PDO $dbh): array {
+function BulkDeliverySettings(PDO $dbh): array {
     $settings = [];
     try {
-        $row = $dbh->query("SELECT * FROM surplus_delivery_settings LIMIT 1")
+        $row = $dbh->query("SELECT * FROM Bulk_delivery_settings LIMIT 1")
                    ->fetch(PDO::FETCH_ASSOC);
         if ($row) $settings = $row;
     } catch (PDOException $e) {
-        error_log('surplus settings unavailable, using defaults: ' . $e->getMessage());
+        error_log('Bulk settings unavailable, using defaults: ' . $e->getMessage());
     }
 
     $out = [];
-    foreach (SURPLUS_FEE_DEFAULTS as $key => $default) {
+    foreach (Bulk_FEE_DEFAULTS as $key => $default) {
         // Explicit null check, not ??: a column present but NULL should fall
         // back too, and `?? ` alone would accept a NULL from the row.
         $out[$key] = isset($settings[$key]) && $settings[$key] !== null
@@ -78,7 +78,7 @@ function surplusDeliverySettings(PDO $dbh): array {
 }
 
 /**
- * The distance a surplus order travels, vendor to customer.
+ * The distance a Bulk order travels, vendor to customer.
  *
  * ROAD distance, from Google Routes API — not the straight line. Roads are not
  * straight, and this fee charges per kilometre: Haversine understated a typical
@@ -93,7 +93,7 @@ function surplusDeliverySettings(PDO $dbh): array {
  *
  * @return array{km: float, minutes: float, estimated: bool, source: string}|null
  */
-function surplusDeliveryDistance(?float $vendorLat, ?float $vendorLng,
+function BulkDeliveryDistance(?float $vendorLat, ?float $vendorLng,
                                  ?float $destLat, ?float $destLng): ?array {
     if ($destLat === null || $destLng === null) {
         return null;
@@ -117,19 +117,19 @@ function surplusDeliveryDistance(?float $vendorLat, ?float $vendorLng,
 }
 
 /**
- * The full itemised fee for one surplus delivery.
+ * The full itemised fee for one Bulk delivery.
  *
  * @param float      $goodsValue   discounted price x quantity, before any fee
  * @param float      $weightKg     total load weight
- * @param array|null $distance     from surplusDeliveryDistance(), or null
+ * @param array|null $distance     from BulkDeliveryDistance(), or null
  * @param bool       $pickupOnly   collection listings are never charged
  *
  * @return array itemised, in the same shape calculateDeliveryFee() returns so
  *               the two can be rendered by the same code.
  */
-function calculateSurplusDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
+function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
                                      ?array $distance, bool $pickupOnly = false): array {
-    $s = surplusDeliverySettings($dbh);
+    $s = BulkDeliverySettings($dbh);
     $pricing = getDeliveryPricingConfig();
 
     $serviceFee        = (float)($pricing['service_fee'] ?? 1000);
@@ -165,7 +165,7 @@ function calculateSurplusDeliveryFee(PDO $dbh, float $goodsValue, float $weightK
     $baseFee     = $s['base_fee'];
     $weightFee   = $weightKg * $s['fee_per_kg'];
     $distanceKm  = $distance['km'] ?? null;
-    $distanceFee = $distanceKm !== null ? $distanceKm * SURPLUS_RATE_PER_KM : 0.0;
+    $distanceFee = $distanceKm !== null ? $distanceKm * Bulk_RATE_PER_KM : 0.0;
 
     $isFree = false;
     if ($goodsValue >= $s['free_delivery_threshold']) {
@@ -179,7 +179,7 @@ function calculateSurplusDeliveryFee(PDO $dbh, float $goodsValue, float $weightK
         $reason = 'Distance measured from our depot: this vendor has not pinned their premises yet.';
     } else {
         $reason = number_format($distanceKm, 1) . ' km by road from the vendor at UGX '
-                . number_format(SURPLUS_RATE_PER_KM, 0) . '/km, plus UGX '
+                . number_format(Bulk_RATE_PER_KM, 0) . '/km, plus UGX '
                 . number_format($s['fee_per_kg'], 0) . '/kg on ' . round($weightKg) . ' kg.';
 
         // Said plainly when the figure did not come from Google. A straight-line
@@ -197,10 +197,10 @@ function calculateSurplusDeliveryFee(PDO $dbh, float $goodsValue, float $weightK
     // whole thing, and the itemised parts below are what was charged before it,
     // so a capped quote is visibly capped rather than silently rescaled.
     $capped = false;
-    if ($totalFee > SURPLUS_MAX_FEE) {
-        $totalFee = SURPLUS_MAX_FEE;
+    if ($totalFee > Bulk_MAX_FEE) {
+        $totalFee = Bulk_MAX_FEE;
         $capped = true;
-        $reason .= ' Capped at UGX ' . number_format(SURPLUS_MAX_FEE, 0) . '.';
+        $reason .= ' Capped at UGX ' . number_format(Bulk_MAX_FEE, 0) . '.';
     }
 
     return [

@@ -2,32 +2,32 @@ package com.techaus.afamfresh.repository
 
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
-import com.techaus.afamfresh.models.CreateSurplusOrderRequest
-import com.techaus.afamfresh.models.CreateSurplusOrderResponse
+import com.techaus.afamfresh.models.CreateBulkOrderRequest
+import com.techaus.afamfresh.models.CreateBulkOrderResponse
 import com.techaus.afamfresh.models.LoyaltyQuoteRequest
 import com.techaus.afamfresh.models.LoyaltyQuoteResponse
-import com.techaus.afamfresh.models.SurplusListing
-import com.techaus.afamfresh.models.SurplusListingsResponse
-import com.techaus.afamfresh.models.SurplusOrder
-import com.techaus.afamfresh.models.SurplusOrdersResponse
-import com.techaus.afamfresh.models.SurplusQuoteRequest
-import com.techaus.afamfresh.models.SurplusQuoteResponse
+import com.techaus.afamfresh.models.BulkListing
+import com.techaus.afamfresh.models.BulkListingsResponse
+import com.techaus.afamfresh.models.BulkOrder
+import com.techaus.afamfresh.models.BulkOrdersResponse
+import com.techaus.afamfresh.models.BulkQuoteRequest
+import com.techaus.afamfresh.models.BulkQuoteResponse
 import com.techaus.afamfresh.utils.ApiError
 import com.techaus.afamfresh.utils.enqueueApi
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
-// Constructor confirmed by MainActivity.kt: SurplusRepository(ApiClient.apiService)
-class SurplusRepository(
+// Constructor confirmed by MainActivity.kt: BulkRepository(ApiClient.apiService)
+class BulkRepository(
     private val apiService: ApiService
 ) {
     fun getPublicListings(
         status: String = "approved",
-        callback: (List<SurplusListing>?, ApiError?) -> Unit
+        callback: (List<BulkListing>?, ApiError?) -> Unit
     ) {
-        apiService.getSurplusListings(status = status)
-            .enqueueApi<SurplusListingsResponse>("SurplusRepo", "getPublicListings") { body, error ->
+        apiService.getBulkListings(status = status)
+            .enqueueApi<BulkListingsResponse>("BulkRepo", "getPublicListings") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.listings ?: emptyList(), null)
@@ -37,7 +37,7 @@ class SurplusRepository(
     }
 
     /**
-     * Places a surplus order.
+     * Places a Bulk order.
      *
      * The whole response is handed back on success, not just the order: the
      * delivery fee and grand total are computed server-side from the order's
@@ -49,11 +49,11 @@ class SurplusRepository(
      * reason rather than a generic "could not place order".
      */
     fun createOrder(
-        request: CreateSurplusOrderRequest,
-        callback: (CreateSurplusOrderResponse?, ApiError?) -> Unit
+        request: CreateBulkOrderRequest,
+        callback: (CreateBulkOrderResponse?, ApiError?) -> Unit
     ) {
-        apiService.createSurplusOrder(request)
-            .enqueueApi<CreateSurplusOrderResponse>("SurplusRepo", "createOrder") { body, error ->
+        apiService.createBulkOrder(request)
+            .enqueueApi<CreateBulkOrderResponse>("BulkRepo", "createOrder") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true && body.order != null -> callback(body, null)
@@ -70,11 +70,11 @@ class SurplusRepository(
      * anything this layer could reconstruct from the numbers.
      */
     fun getQuote(
-        request: SurplusQuoteRequest,
-        callback: (SurplusQuoteResponse?, ApiError?) -> Unit
+        request: BulkQuoteRequest,
+        callback: (BulkQuoteResponse?, ApiError?) -> Unit
     ) {
-        apiService.getSurplusQuote(request)
-            .enqueueApi<SurplusQuoteResponse>("SurplusRepo", "getQuote") { body, error ->
+        apiService.getBulkQuote(request)
+            .enqueueApi<BulkQuoteResponse>("BulkRepo", "getQuote") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body, null)
@@ -83,13 +83,13 @@ class SurplusRepository(
             }
     }
 
-    /** The signed-in customer's own surplus orders. */
+    /** The signed-in customer's own Bulk orders. */
     fun getMyOrders(
         userId: Int,
-        callback: (List<SurplusOrder>?, ApiError?) -> Unit
+        callback: (List<BulkOrder>?, ApiError?) -> Unit
     ) {
-        apiService.getMySurplusOrders(userId = userId)
-            .enqueueApi<SurplusOrdersResponse>("SurplusRepo", "getMyOrders") { body, error ->
+        apiService.getMyBulkOrders(userId = userId)
+            .enqueueApi<BulkOrdersResponse>("BulkRepo", "getMyOrders") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body.orders ?: emptyList(), null)
@@ -101,7 +101,7 @@ class SurplusRepository(
     private fun text(value: String) = value.toRequestBody("text/plain".toMediaTypeOrNull())
 
     /**
-     * The customer's confirm-and-rate step for a surplus order. Mirrors
+     * The customer's confirm-and-rate step for a Bulk order. Mirrors
      * OrderRepository.confirmReceipt — see there for why [photoBytes] is
      * prepared by the caller rather than here.
      */
@@ -122,7 +122,7 @@ class SurplusRepository(
                 "photo", "confirm.jpg", it.toRequestBody("image/jpeg".toMediaTypeOrNull())
             )
         }
-        apiService.confirmSurplusReceipt(
+        apiService.confirmBulkReceipt(
             orderId = text(orderId.toString()),
             userId = text(userId.toString()),
             rating = rating?.let { text(it.toString()) },
@@ -132,7 +132,7 @@ class SurplusRepository(
             feedback = feedback?.takeIf { it.isNotBlank() }?.let { text(it) },
             emojiReaction = emojiReaction?.let { text(it) },
             photo = photoPart
-        ).enqueueApi<BaseResponse>("SurplusRepo", "confirmReceipt") { body, error ->
+        ).enqueueApi<BaseResponse>("BulkRepo", "confirmReceipt") { body, error ->
             when {
                 error != null -> callback(false, error)
                 body?.success == true -> callback(true, null)
@@ -148,7 +148,7 @@ class SurplusRepository(
         callback: (LoyaltyQuoteResponse?, ApiError?) -> Unit
     ) {
         apiService.getLoyaltyQuote(LoyaltyQuoteRequest(points, goodsValue))
-            .enqueueApi<LoyaltyQuoteResponse>("SurplusRepo", "getLoyaltyQuote") { body, error ->
+            .enqueueApi<LoyaltyQuoteResponse>("BulkRepo", "getLoyaltyQuote") { body, error ->
                 when {
                     error != null -> callback(null, error)
                     body?.success == true -> callback(body, null)

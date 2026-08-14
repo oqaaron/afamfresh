@@ -50,11 +50,11 @@ data class Delivery(
     @SerializedName("order_id") val orderId: Int? = null,
 
     /**
-     * Which table [orderId] refers to: "order" for the shop, "surplus" for a
-     * bulk surplus order collected from a vendor.
+     * Which table [orderId] refers to: "order" for the shop, "Bulk" for a
+     * bulk Bulk order collected from a vendor.
      *
      * Must be sent back on every call about this delivery. The two id spaces
-     * OVERLAP — shop order 41 and surplus order 41 both exist — so an id alone
+     * OVERLAP — shop order 41 and Bulk order 41 both exist — so an id alone
      * can resolve to a different customer's job entirely.
      *
      * Defaults to "order" so a response from an older server, which does not
@@ -83,12 +83,12 @@ data class Delivery(
 
     /**
      * Where the rider COLLECTS from. Null for shop orders, which all leave the
-     * warehouse; a surplus job is collected from the vendor's own premises, and
+     * warehouse; a Bulk job is collected from the vendor's own premises, and
      * a rider sent to the warehouse for one would find nothing there.
      */
     @SerializedName("pickup_address") val pickupAddress: String? = null,
 
-    /** Set on collection-only surplus orders. Detail view only. */
+    /** Set on collection-only Bulk orders. Detail view only. */
     @SerializedName("pickup_code") val pickupCode: String? = null,
 
     @SerializedName("items") val items: List<DeliveryItem>? = null
@@ -96,8 +96,8 @@ data class Delivery(
     val customerOrDash: String get() = customerName?.takeIf { it.isNotBlank() } ?: "Customer"
     val addressOrDash: String get() = address?.takeIf { it.isNotBlank() } ?: "No address given"
 
-    /** A bulk surplus job rather than an ordinary shop delivery. */
-    val isSurplus: Boolean get() = source == "surplus"
+    /** A bulk Bulk job rather than an ordinary shop delivery. */
+    val isBulk: Boolean get() = source == "Bulk"
 
     /** Human label for the rider's own progress. */
     val stageLabel: String
@@ -138,7 +138,7 @@ data class Delivery(
 data class DeliveryItem(
     @SerializedName("name") val name: String? = null,
     /**
-     * Decimal, not whole units. A surplus line is ordered in kilograms and can
+     * Decimal, not whole units. A Bulk line is ordered in kilograms and can
      * be 20.5; as an Int, Gson truncated it and showed a rider a load lighter
      * than the one they have to carry.
      */
@@ -273,9 +273,9 @@ data class EarningsEntry(
     @SerializedName("order_id") val orderId: Int? = null,
 
     /**
-     * "order" or "surplus". Two entries can share an order id, so this is what
-     * tells them apart in the ledger — and a surplus entry is paid from the
-     * surplus delivery fee rather than a mileage component.
+     * "order" or "Bulk". Two entries can share an order id, so this is what
+     * tells them apart in the ledger — and a Bulk entry is paid from the
+     * Bulk delivery fee rather than a mileage component.
      */
     @SerializedName("source") val source: String = "order",
 

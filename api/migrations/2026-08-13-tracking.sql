@@ -5,13 +5,13 @@
 -- Three things have to change before it can be read safely.
 --
 -- 1. A FOREIGN KEY TO `orders`. fk_tracking_order constrains order_id to
---    orders.orderid, so a SURPLUS breadcrumb is rejected outright. Every
---    surplus location post since dispatch shipped has been failing silently.
+--    orders.orderid, so a Bulk breadcrumb is rejected outright. Every
+--    Bulk location post since dispatch shipped has been failing silently.
 --    Nobody noticed because nothing reads the table.
 --
 -- 2. NO SOURCE COLUMN. api/rider.php writes the order_id from
 --    rider_assignments without recording which table it came from. Shop order
---    41 and surplus order 41 both exist, so their trails would interleave in
+--    41 and Bulk order 41 both exist, so their trails would interleave in
 --    one stream and a customer tracking either would be shown the other
 --    rider's position.
 --
@@ -26,7 +26,7 @@
 ALTER TABLE `order_tracking_logs` DROP FOREIGN KEY `fk_tracking_order`;
 
 ALTER TABLE `order_tracking_logs`
-  ADD COLUMN `source` ENUM('order','surplus') NOT NULL DEFAULT 'order'
+  ADD COLUMN `source` ENUM('order','Bulk') NOT NULL DEFAULT 'order'
       COMMENT 'Which table order_id points at'
       AFTER `order_id`,
   ADD COLUMN `rider_id` INT(11) DEFAULT NULL AFTER `source`,
@@ -41,7 +41,7 @@ ALTER TABLE `order_tracking_logs`
   ADD KEY `idx_trail` (`source`, `order_id`, `recorded_at`),
   ADD KEY `idx_rider_time` (`rider_id`, `recorded_at`);
 
--- Every existing row is a shop order — surplus writes were being rejected — so
+-- Every existing row is a shop order — Bulk writes were being rejected — so
 -- the 'order' default is correct for all of them and no backfill is needed.
 
 -- -------------------------------------------------------------

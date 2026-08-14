@@ -6,18 +6,18 @@
 //
 // The rider system was written when `orders` was the only kind of order, so
 // api/rider.php reads o.fname, o.mobile, o.dest_lat and a dozen other columns
-// directly. surplus_orders has none of those names: the customer's name lives
+// directly. Bulk_orders has none of those names: the customer's name lives
 // on `users`, the destination is delivery_lat/delivery_lng, and the goods total
 // is split across total_price and delivery_fee.
 //
-// Rather than scatter `if ($source === 'surplus')` through four actions, both
+// Rather than scatter `if ($source === 'Bulk')` through four actions, both
 // tables are read here and returned with identical keys. api/rider.php then
 // works the same way for both, and the differences are stated once, here, where
 // they can be seen together.
 //
 // WHY `source` EXISTS AT ALL
 //
-// The two id spaces overlap -- shop order 41 and surplus order 41 both exist.
+// The two id spaces overlap -- shop order 41 and Bulk order 41 both exist.
 // Every function here takes a source alongside the id for that reason, and
 // refuses an unrecognised one rather than defaulting, because defaulting would
 // silently read the wrong customer's address.
@@ -27,7 +27,7 @@ require_once __DIR__ . '/rider_earnings.php';
 
 /** The only two values `source` may take. Anything else is a caller bug. */
 function dispatchSources(): array {
-    return ['order', 'surplus'];
+    return ['order', 'Bulk'];
 }
 
 function isDispatchSource(?string $source): bool {
@@ -68,9 +68,9 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
         return $row;
     }
 
-    if ($source === 'surplus') {
+    if ($source === 'Bulk') {
         // The customer's name and phone are on `users`; the pickup point is the
-        // vendor's location, because a surplus delivery starts at the vendor
+        // vendor's location, because a Bulk delivery starts at the vendor
         // rather than at the AfamFresh warehouse. That is the substantive
         // difference between the two kinds of job, and the rider needs it.
         $stmt = $dbh->prepare(
@@ -85,11 +85,11 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
                     so.scheduled_delivery_date, so.scheduled_delivery_slot,
                     so.pickup_code,
                     v.location AS pickup_address, v.business_name,
-                    -- The vendor's pin, not the warehouse: a surplus load is
+                    -- The vendor's pin, not the warehouse: a Bulk load is
                     -- collected from their premises. Null until they pin it.
                     v.lat AS pickup_lat, v.lng AS pickup_lng
-               FROM surplus_orders so
-               JOIN surplus_listings sl ON sl.id = so.listing_id
+               FROM Bulk_orders so
+               JOIN Bulk_listings sl ON sl.id = so.listing_id
                JOIN vendors v ON v.id = sl.vendor_id
                JOIN users u ON u.id = so.user_id
               WHERE so.id = ?"
@@ -98,7 +98,7 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
 
-        $row['source'] = 'surplus';
+        $row['source'] = 'Bulk';
         return $row;
     }
 
@@ -108,7 +108,7 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
 /**
  * The line items on a deliverable.
  *
- * A surplus order is always exactly one listing of one product -- there is no
+ * A Bulk order is always exactly one listing of one product -- there is no
  * cart -- so it returns a single row rather than reading an items table it
  * does not have.
  */
@@ -127,8 +127,8 @@ function deliverableItems(PDO $dbh, string $source, int $orderId): array {
 
     $stmt = $dbh->prepare(
         "SELECT i.name, so.quantity, so.total_price
-           FROM surplus_orders so
-           JOIN surplus_listings sl ON sl.id = so.listing_id
+           FROM Bulk_orders so
+           JOIN Bulk_listings sl ON sl.id = so.listing_id
            JOIN items i ON i.id = sl.product_id
           WHERE so.id = ?"
     );
@@ -140,7 +140,7 @@ function deliverableItems(PDO $dbh, string $source, int $orderId): array {
 
     return [[
         'name' => $row['name'],
-        // Bulk surplus is ordered in decimal kilograms. Casting to int here
+        // Bulk Bulk is ordered in decimal kilograms. Casting to int here
         // would show a rider "20" for a 20.5 kg load they have to fit on a bike.
         'quantity' => $quantity,
         // UNIT price, matching what order_items holds for shop orders. The row
@@ -154,9 +154,9 @@ function deliverableItems(PDO $dbh, string $source, int $orderId): array {
 /**
  * Writes a delivery status back to whichever table owns the order.
  *
- * The shop and surplus status vocabularies are different and deliberately not
+ * The shop and Bulk status vocabularies are different and deliberately not
  * merged: `orders` uses human labels ("Out for Delivery") in `status` plus a
- * machine value in `current_status`, while surplus_orders uses a single
+ * machine value in `current_status`, while Bulk_orders uses a single
  * lowercase enum. Mapping one onto the other would mean writing a value that
  * the vendor's own screen cannot render.
  */
@@ -173,14 +173,14 @@ function applyDeliveryStatus(PDO $dbh, string $source, int $orderId, array $map,
         return;
     }
 
-    // Surplus: only 'delivered' has a counterpart worth writing. A rider
+    // Bulk: only 'delivered' has a counterpart worth writing. A rider
     // picking the load up does not change what the ORDER is -- it is still
     // 'ready' until it arrives -- and inventing intermediate states here would
-    // put values in the column that api/surplus-orders.php would then reject as
+    // put values in the column that api/Bulk-orders.php would then reject as
     // invalid.
     if ($next === 'delivered') {
         $dbh->prepare(
-            "UPDATE surplus_orders
+            "UPDATE Bulk_orders
                 SET status = 'delivered', delivered_at = NOW(), updated_at = NOW()
               WHERE id = ?"
         )->execute([$orderId]);
@@ -205,7 +205,7 @@ function saveDeliveryProof(PDO $dbh, string $source, int $orderId, string $filen
     }
 
     $dbh->prepare(
-        "UPDATE surplus_orders
+        "UPDATE Bulk_orders
             SET delivery_photo = ?, delivery_confirmed = 1, delivery_confirmed_at = NOW(),
                 updated_at = NOW()
           WHERE id = ?"
@@ -213,12 +213,12 @@ function saveDeliveryProof(PDO $dbh, string $source, int $orderId, string $filen
 }
 
 /**
- * What a rider earns for delivering a surplus order.
+ * What a rider earns for delivering a Bulk order.
  *
  * Matches the shop's own rule in includes/rider_earnings.php: paid from
  * carriage only (base + weight + distance) — never the service fee,
  * insurance, or processing fee, which cover the platform's own costs and are
- * not something the rider performs. A surplus order has no single "mileage"
+ * not something the rider performs. A Bulk order has no single "mileage"
  * figure the way a shop order does, so this sums the carriage components out
  * of the stored `delivery_fee_breakdown` JSON instead.
  *
@@ -242,9 +242,9 @@ function saveDeliveryProof(PDO $dbh, string $source, int $orderId, string $filen
  *
  * @return array{amount: float, estimated: bool}|null
  */
-function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
+function BulkRiderFeeFor(PDO $dbh, int $orderId): ?array {
     $stmt = $dbh->prepare(
-        "SELECT delivery_fee, delivery_fee_breakdown FROM surplus_orders WHERE id = ?"
+        "SELECT delivery_fee, delivery_fee_breakdown FROM Bulk_orders WHERE id = ?"
     );
     $stmt->execute([$orderId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -257,7 +257,7 @@ function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
     $breakdown = $row['delivery_fee_breakdown'] ? json_decode($row['delivery_fee_breakdown'], true) : null;
 
     if (!is_array($breakdown)) {
-        error_log("surplusRiderFeeFor: order $orderId has no parseable delivery_fee_breakdown, "
+        error_log("BulkRiderFeeFor: order $orderId has no parseable delivery_fee_breakdown, "
                  . "falling back to the full delivery_fee");
         return ['amount' => $fullFee, 'estimated' => true];
     }
@@ -292,7 +292,7 @@ function surplusRiderFeeFor(PDO $dbh, int $orderId): ?array {
  * belongs here, once, instead of duplicated at every caller.
  *
  * Called at dispatch time and on reassignment (admin/orders.php,
- * admin/surplus-orders.php) rather than waiting for the rider to mark the
+ * admin/Bulk-orders.php) rather than waiting for the rider to mark the
  * delivery picked_up, which is where this used to happen exclusively. That
  * left a real gap: the rider's Navigate screen and the customer's tracking
  * map both had nothing to draw for however long a delivery sat in

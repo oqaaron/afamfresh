@@ -36,7 +36,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
 //
 // Read-only by design: ApiService.kt only has a GET for vendor/products.php —
 // no create/update/delete methods exist for a vendor's regular product catalog
-// (unlike surplus listings, which have full CRUD). Add editing once those
+// (unlike Bulk listings, which have full CRUD). Add editing once those
 // endpoints exist.
 @Composable
 fun VendorProductsScreen(
@@ -45,7 +45,7 @@ fun VendorProductsScreen(
     onBack: () -> Unit
 ) {
     // The vendor's OWN products now, not catalogue items they stock. Only the
-    // approved ones can carry a surplus listing, and pending/rejected must stay
+    // approved ones can carry a Bulk listing, and pending/rejected must stay
     // visible or a rejection is invisible and simply gets resubmitted.
     val products by vendorViewModel.myProducts.collectAsState()
     val isLoading by vendorViewModel.isLoading.collectAsState()
@@ -82,7 +82,7 @@ fun VendorProductsScreen(
         floatingActionButton = {
             // The only way to fill an inventory from the app. Without it a
             // vendor's product list could only be populated by an admin, and a
-            // surplus listing has to point at a product already stocked.
+            // Bulk listing has to point at a product already stocked.
             FloatingActionButton(onClick = onAddProduct, containerColor = Forest) {
                 Icon(Icons.Default.Add, contentDescription = "Add product", tint = Color.White)
             }
@@ -115,7 +115,7 @@ fun VendorProductsScreen(
                     icon = Icons.Default.Inventory2,
                     title = "No products yet",
                     detail = "Add what you sell. An administrator approves each one " +
-                        "before you can list surplus of it."
+                        "before you can list Bulk of it."
                 )
                 else -> LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),

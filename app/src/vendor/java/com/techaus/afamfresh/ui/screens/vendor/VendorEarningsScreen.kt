@@ -38,7 +38,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  *
  * WHAT THE NUMBERS MEAN
  *
- * A credit lands when a surplus order is DELIVERED, not when it is paid for,
+ * A credit lands when a Bulk order is DELIVERED, not when it is paid for,
  * and it is the goods value less the vendor's commission rate. The delivery fee
  * is never part of it: that money pays the rider who carried the load.
  *
@@ -80,7 +80,7 @@ fun VendorEarningsScreen(
                 }
                 Column {
                     Text("Earnings", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                    Text("From delivered surplus orders", fontSize = 12.sp, color = InkMuted)
+                    Text("From delivered Bulk orders", fontSize = 12.sp, color = InkMuted)
                 }
             }
         }
@@ -144,7 +144,7 @@ fun VendorEarningsScreen(
                             EmptyState(
                                 icon = Icons.Default.Payments,
                                 title = "Nothing earned yet",
-                                detail = "You are credited when a surplus order is delivered, " +
+                                detail = "You are credited when a Bulk order is delivered, " +
                                     "not when it is paid for. Once one arrives, it shows up here.",
                                 modifier = Modifier.height(260.dp)
                             )

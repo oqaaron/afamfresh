@@ -369,13 +369,13 @@ CREATE TABLE `order_items` (
   KEY `order_id` (`order_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=489 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `order_surplus_items`;
+DROP TABLE IF EXISTS `order_Bulk_items`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `order_surplus_items` (
+CREATE TABLE `order_Bulk_items` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `order_id` int(11) NOT NULL,
-  `surplus_listing_id` int(11) NOT NULL,
+  `Bulk_listing_id` int(11) NOT NULL,
   `product_name` varchar(255) DEFAULT NULL,
   `quantity` decimal(10,2) NOT NULL,
   `unit_price` decimal(10,2) NOT NULL,
@@ -385,7 +385,7 @@ CREATE TABLE `order_surplus_items` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_order` (`order_id`),
-  CONSTRAINT `order_surplus_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`orderid`) ON DELETE CASCADE
+  CONSTRAINT `order_Bulk_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`orderid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `order_tracking_logs`;
@@ -726,10 +726,10 @@ CREATE TABLE `storage_pricing` (
   KEY `idx_is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_analytics`;
+DROP TABLE IF EXISTS `Bulk_analytics`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_analytics` (
+CREATE TABLE `Bulk_analytics` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `vendor_id` int(11) NOT NULL,
   `date` date NOT NULL,
@@ -743,13 +743,13 @@ CREATE TABLE `surplus_analytics` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `vendor_id` (`vendor_id`,`date`),
   KEY `idx_date` (`date`),
-  CONSTRAINT `surplus_analytics_ibfk_1` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`id`) ON DELETE CASCADE
+  CONSTRAINT `Bulk_analytics_ibfk_1` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_delivery_settings`;
+DROP TABLE IF EXISTS `Bulk_delivery_settings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_delivery_settings` (
+CREATE TABLE `Bulk_delivery_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `base_fee` decimal(10,2) DEFAULT 5000.00,
   `fee_per_kg` decimal(10,2) DEFAULT 500.00,
@@ -759,10 +759,10 @@ CREATE TABLE `surplus_delivery_settings` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_discount_rules`;
+DROP TABLE IF EXISTS `Bulk_discount_rules`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_discount_rules` (
+CREATE TABLE `Bulk_discount_rules` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `min_discount_percent` decimal(5,2) NOT NULL COMMENT 'Minimum discount (e.g., 30%)',
@@ -776,22 +776,22 @@ CREATE TABLE `surplus_discount_rules` (
   KEY `idx_is_active` (`is_active`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_listings`;
+DROP TABLE IF EXISTS `Bulk_listings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_listings` (
+CREATE TABLE `Bulk_listings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `vendor_id` int(11) NOT NULL,
   `product_id` int(11) NOT NULL,
   `original_price` decimal(10,2) NOT NULL COMMENT 'Original price before discount',
   `discount_percent` decimal(5,2) NOT NULL COMMENT 'Discount percentage (30-70%)',
   `discounted_price` decimal(10,2) NOT NULL COMMENT 'Price after discount',
-  `surplus_quantity` int(11) NOT NULL COMMENT 'Available quantity',
+  `Bulk_quantity` int(11) NOT NULL COMMENT 'Available quantity',
   `remaining_quantity` int(11) NOT NULL COMMENT 'Quantity still available',
-  `expiry_date` datetime NOT NULL COMMENT 'When the surplus produce expires',
+  `expiry_date` datetime NOT NULL COMMENT 'When the Bulk produce expires',
   `listing_type` enum('goodie_bag','final_days','bulk') DEFAULT 'goodie_bag',
   `status` enum('pending','approved','rejected','cancelled') DEFAULT 'pending',
-  `description` text DEFAULT NULL COMMENT 'Additional details about the surplus',
+  `description` text DEFAULT NULL COMMENT 'Additional details about the Bulk',
   `condition_rating` enum('excellent','good','fair') DEFAULT 'good' COMMENT 'Quality condition',
   `pickup_only` tinyint(1) DEFAULT 0 COMMENT 'If true, only pickup allowed (no delivery)',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -807,14 +807,14 @@ CREATE TABLE `surplus_listings` (
   KEY `idx_listing_type` (`listing_type`),
   KEY `idx_discount_percent` (`discount_percent`),
   KEY `idx_created_at` (`created_at`),
-  CONSTRAINT `surplus_listings_ibfk_1` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `surplus_listings_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `items` (`id`) ON DELETE CASCADE
+  CONSTRAINT `Bulk_listings_ibfk_1` FOREIGN KEY (`vendor_id`) REFERENCES `vendors` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `Bulk_listings_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `items` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_matching_preferences`;
+DROP TABLE IF EXISTS `Bulk_matching_preferences`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_matching_preferences` (
+CREATE TABLE `Bulk_matching_preferences` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
   `preferred_categories` varchar(255) DEFAULT NULL COMMENT 'Comma-separated category IDs',
@@ -826,13 +826,13 @@ CREATE TABLE `surplus_matching_preferences` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_id` (`user_id`),
-  CONSTRAINT `surplus_matching_preferences_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  CONSTRAINT `Bulk_matching_preferences_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_notifications`;
+DROP TABLE IF EXISTS `Bulk_notifications`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_notifications` (
+CREATE TABLE `Bulk_notifications` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
   `listing_id` int(11) NOT NULL,
@@ -844,14 +844,14 @@ CREATE TABLE `surplus_notifications` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_is_read` (`is_read`),
   KEY `idx_created_at` (`created_at`),
-  CONSTRAINT `surplus_notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `surplus_notifications_ibfk_2` FOREIGN KEY (`listing_id`) REFERENCES `surplus_listings` (`id`) ON DELETE CASCADE
+  CONSTRAINT `Bulk_notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `Bulk_notifications_ibfk_2` FOREIGN KEY (`listing_id`) REFERENCES `Bulk_listings` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `surplus_orders`;
+DROP TABLE IF EXISTS `Bulk_orders`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `surplus_orders` (
+CREATE TABLE `Bulk_orders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `listing_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
@@ -878,8 +878,8 @@ CREATE TABLE `surplus_orders` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_status` (`status`),
   KEY `idx_created_at` (`created_at`),
-  CONSTRAINT `surplus_orders_ibfk_1` FOREIGN KEY (`listing_id`) REFERENCES `surplus_listings` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `surplus_orders_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  CONSTRAINT `Bulk_orders_ibfk_1` FOREIGN KEY (`listing_id`) REFERENCES `Bulk_listings` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `Bulk_orders_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `user_notifications`;
@@ -1007,7 +1007,7 @@ CREATE TABLE `vendor_notifications` (
   `vendor_id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
   `message` text NOT NULL,
-  `type` enum('order','payment','system','surplus') DEFAULT 'system',
+  `type` enum('order','payment','system','Bulk') DEFAULT 'system',
   `is_read` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -1121,7 +1121,7 @@ INSERT INTO `category` (`id`, `categry`, `cateimg`) VALUES (9,'Fruits','fruits.p
 INSERT INTO `site_settings` (`setting_key`, `setting_value`, `updated_at`, `promo_bg_color`, `promo_bg_gradient_start`, `promo_bg_gradient_end`, `promo_accent_color`, `promo_text_color`, `promo_cta_text`, `promo_cta_link`, `promo_enabled`, `promo_countdown_enabled`, `promo_countdown_date`, `promo_custom_image`) VALUES ('hero_autoplay_enabled','1','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_autoplay_interval','4000','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_badge','Now Delivering in Kampala','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_cta_primary_link','products.php','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_cta_primary_text','🛒 Shop Now →','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_cta_secondary_link','#delivery-zones','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_cta_secondary_text','📍 Check My Zone','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_enabled','1','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat1_label','Products Available','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat1_num','500+','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat2_label','Avg Delivery Time','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat2_num','2hrs','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat3_label','Customer Rating','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_stat3_num','4.9★','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_subtitle','Order fresh vegetables, fruits, meat, and cereals from AfamFresh. Delivered same-day across Kampala and her Surroundings.','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('hero_title','Farm Fresh Right to Your Doorstep','2026-05-29 06:28:53','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_accent_color','#FFC107','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_bg_gradient_end','#2d8a44','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_bg_gradient_start','#0f3d1f','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_countdown_date','','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_countdown_enabled','1','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_cta_link','products.php','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_cta_text','Shop the Deal','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_custom_image','','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_enabled','1','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_feature1','✓ New Products Added Daily','2026-05-23 10:10:42','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_feature2','✓ Quickest Delivery','2026-05-23 10:10:42','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_sub','Free Delivery on Orders Over 75,000 UGX','2026-05-23 10:10:42','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_tag','Limited Time Offer','2026-05-23 10:10:42','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_text_color','#ffffff','2026-05-29 05:42:33','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL),('promo_title','Fresh Deals - Upto 10% Off This Week','2026-06-04 11:58:17','#0f3d1f','#0f3d1f','#2d8a44','#FFC107','#ffffff','Shop the Deal','products.php',1,1,NULL,NULL);
 /*!40000 ALTER TABLE `site_settings` ENABLE KEYS */;
 /*!40000 ALTER TABLE `app_config` DISABLE KEYS */;
-INSERT INTO `app_config` (`config_key`, `config_value`, `updated_at`) VALUES ('current_version','1.0','2026-06-28 15:52:56'),('is_maintenance_mode','0','2026-06-28 14:27:28'),('maintenance_message','We are updating our stock. Back soon!','2026-06-28 13:54:51'),('min_version_required','1.0','2026-06-28 15:53:04'),('surplus_approval_required','1','2026-06-28 13:54:51');
+INSERT INTO `app_config` (`config_key`, `config_value`, `updated_at`) VALUES ('current_version','1.0','2026-06-28 15:52:56'),('is_maintenance_mode','0','2026-06-28 14:27:28'),('maintenance_message','We are updating our stock. Back soon!','2026-06-28 13:54:51'),('min_version_required','1.0','2026-06-28 15:53:04'),('Bulk_approval_required','1','2026-06-28 13:54:51');
 /*!40000 ALTER TABLE `app_config` ENABLE KEYS */;
 /*!40000 ALTER TABLE `delivery_pricing` DISABLE KEYS */;
 INSERT INTO `delivery_pricing` (`id`, `profit_percent_enabled`, `profit_percent`, `service_fee`, `created_at`, `updated_at`, `free_delivery_threshold`, `free_delivery_distance_threshold`, `medium_order_threshold`, `medium_order_rate`, `low_order_rate`, `insurance_percent`) VALUES (1,1,2.80,1800.00,'2026-05-26 04:39:31','2026-06-07 23:38:00',100000.00,5,75000.00,380.00,700.00,0.90);
@@ -1141,12 +1141,12 @@ INSERT INTO `gift_hampers` (`id`, `name`, `description`, `price`, `image`, `is_a
 /*!40000 ALTER TABLE `gift_hamper_items` DISABLE KEYS */;
 INSERT INTO `gift_hamper_items` (`id`, `hamper_id`, `item_id`, `quantity`) VALUES (21,1,24,1),(22,1,45,1),(23,1,71,1),(24,1,26,1),(25,1,69,2),(26,1,68,1),(50,2,26,1),(51,2,40,1),(52,2,50,1),(53,2,68,1),(54,2,69,1),(55,2,72,1),(56,2,79,1),(57,2,75,1),(58,2,84,1),(59,2,80,1),(60,2,81,1);
 /*!40000 ALTER TABLE `gift_hamper_items` ENABLE KEYS */;
-/*!40000 ALTER TABLE `surplus_discount_rules` DISABLE KEYS */;
-INSERT INTO `surplus_discount_rules` (`id`, `name`, `min_discount_percent`, `max_discount_percent`, `days_before_expiry`, `condition_multiplier`, `is_active`, `created_at`, `updated_at`) VALUES (1,'Standard Rule',30.00,50.00,3,1.00,1,'2026-05-27 17:12:17','2026-05-27 17:12:17'),(2,'Urgent Rule',50.00,70.00,1,1.00,1,'2026-05-27 17:12:17','2026-05-27 17:12:17'),(3,'Bulk Discount',40.00,60.00,5,0.95,1,'2026-05-27 17:12:17','2026-05-27 17:12:17');
-/*!40000 ALTER TABLE `surplus_discount_rules` ENABLE KEYS */;
-/*!40000 ALTER TABLE `surplus_delivery_settings` DISABLE KEYS */;
-INSERT INTO `surplus_delivery_settings` (`id`, `base_fee`, `fee_per_kg`, `max_weight_kg`, `free_delivery_threshold`, `updated_at`) VALUES (1,5000.00,500.00,1000,500000.00,'2026-06-15 12:23:05'),(2,5000.00,500.00,1000,500000.00,'2026-06-15 13:29:59');
-/*!40000 ALTER TABLE `surplus_delivery_settings` ENABLE KEYS */;
+/*!40000 ALTER TABLE `Bulk_discount_rules` DISABLE KEYS */;
+INSERT INTO `Bulk_discount_rules` (`id`, `name`, `min_discount_percent`, `max_discount_percent`, `days_before_expiry`, `condition_multiplier`, `is_active`, `created_at`, `updated_at`) VALUES (1,'Standard Rule',30.00,50.00,3,1.00,1,'2026-05-27 17:12:17','2026-05-27 17:12:17'),(2,'Urgent Rule',50.00,70.00,1,1.00,1,'2026-05-27 17:12:17','2026-05-27 17:12:17'),(3,'Bulk Discount',40.00,60.00,5,0.95,1,'2026-05-27 17:12:17','2026-05-27 17:12:17');
+/*!40000 ALTER TABLE `Bulk_discount_rules` ENABLE KEYS */;
+/*!40000 ALTER TABLE `Bulk_delivery_settings` DISABLE KEYS */;
+INSERT INTO `Bulk_delivery_settings` (`id`, `base_fee`, `fee_per_kg`, `max_weight_kg`, `free_delivery_threshold`, `updated_at`) VALUES (1,5000.00,500.00,1000,500000.00,'2026-06-15 12:23:05'),(2,5000.00,500.00,1000,500000.00,'2026-06-15 13:29:59');
+/*!40000 ALTER TABLE `Bulk_delivery_settings` ENABLE KEYS */;
 /*!40000 ALTER TABLE `storage_pricing` DISABLE KEYS */;
 /*!40000 ALTER TABLE `storage_pricing` ENABLE KEYS */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

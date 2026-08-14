@@ -72,7 +72,7 @@ class RiderRepository(
     }
 
     // `source` comes from the Delivery the rider tapped. It is not optional and
-    // must never be guessed: shop order 41 and surplus order 41 both exist, so
+    // must never be guessed: shop order 41 and Bulk order 41 both exist, so
     // the wrong value opens a different customer's job.
     fun loadDeliveryDetail(
         orderId: Int,

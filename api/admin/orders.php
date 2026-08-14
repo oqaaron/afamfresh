@@ -33,9 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // nothing had ever written to it.
                 //
                 // Scoped to source='order'. rider_assignments now also holds
-                // surplus deliveries, and the two id spaces overlap — without
+                // Bulk deliveries, and the two id spaces overlap — without
                 // this, assigning a rider to shop order 41 would find the
-                // SURPLUS assignment for order 41 and reassign that instead,
+                // Bulk assignment for order 41 and reassign that instead,
                 // silently moving a different customer's delivery to a
                 // different rider.
                 $existing = $dbh->prepare(
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Told after commit, never inside the transaction: a
                 // notification failure must not roll back a real assignment.
-                // Same shape as admin/surplus-orders.php's own rider-assigned
+                // Same shape as admin/Bulk-orders.php's own rider-assigned
                 // notification, which shop orders never had.
                 try {
                     require_once __DIR__ . '/../includes/notifications.php';

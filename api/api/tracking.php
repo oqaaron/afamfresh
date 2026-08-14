@@ -51,7 +51,7 @@ try {
     // --- who owns this order -------------------------------------------
     $ownerStmt = $source === 'order'
         ? $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?")
-        : $dbh->prepare("SELECT user_id FROM surplus_orders WHERE id = ?");
+        : $dbh->prepare("SELECT user_id FROM Bulk_orders WHERE id = ?");
     $ownerStmt->execute([$orderId]);
     $ownerId = $ownerStmt->fetchColumn();
 

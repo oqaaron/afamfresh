@@ -13,8 +13,8 @@ DBP=$(/opt/lampp/bin/php -r "require '$BACKEND/includes/config.php'; echo DB_PAS
 # Tables whose CONTENTS are safe to version: catalogue, pricing, UI copy,
 # feature flags. Everything else gets structure only.
 SEED=(items category site_settings app_config delivery_pricing delivery_slots
-      shipping banner gift_hampers gift_hamper_items surplus_discount_rules
-      surplus_delivery_settings storage_pricing)
+      shipping banner gift_hampers gift_hamper_items Bulk_discount_rules
+      Bulk_delivery_settings storage_pricing)
 
 ARGS=(--host=localhost --user="$DBU" --default-character-set=utf8mb4
       --single-transaction --skip-add-locks --skip-comments

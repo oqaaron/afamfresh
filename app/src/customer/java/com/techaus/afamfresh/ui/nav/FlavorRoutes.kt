@@ -37,14 +37,18 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         }
     }
 
-    composable("surplus_delivery_map/{listingId}") { backStackEntry ->
+    composable("Bulk_delivery_map/{listingId}") { backStackEntry ->
         val listingId = backStackEntry.arguments?.getString("listingId").orEmpty()
         DeliveryMapScreen(
             onBack = { nav.popBackStack() },
-            // Zero: the map's own fee quote is for shop orders and is ignored
-            // here. Surplus is priced by api/surplus-quote.php, which the
-            // checkout screen calls with the coordinates this returns.
+            // The map's own fee quote is for shop orders. Bulk is priced by
+            // api/Bulk-quote.php, which the checkout screen calls with the
+            // coordinates this returns — requiresFeeQuote = false skips the
+            // shop quote entirely rather than calling it with a cartSubtotal
+            // of 0, which used to trip its "add something to your cart"
+            // guard and block confirming a Bulk delivery point outright.
             cartSubtotal = 0.0,
+            requiresFeeQuote = false,
             deliveryRepository = deps.deliveryRepository,
             onLocationSelected = { pickupAddress, dropoffAddress, pickupLat, pickupLng,
                                    dropoffLat, dropoffLng, distanceKm, totalCost ->
@@ -60,8 +64,8 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
                         cost = totalCost
                     )
                 )
-                nav.navigate("surplus_checkout/$listingId") {
-                    popUpTo("surplus_delivery_map/$listingId") { inclusive = true }
+                nav.navigate("Bulk_checkout/$listingId") {
+                    popUpTo("Bulk_delivery_map/$listingId") { inclusive = true }
                 }
             }
         )

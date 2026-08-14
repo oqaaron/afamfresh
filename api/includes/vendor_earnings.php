@@ -16,7 +16,7 @@
 // =============================================================
 
 /**
- * Credit a vendor for one delivered surplus order.
+ * Credit a vendor for one delivered Bulk order.
  *
  * The commission comes from the vendor's own `commission_rate`, which is per
  * vendor and defaults to 10% — not a global constant, unlike riders.
@@ -30,25 +30,25 @@
  * pay twice.
  *
  * @param PDO $dbh
- * @param int $surplusOrderId  surplus_orders.id
+ * @param int $BulkOrderId  Bulk_orders.id
  * @return array{ok: bool, error: ?string}
  */
-function creditVendorEarnings($dbh, $surplusOrderId) {
+function creditVendorEarnings($dbh, $BulkOrderId) {
     // The vendor and the money both come from the listing behind the order,
     // read server-side. Nothing here is taken from a request.
     $stmt = $dbh->prepare(
         "SELECT so.id, so.total_price, so.delivery_fee, so.payment_status,
                 sl.vendor_id, v.commission_rate
-           FROM surplus_orders so
-           JOIN surplus_listings sl ON sl.id = so.listing_id
+           FROM Bulk_orders so
+           JOIN Bulk_listings sl ON sl.id = so.listing_id
            JOIN vendors v ON v.id = sl.vendor_id
           WHERE so.id = ?"
     );
-    $stmt->execute([$surplusOrderId]);
+    $stmt->execute([$BulkOrderId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$row) {
-        error_log("creditVendorEarnings: surplus order $surplusOrderId has no listing or vendor");
+        error_log("creditVendorEarnings: Bulk order $BulkOrderId has no listing or vendor");
         return ['ok' => false, 'error' => 'That order has no vendor to credit.'];
     }
 
@@ -68,7 +68,7 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
     // delivery helps nobody. An unpaid delivered order is instead surfaced on
     // the reconciliation page's exceptions list, where someone can act on it.
     if (strcasecmp((string)$row['payment_status'], 'paid') !== 0) {
-        error_log("creditVendorEarnings: surplus order $surplusOrderId is '"
+        error_log("creditVendorEarnings: Bulk order $BulkOrderId is '"
                   . $row['payment_status'] . "', not paid — vendor not credited");
         return [
             'ok'    => false,
@@ -80,25 +80,25 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
     $vendorId = (int)$row['vendor_id'];
 
     $existing = $dbh->prepare(
-        "SELECT id FROM vendor_earnings WHERE source = 'surplus' AND order_id = ? AND vendor_id = ?"
+        "SELECT id FROM vendor_earnings WHERE source = 'Bulk' AND order_id = ? AND vendor_id = ?"
     );
-    $existing->execute([$surplusOrderId, $vendorId]);
+    $existing->execute([$BulkOrderId, $vendorId]);
     if ($existing->fetchColumn()) {
         return ['ok' => true, 'error' => null];
     }
 
     // total_price IS the goods total, full stop — delivery_fee is a separate
     // column that is never folded into it anywhere in the checkout path
-    // (api/surplus-orders.php computes total_price as unit_price * quantity
-    // before delivery_fee is even known; surplusPayableTotal() then sums the
+    // (api/Bulk-orders.php computes total_price as unit_price * quantity
+    // before delivery_fee is even known; BulkPayableTotal() then sums the
     // two for the amount actually charged). A previous version of this
     // function subtracted delivery_fee here "defensively", which was wrong
     // under the schema as it has always behaved: it silently under-credited
-    // every vendor, on every delivered surplus order, by their delivery fee's
+    // every vendor, on every delivered Bulk order, by their delivery fee's
     // worth before commission was even applied.
     $goods = max(0.0, (float)$row['total_price']);
     if ($goods <= 0) {
-        error_log("creditVendorEarnings: surplus order $surplusOrderId has no goods value to credit");
+        error_log("creditVendorEarnings: Bulk order $BulkOrderId has no goods value to credit");
         return ['ok' => false, 'error' => 'That order has nothing to credit.'];
     }
 
@@ -110,8 +110,8 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
         $dbh->prepare(
             "INSERT INTO vendor_earnings
                 (vendor_id, order_id, source, order_amount, commission_amount, net_earnings)
-             VALUES (?, ?, 'surplus', ?, ?, ?)"
-        )->execute([$vendorId, $surplusOrderId, $goods, $commission, $net]);
+             VALUES (?, ?, 'Bulk', ?, ?, ?)"
+        )->execute([$vendorId, $BulkOrderId, $goods, $commission, $net]);
 
         return ['ok' => true, 'error' => null];
     } catch (PDOException $e) {
@@ -120,7 +120,7 @@ function creditVendorEarnings($dbh, $surplusOrderId) {
         if ($e->getCode() === '23000') {
             return ['ok' => true, 'error' => null];
         }
-        error_log("creditVendorEarnings failed for surplus order $surplusOrderId: " . $e->getMessage());
+        error_log("creditVendorEarnings failed for Bulk order $BulkOrderId: " . $e->getMessage());
         return ['ok' => false, 'error' => 'Could not record earnings for this order.'];
     }
 }

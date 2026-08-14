@@ -44,18 +44,18 @@ try {
     error_log('admin nav: pending product count failed: ' . $e->getMessage());
 }
 
-// Surplus listings awaiting review. This queue is time-sensitive in a way the
+// Bulk listings awaiting review. This queue is time-sensitive in a way the
 // others are not: a listing sits against an expiry date, so one left unreviewed
 // long enough is worthless by the time anyone looks.
-$navPendingSurplus = 0;
+$navPendingBulk = 0;
 try {
     if (isset($dbh)) {
-        $navPendingSurplus = (int)$dbh->query(
-            "SELECT COUNT(*) FROM surplus_listings WHERE status = 'pending'"
+        $navPendingBulk = (int)$dbh->query(
+            "SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending'"
         )->fetchColumn();
     }
 } catch (Throwable $e) {
-    error_log('admin nav: pending surplus count failed: ' . $e->getMessage());
+    error_log('admin nav: pending Bulk count failed: ' . $e->getMessage());
 }
 
 // Withdrawal requests waiting on a decision. Money someone is waiting for, so
@@ -71,7 +71,7 @@ try {
     error_log('admin nav: pending payout count failed: ' . $e->getMessage());
 }
 
-// Paid surplus orders with nobody sent to collect them. The most urgent queue
+// Paid Bulk orders with nobody sent to collect them. The most urgent queue
 // on this menu: the goods are perishable, the customer has already paid, and
 // nothing happens until someone here assigns a rider.
 $navNeedsRider = 0;
@@ -79,9 +79,9 @@ try {
     if (isset($dbh)) {
         $navNeedsRider = (int)$dbh->query(
             "SELECT COUNT(*)
-               FROM surplus_orders so
-               JOIN surplus_listings sl ON sl.id = so.listing_id
-               LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'surplus'
+               FROM Bulk_orders so
+               JOIN Bulk_listings sl ON sl.id = so.listing_id
+               LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'Bulk'
               WHERE so.payment_status IN ('paid','pending_cash')
                 AND sl.pickup_only = 0
                 AND so.status NOT IN ('delivered','cancelled','refunded')
@@ -103,8 +103,8 @@ $navItems = [
     ['role-requests.php',    'Role Requests',      'fa-user-check'],
     ['admin-dashboard.php',  'Vendor Verification','fa-store'],
     ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
-    ['surplus-listings.php', 'Surplus Listings',   'fa-tags'],
-    ['surplus-orders.php',   'Surplus Orders',     'fa-truck-fast'],
+    ['Bulk-listings.php', 'Bulk Listings',   'fa-tags'],
+    ['Bulk-orders.php',   'Bulk Orders',     'fa-truck-fast'],
     ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
     ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced'],
     ['routing-check.php',    'Routing check',      'fa-route'],
@@ -123,10 +123,10 @@ $navItems = [
                 <?php if ($href === 'vendor-catalogue.php' && $navPendingProducts > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingProducts ?></span>
                 <?php endif; ?>
-                <?php if ($href === 'surplus-listings.php' && $navPendingSurplus > 0): ?>
-                    <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingSurplus ?></span>
+                <?php if ($href === 'Bulk-listings.php' && $navPendingBulk > 0): ?>
+                    <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingBulk ?></span>
                 <?php endif; ?>
-                <?php if ($href === 'surplus-orders.php' && $navNeedsRider > 0): ?>
+                <?php if ($href === 'Bulk-orders.php' && $navNeedsRider > 0): ?>
                     <span class="bg-red-400 text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $navNeedsRider ?></span>
                 <?php endif; ?>
                 <?php if ($href === 'vendor-payouts.php' && $navPendingPayouts > 0): ?>

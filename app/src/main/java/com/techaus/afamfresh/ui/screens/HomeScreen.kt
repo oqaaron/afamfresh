@@ -51,7 +51,7 @@ fun HomeScreen(
     onProductClick: (Product) -> Unit,
     onOrdersClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onSurplusClick: () -> Unit,
+    onBulkClick: () -> Unit,
     onCartClick: () -> Unit,
     productViewModel: ProductViewModel,
     cartViewModel: CartViewModel,

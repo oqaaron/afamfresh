@@ -2,12 +2,12 @@ package com.techaus.afamfresh.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.techaus.afamfresh.models.CreateSurplusOrderRequest
-import com.techaus.afamfresh.models.SurplusListing
-import com.techaus.afamfresh.models.SurplusOrder
-import com.techaus.afamfresh.models.SurplusQuoteRequest
-import com.techaus.afamfresh.models.SurplusQuoteResponse
-import com.techaus.afamfresh.repository.SurplusRepository
+import com.techaus.afamfresh.models.CreateBulkOrderRequest
+import com.techaus.afamfresh.models.BulkListing
+import com.techaus.afamfresh.models.BulkOrder
+import com.techaus.afamfresh.models.BulkQuoteRequest
+import com.techaus.afamfresh.models.BulkQuoteResponse
+import com.techaus.afamfresh.repository.BulkRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,13 +15,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// Constructor confirmed by MainActivity.kt: SurplusViewModel(surplusRepository)
-class SurplusViewModel(
-    private val surplusRepository: SurplusRepository
+// Constructor confirmed by MainActivity.kt: BulkViewModel(BulkRepository)
+class BulkViewModel(
+    private val BulkRepository: BulkRepository
 ) : ViewModel() {
 
-    private val _listings = MutableStateFlow<List<SurplusListing>>(emptyList())
-    val listings: StateFlow<List<SurplusListing>> = _listings.asStateFlow()
+    private val _listings = MutableStateFlow<List<BulkListing>>(emptyList())
+    val listings: StateFlow<List<BulkListing>> = _listings.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -39,12 +39,12 @@ class SurplusViewModel(
     fun loadListings() {
         _isLoading.value = true
         _error.value = null
-        surplusRepository.getPublicListings { listings, error ->
+        BulkRepository.getPublicListings { listings, error ->
             _isLoading.value = false
             if (listings != null) {
                 _listings.value = listings
             } else {
-                _error.value = error?.userMessage ?: "Unable to load surplus deals"
+                _error.value = error?.userMessage ?: "Unable to load Bulk deals"
                 _canRetry.value = error?.isRetryable ?: true
             }
         }
@@ -54,8 +54,8 @@ class SurplusViewModel(
     // Pricing an order before it exists
     // ---------------------------------------------------------------
 
-    private val _quote = MutableStateFlow<SurplusQuoteResponse?>(null)
-    val quote: StateFlow<SurplusQuoteResponse?> = _quote.asStateFlow()
+    private val _quote = MutableStateFlow<BulkQuoteResponse?>(null)
+    val quote: StateFlow<BulkQuoteResponse?> = _quote.asStateFlow()
 
     private val _quoteLoading = MutableStateFlow(false)
     val quoteLoading: StateFlow<Boolean> = _quoteLoading.asStateFlow()
@@ -79,8 +79,8 @@ class SurplusViewModel(
         _quoteLoading.value = true
         _quoteError.value = null
 
-        surplusRepository.getQuote(
-            SurplusQuoteRequest(
+        BulkRepository.getQuote(
+            BulkQuoteRequest(
                 listingId = listingId,
                 quantity = quantity,
                 deliveryLat = lat,
@@ -122,7 +122,7 @@ class SurplusViewModel(
         }
         loyaltyQuoteJob = viewModelScope.launch {
             delay(350L)
-            surplusRepository.getLoyaltyQuote(points, goodsValue) { body, _ ->
+            BulkRepository.getLoyaltyQuote(points, goodsValue) { body, _ ->
                 _loyaltyPreview.value = body?.let {
                     LoyaltyPreview(it.pointsApplied, it.discount, it.capped)
                 }
@@ -141,8 +141,8 @@ class SurplusViewModel(
     val orderError: StateFlow<String?> = _orderError.asStateFlow()
 
     /** The order just created, still unpaid. Cleared once checkout is done with it. */
-    private val _placedOrder = MutableStateFlow<SurplusOrder?>(null)
-    val placedOrder: StateFlow<SurplusOrder?> = _placedOrder.asStateFlow()
+    private val _placedOrder = MutableStateFlow<BulkOrder?>(null)
+    val placedOrder: StateFlow<BulkOrder?> = _placedOrder.asStateFlow()
 
     /**
      * Places the order and reports the id and the amount that will be charged.
@@ -156,7 +156,7 @@ class SurplusViewModel(
      * screen still advertising quantity they have just bought.
      */
     fun placeOrder(
-        request: CreateSurplusOrderRequest,
+        request: CreateBulkOrderRequest,
         onPlaced: (orderId: Int, grandTotal: Double) -> Unit
     ) {
         if (_isPlacingOrder.value) return   // guard the double tap: this creates money
@@ -164,7 +164,7 @@ class SurplusViewModel(
         _isPlacingOrder.value = true
         _orderError.value = null
 
-        surplusRepository.createOrder(request) { response, error ->
+        BulkRepository.createOrder(request) { response, error ->
             _isPlacingOrder.value = false
 
             val order = response?.order
@@ -173,7 +173,7 @@ class SurplusViewModel(
                 loadListings()
                 onPlaced(order.id, response.grandTotal)
             } else {
-                // The server's own message — "Minimum order value for surplus is
+                // The server's own message — "Minimum order value for Bulk is
                 // UGX 250,000" and friends — is written for the customer and says
                 // more than anything this layer could substitute.
                 _orderError.value = error?.userMessage ?: "Could not place your order."
@@ -190,11 +190,11 @@ class SurplusViewModel(
     }
 
     // ---------------------------------------------------------------
-    // The customer's own surplus orders
+    // The customer's own Bulk orders
     // ---------------------------------------------------------------
 
-    private val _myOrders = MutableStateFlow<List<SurplusOrder>>(emptyList())
-    val myOrders: StateFlow<List<SurplusOrder>> = _myOrders.asStateFlow()
+    private val _myOrders = MutableStateFlow<List<BulkOrder>>(emptyList())
+    val myOrders: StateFlow<List<BulkOrder>> = _myOrders.asStateFlow()
 
     private val _ordersLoading = MutableStateFlow(false)
     val ordersLoading: StateFlow<Boolean> = _ordersLoading.asStateFlow()
@@ -205,12 +205,12 @@ class SurplusViewModel(
     fun loadMyOrders(userId: Int) {
         _ordersLoading.value = true
         _ordersError.value = null
-        surplusRepository.getMyOrders(userId) { orders, error ->
+        BulkRepository.getMyOrders(userId) { orders, error ->
             _ordersLoading.value = false
             if (orders != null) {
                 _myOrders.value = orders
             } else {
-                _ordersError.value = error?.userMessage ?: "Could not load your surplus orders."
+                _ordersError.value = error?.userMessage ?: "Could not load your Bulk orders."
             }
         }
     }
@@ -228,7 +228,7 @@ class SurplusViewModel(
         onResult: (Boolean, String?) -> Unit
     ) {
         _ordersLoading.value = true
-        surplusRepository.confirmReceipt(
+        BulkRepository.confirmReceipt(
             orderId, userId, rating, ratingSpeed, ratingProfessionalism, ratingPackaging,
             feedback, emojiReaction, photoBytes
         ) { success, error ->

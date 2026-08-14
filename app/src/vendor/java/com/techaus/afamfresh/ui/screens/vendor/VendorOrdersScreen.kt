@@ -16,8 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.models.SurplusOrder
-import com.techaus.afamfresh.models.UpdateSurplusOrderStatusRequest
+import com.techaus.afamfresh.models.BulkOrder
+import com.techaus.afamfresh.models.UpdateBulkOrderStatusRequest
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
@@ -39,7 +39,7 @@ fun VendorOrdersScreen(
     val profile by vendorViewModel.profile.collectAsState()
     val updating by vendorViewModel.updatingOrders.collectAsState()
 
-    // Keyed on the vendor profile, not Unit: surplus-orders.php needs a
+    // Keyed on the vendor profile, not Unit: Bulk-orders.php needs a
     // vendor_id, and that is only known once MainScreen's start() has resolved
     // the vendor record. Firing on Unit could run first and load nothing.
     LaunchedEffect(profile?.id) {
@@ -95,7 +95,7 @@ fun VendorOrdersScreen(
                             onCancel = {
                                 vendorViewModel.updateOrderStatus(
                                     order.id,
-                                    UpdateSurplusOrderStatusRequest.CANCELLED
+                                    UpdateBulkOrderStatusRequest.CANCELLED
                                 )
                             }
                         )
@@ -107,17 +107,17 @@ fun VendorOrdersScreen(
 }
 
 /**
- * Renders a [SurplusOrder], not an Order — surplus-orders.php is the only
+ * Renders a [BulkOrder], not an Order — Bulk-orders.php is the only
  * per-vendor order endpoint this backend exposes.
  */
 @Composable
 private fun VendorOrderRow(
-    order: SurplusOrder,
+    order: BulkOrder,
     isUpdating: Boolean,
     onAdvance: (String) -> Unit,
     onCancel: () -> Unit
 ) {
-    val next = UpdateSurplusOrderStatusRequest.nextAfter(order.status)
+    val next = UpdateBulkOrderStatusRequest.nextAfter(order.status)
 
     Column(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(CardWhite).padding(14.dp)
@@ -224,7 +224,7 @@ private fun VendorOrderRow(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                UpdateSurplusOrderStatusRequest.actionLabel(next),
+                                UpdateBulkOrderStatusRequest.actionLabel(next),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )

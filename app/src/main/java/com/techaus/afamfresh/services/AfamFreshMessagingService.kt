@@ -29,7 +29,7 @@ import kotlin.random.Random
  *     "title":    "Order confirmed",
  *     "body":     "Your order #1234 is being prepared",
  *     "order_id": "1234",       // deep-links to that order when present
- *     "source":   "order"       // "order" or "surplus" — which table
+ *     "source":   "order"       // "order" or "Bulk" — which table
  *                                // order_id means; the two id spaces
  *                                // overlap, so this decides where a tap
  *                                // navigates. Absent = treated as "order".
@@ -45,8 +45,8 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
     companion object {
         const val CHANNEL_ID = "afamfresh_orders"
         const val EXTRA_ORDER_ID = "notification_order_id"
-        // "order" or "surplus" — the two id spaces overlap (a shop order and
-        // a surplus order can share a numeric id), so a tap cannot resolve
+        // "order" or "Bulk" — the two id spaces overlap (a shop order and
+        // a Bulk order can share a numeric id), so a tap cannot resolve
         // which table order_id means without this. Absent on older/legacy
         // payloads; the receiving end treats that the same as "order".
         const val EXTRA_SOURCE = "notification_source"
@@ -148,7 +148,7 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
                 "Order updates",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Order status changes and surplus deals"
+                description = "Order status changes and Bulk deals"
             }
         )
     }

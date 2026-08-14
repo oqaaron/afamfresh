@@ -10,7 +10,7 @@
 --
 -- 1. vendor_earnings.source
 --    The table was built around `orders` (the existing query joins o.orderid),
---    but vendor sales happen through surplus_orders. order_id alone is
+--    but vendor sales happen through Bulk_orders. order_id alone is
 --    therefore ambiguous -- id 7 could be either table. `source` says which.
 --
 -- 2. A unique key across (source, order_id, vendor_id)
@@ -25,18 +25,18 @@
 -- =============================================================
 
 -- Defaults to 'order' so any pre-existing row keeps its original meaning.
--- New credits pass 'surplus' explicitly.
+-- New credits pass 'Bulk' explicitly.
 ALTER TABLE `vendor_earnings`
-  ADD COLUMN `source` ENUM('order','surplus') NOT NULL DEFAULT 'order'
+  ADD COLUMN `source` ENUM('order','Bulk') NOT NULL DEFAULT 'order'
     COMMENT 'Which table order_id points at'
     AFTER `order_id`;
 
 ALTER TABLE `vendor_earnings`
   ADD UNIQUE KEY `uniq_earning_per_order` (`source`, `order_id`, `vendor_id`);
 
--- Payment state for surplus orders. `orders` has had these three all along;
--- surplus_orders carried no record of whether money ever changed hands.
-ALTER TABLE `surplus_orders`
+-- Payment state for Bulk orders. `orders` has had these three all along;
+-- Bulk_orders carried no record of whether money ever changed hands.
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `payment_status` VARCHAR(50) NOT NULL DEFAULT 'pending'
     COMMENT 'pending | paid | failed | cancelled — mirrors orders.payment_status',
   ADD COLUMN `payment_captured_at` DATETIME DEFAULT NULL,
@@ -46,5 +46,5 @@ ALTER TABLE `surplus_orders`
 -- Sanity checks.
 SELECT COUNT(*) AS earnings_rows, SUM(source = 'order') AS legacy_order_rows
   FROM `vendor_earnings`;
-SELECT COUNT(*) AS surplus_orders, SUM(payment_status = 'pending') AS unpaid
-  FROM `surplus_orders`;
+SELECT COUNT(*) AS Bulk_orders, SUM(payment_status = 'pending') AS unpaid
+  FROM `Bulk_orders`;

@@ -47,7 +47,7 @@ function reconciliationDaily(PDO $dbh, ?string $from, ?string $to): array {
                    SUM(CASE WHEN payment_method='card' THEN total_price + delivery_fee ELSE 0 END),
                    SUM(CASE WHEN payment_method='unknown' THEN total_price + delivery_fee ELSE 0 END),
                    COUNT(*)
-              FROM surplus_orders
+              FROM Bulk_orders
              WHERE payment_status = 'paid' $surDate
              GROUP BY DATE(created_at)
           ) AS combined
@@ -80,7 +80,7 @@ function reconciliationRiderCash(PDO $dbh, ?string $from, ?string $to): array {
              GROUP BY cash_collected_by
             UNION ALL
             SELECT cash_collected_by, SUM(total_price + delivery_fee), COUNT(*)
-              FROM surplus_orders
+              FROM Bulk_orders
              WHERE payment_method='cash' AND cash_collected_by IS NOT NULL $surDate
              GROUP BY cash_collected_by
           ) AS t
@@ -115,9 +115,9 @@ function reconciliationExceptions(PDO $dbh, ?string $from, ?string $to): array {
           FROM orders
          WHERE delivered_at IS NOT NULL AND payment_status <> 'paid' $shopDate
         UNION ALL
-        SELECT 'surplus', id, total_price + delivery_fee,
+        SELECT 'Bulk', id, total_price + delivery_fee,
                payment_status, payment_method, delivered_at
-          FROM surplus_orders
+          FROM Bulk_orders
          WHERE delivered_at IS NOT NULL AND payment_status <> 'paid' $surDate
          ORDER BY delivered_at DESC LIMIT 200");
     $unpaid->execute(array_merge($shopParams, $surParams));
@@ -127,8 +127,8 @@ function reconciliationExceptions(PDO $dbh, ?string $from, ?string $to): array {
           FROM orders
          WHERE payment_status = 'paid' AND payment_method = 'unknown' $shopDate
         UNION ALL
-        SELECT 'surplus', id, total_price + delivery_fee, created_at
-          FROM surplus_orders
+        SELECT 'Bulk', id, total_price + delivery_fee, created_at
+          FROM Bulk_orders
          WHERE payment_status = 'paid' AND payment_method = 'unknown' $surDate
          ORDER BY at DESC LIMIT 200");
     $unattributed->execute(array_merge($shopParams, $surParams));

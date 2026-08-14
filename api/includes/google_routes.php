@@ -10,7 +10,7 @@
 //
 // calculateDistance() is Haversine — the straight line between two points.
 // Roads are not straight. On a typical Kampala journey it understates the real
-// driving distance by 20-40%, and the surplus delivery fee charges per km, so
+// driving distance by 20-40%, and the Bulk delivery fee charges per km, so
 // every bulk order was being under-charged by roughly that much.
 //
 // getRoadDistance() does call a real router, but it is public OSRM over plain

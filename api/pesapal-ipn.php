@@ -29,7 +29,7 @@
  */
 
 require_once __DIR__ . '/includes/pesapal.php';
-require_once __DIR__ . '/includes/surplus_payment.php';
+require_once __DIR__ . '/includes/Bulk_payment.php';
 require_once __DIR__ . '/includes/payment_ledger.php';
 
 // Pesapal retries on any non-200, so this must answer 200 even on our own
@@ -83,46 +83,46 @@ try {
 // Locate the order. The tracking id is the reliable key; the merchant reference
 // is `<orderid>-<timestamp>` and is used only as a fallback.
 try {
-    // Surplus orders live in their own table, so the tracking id has to be
+    // Bulk orders live in their own table, so the tracking id has to be
     // looked for in both. Checked first when the merchant reference says so:
     // it is written as `SUR-<id>-<timestamp>` by api/payment.php precisely
     // because the two id spaces overlap and a bare id would be ambiguous.
-    $looksSurplus = stripos($merchantRef, 'SUR-') === 0;
+    $looksBulk = stripos($merchantRef, 'SUR-') === 0;
 
-    $surplus = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM surplus_orders WHERE pesapal_tracking_id = ?");
-    $surplus->execute([$trackingId]);
-    $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
+    $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM Bulk_orders WHERE pesapal_tracking_id = ?");
+    $Bulk->execute([$trackingId]);
+    $BulkOrder = $Bulk->fetch(PDO::FETCH_ASSOC);
 
-    if (!$surplusOrder && $looksSurplus) {
+    if (!$BulkOrder && $looksBulk) {
         $idFromRef = (int)(explode('-', $merchantRef)[1] ?? 0);
         if ($idFromRef > 0) {
-            $surplus = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM surplus_orders WHERE id = ?");
-            $surplus->execute([$idFromRef]);
-            $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
+            $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM Bulk_orders WHERE id = ?");
+            $Bulk->execute([$idFromRef]);
+            $BulkOrder = $Bulk->fetch(PDO::FETCH_ASSOC);
         }
     }
 
-    if ($surplusOrder) {
-        $surplusId = (int)$surplusOrder['id'];
-        if (strcasecmp((string)$surplusOrder['payment_status'], 'paid') === 0) {
-            ipnDone('already paid', ['surplus_order_id' => $surplusId]);
+    if ($BulkOrder) {
+        $BulkId = (int)$BulkOrder['id'];
+        if (strcasecmp((string)$BulkOrder['payment_status'], 'paid') === 0) {
+            ipnDone('already paid', ['Bulk_order_id' => $BulkId]);
         }
-        applySurplusPaymentStatus($dbh, $surplusId, $mapped, $trackingId);
+        applyBulkPaymentStatus($dbh, $BulkId, $mapped, $trackingId);
 
-        if ($mapped === 'paid' && (int)($surplusOrder['points_redeemed'] ?? 0) > 0) {
+        if ($mapped === 'paid' && (int)($BulkOrder['points_redeemed'] ?? 0) > 0) {
             require_once __DIR__ . '/includes/loyalty.php';
-            settleLoyaltyRedemption($dbh, (int)$surplusOrder['user_id'], 'surplus', $surplusId, (int)$surplusOrder['points_redeemed']);
+            settleLoyaltyRedemption($dbh, (int)$BulkOrder['user_id'], 'Bulk', $BulkId, (int)$BulkOrder['points_redeemed']);
         }
 
         $channel = $status['payment_method'] ?? null;
         if ($mapped === 'paid') {
             $dbh->prepare(
-                "UPDATE surplus_orders SET payment_method = ?, payment_channel = ?
+                "UPDATE Bulk_orders SET payment_method = ?, payment_channel = ?
                   WHERE id = ? AND payment_method IN ('unknown','mobile_money','card')"
-            )->execute([classifyPaymentChannel($channel), $channel, $surplusId]);
+            )->execute([classifyPaymentChannel($channel), $channel, $BulkId]);
         }
-        recordPaymentEvent($dbh, 'surplus', $surplusId, 'ipn', [
-            'from_status' => $surplusOrder['payment_status'] ?? null,
+        recordPaymentEvent($dbh, 'Bulk', $BulkId, 'ipn', [
+            'from_status' => $BulkOrder['payment_status'] ?? null,
             'to_status'   => $mapped,
             'method'      => classifyPaymentChannel($channel),
             'channel'     => $channel,
@@ -131,8 +131,8 @@ try {
             'actor_type'  => 'pesapal',
             'raw'         => json_encode($status),
         ]);
-        error_log("Pesapal IPN: surplus order $surplusId set to $mapped.");
-        ipnDone('processed', ['surplus_order_id' => $surplusId, 'payment_status' => $mapped]);
+        error_log("Pesapal IPN: Bulk order $BulkId set to $mapped.");
+        ipnDone('processed', ['Bulk_order_id' => $BulkId, 'payment_status' => $mapped]);
     }
 
     $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE pesapal_tracking_id = ?");

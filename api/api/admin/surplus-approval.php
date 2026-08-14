@@ -15,7 +15,7 @@ $action = $_GET['action'] ?? '';
 
 if ($action === 'pending') {
     $stmt = $dbh->query("SELECT sl.*, v.business_name, i.name as product_name 
-                         FROM surplus_listings sl 
+                         FROM Bulk_listings sl 
                          LEFT JOIN vendors v ON sl.vendor_id = v.id 
                          LEFT JOIN items i ON sl.product_id = i.id 
                          WHERE sl.status = 'pending'");
@@ -32,7 +32,7 @@ if (in_array($action, ['approve', 'reject']) && $_SERVER['REQUEST_METHOD'] === '
         exit;
     }
     $newStatus = $action === 'approve' ? 'approved' : 'rejected';
-    $stmt = $dbh->prepare("UPDATE surplus_listings SET status = ? WHERE id = ?");
+    $stmt = $dbh->prepare("UPDATE Bulk_listings SET status = ? WHERE id = ?");
     $stmt->execute([$newStatus, $id]);
     echo json_encode(['success' => true]);
     exit;

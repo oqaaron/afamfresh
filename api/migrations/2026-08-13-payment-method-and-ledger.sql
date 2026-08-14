@@ -5,7 +5,7 @@
 --
 -- 1. NOTHING RECORDS HOW AN ORDER WAS PAID. api/orders.php reads a
 --    payment_method from the request and then never uses it, and neither
---    `orders` nor `surplus_orders` has a column for it. Cash and mobile money
+--    `orders` nor `Bulk_orders` has a column for it. Cash and mobile money
 --    are therefore indistinguishable after the fact, which makes reconciling
 --    the rider float against the Pesapal settlement impossible.
 --
@@ -60,13 +60,13 @@ ALTER TABLE `orders`
       AFTER `cash_collected_by`,
   ADD KEY `idx_orders_payment` (`payment_status`, `payment_method`, `ordertime`);
 
-ALTER TABLE `surplus_orders`
+ALTER TABLE `Bulk_orders`
   ADD COLUMN `payment_method` ENUM('unknown','cash','mobile_money','card')
       NOT NULL DEFAULT 'unknown' AFTER `payment_status`,
   ADD COLUMN `payment_channel` VARCHAR(50) DEFAULT NULL AFTER `payment_method`,
   ADD COLUMN `cash_collected_by` INT(11) DEFAULT NULL AFTER `payment_channel`,
   ADD COLUMN `cash_collected_at` DATETIME DEFAULT NULL AFTER `cash_collected_by`,
-  ADD KEY `idx_surplus_payment` (`payment_status`, `payment_method`, `created_at`);
+  ADD KEY `idx_Bulk_payment` (`payment_status`, `payment_method`, `created_at`);
 
 -- -------------------------------------------------------------
 -- 2. Backfill only what is certain
@@ -89,11 +89,11 @@ UPDATE `orders`
    AND `pesapal_tracking_id` IS NOT NULL
    AND `pesapal_tracking_id` <> '';
 
-UPDATE `surplus_orders`
+UPDATE `Bulk_orders`
    SET `payment_method` = 'cash'
  WHERE `payment_status` = 'pending_cash';
 
-UPDATE `surplus_orders`
+UPDATE `Bulk_orders`
    SET `payment_method` = 'mobile_money'
  WHERE `payment_method` = 'unknown'
    AND `pesapal_tracking_id` IS NOT NULL
@@ -104,7 +104,7 @@ UPDATE `surplus_orders`
 -- -------------------------------------------------------------
 -- Append-only. Nothing in the application ever UPDATEs or DELETEs a row here;
 -- a correction is a new row. That is the whole point -- `orders` and
--- `surplus_orders` already hold current state, and current state is exactly
+-- `Bulk_orders` already hold current state, and current state is exactly
 -- what was being lost every time an attempt overwrote its predecessor.
 --
 -- No foreign key on order_id, for the same reason vendor_earnings has none:
@@ -112,7 +112,7 @@ UPDATE `surplus_orders`
 -- one. `source` says which.
 CREATE TABLE IF NOT EXISTS `payment_events` (
   `id`            BIGINT(20) NOT NULL AUTO_INCREMENT,
-  `source`        ENUM('order','surplus') NOT NULL,
+  `source`        ENUM('order','Bulk') NOT NULL,
   `order_id`      INT(11) NOT NULL,
   `event`         VARCHAR(40) NOT NULL
                   COMMENT 'initiated | ipn | verified | cash_selected | cash_collected | reversed | admin_adjust',
@@ -147,4 +147,4 @@ SELECT payment_method, payment_status, COUNT(*) AS n,
 
 SELECT payment_method, payment_status, COUNT(*) AS n,
        COALESCE(SUM(total_price + delivery_fee),0) AS value
-  FROM surplus_orders GROUP BY payment_method, payment_status ORDER BY value DESC;
+  FROM Bulk_orders GROUP BY payment_method, payment_status ORDER BY value DESC;

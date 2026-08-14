@@ -216,7 +216,7 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
                     <?php foreach ($exceptions['delivered_unpaid'] as $x): ?>
                         <tr>
                             <td class="px-4 py-2">
-                                <span class="text-gray-400"><?= $x['source'] === 'surplus' ? 'Surplus' : 'Shop' ?></span>
+                                <span class="text-gray-400"><?= $x['source'] === 'Bulk' ? 'Bulk' : 'Shop' ?></span>
                                 #<?= (int)$x['id'] ?>
                             </td>
                             <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars($x['payment_status']) ?></td>
@@ -245,7 +245,7 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
                     <?php foreach ($exceptions['paid_unattributed'] as $x): ?>
                         <tr>
                             <td class="px-4 py-2">
-                                <span class="text-gray-400"><?= $x['source'] === 'surplus' ? 'Surplus' : 'Shop' ?></span>
+                                <span class="text-gray-400"><?= $x['source'] === 'Bulk' ? 'Bulk' : 'Shop' ?></span>
                                 #<?= (int)$x['id'] ?>
                             </td>
                             <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars((string)$x['at']) ?></td>

@@ -3,20 +3,20 @@ package com.techaus.afamfresh.models
 import com.google.gson.annotations.SerializedName
 
 /**
- * ✅ VERIFIED against `api/surplus-listings.php` and the `surplus_listings`
+ * ✅ VERIFIED against `api/Bulk-listings.php` and the `Bulk_listings`
  * table. The previous version of this file was inferred from the app's own
  * (wrong) ApiService field list, and not one of its names existed on the wire:
  *
  *   title        -> product_name      (joined from items.name)
  *   price        -> discounted_price
- *   quantity     -> surplus_quantity / remaining_quantity
+ *   quantity     -> Bulk_quantity / remaining_quantity
  *   unit         -> quantitytype      (joined from items)
  *   expires_at   -> expiry_date
  *   vendor_name  -> business_name     (joined from vendors)
  *
  * The endpoint does `SELECT sl.*` plus a join, so these are raw column names.
  */
-data class SurplusListing(
+data class BulkListing(
     @SerializedName("id") val id: Int = 0,
     @SerializedName("vendor_id") val vendorId: Int = 0,
     @SerializedName("product_id") val productId: Int = 0,
@@ -25,7 +25,7 @@ data class SurplusListing(
     @SerializedName("discount_percent") val discountPercent: Double = 0.0,
     @SerializedName("discounted_price") val discountedPrice: Double = 0.0,
 
-    @SerializedName("surplus_quantity") val surplusQuantity: Int = 0,
+    @SerializedName("Bulk_quantity") val BulkQuantity: Int = 0,
     @SerializedName("remaining_quantity") val remainingQuantity: Int = 0,
 
     /** datetime, e.g. "2026-08-04 18:00:00" — NOT an ISO-8601 instant. */
@@ -60,7 +60,7 @@ data class SurplusListing(
 ) {
     /** What the UI should show as the listing's heading. */
     val displayTitle: String
-        get() = productName?.takeIf { it.isNotBlank() } ?: "Surplus item"
+        get() = productName?.takeIf { it.isNotBlank() } ?: "Bulk item"
 
     /** Prefer the business name; fall back to the vendor's personal name. */
     val vendorDisplayName: String?
@@ -72,23 +72,23 @@ data class SurplusListing(
     val isApproved: Boolean get() = status == "approved"
 }
 
-data class SurplusListingsResponse(
+data class BulkListingsResponse(
     @SerializedName("success") val success: Boolean = false,
-    @SerializedName("listings") val listings: List<SurplusListing>? = null,
+    @SerializedName("listings") val listings: List<BulkListing>? = null,
     // The endpoint reports failures as {"error": "..."} with no success flag,
     // so `success` must default to false rather than being non-null-required.
     @SerializedName("error") val error: String? = null
 )
 
-data class SurplusListingResponse(
+data class BulkListingResponse(
     @SerializedName("success") val success: Boolean = false,
-    @SerializedName("listing") val listing: SurplusListing? = null,
+    @SerializedName("listing") val listing: BulkListing? = null,
     @SerializedName("message") val message: String? = null,
     @SerializedName("error") val error: String? = null
 )
 
 /**
- * Body for POST `surplus-listings.php`. Read field-for-field from the PHP.
+ * Body for POST `Bulk-listings.php`. Read field-for-field from the PHP.
  *
  * `user_id` — not vendor_id: the endpoint looks the vendor up from the user and
  * requires `is_verified = TRUE`.
@@ -96,12 +96,12 @@ data class SurplusListingResponse(
  * The server rejects `discount_percent` outside 30–70 inclusive, and computes
  * `discounted_price` itself, so the app must not send a price.
  */
-data class CreateSurplusListingRequest(
+data class CreateBulkListingRequest(
     @SerializedName("user_id") val userId: Int,
     @SerializedName("product_id") val productId: Int,
     @SerializedName("original_price") val originalPrice: Double,
     @SerializedName("discount_percent") val discountPercent: Double,
-    @SerializedName("surplus_quantity") val surplusQuantity: Int,
+    @SerializedName("Bulk_quantity") val BulkQuantity: Int,
     /** "YYYY-MM-DD HH:MM:SS" */
     @SerializedName("expiry_date") val expiryDate: String,
     @SerializedName("listing_type") val listingType: String = "goodie_bag",
@@ -117,17 +117,17 @@ data class CreateSurplusListingRequest(
 }
 
 /**
- * Body for PUT `surplus-listings.php`.
+ * Body for PUT `Bulk-listings.php`.
  *
  * ⚠️ The endpoint only updates status, remaining_quantity and admin_notes — it
  * cannot edit price, quantity or expiry, which is what the app's old
- * `updateVendorSurplusListing` tried to send.
+ * `updateVendorBulkListing` tried to send.
  *
  * ⚠️ SECURITY: the PHP performs no ownership check, so any authenticated caller
  * can set any listing's status — including approving their own. This is
  * reported to the backend owner; the app only ever sends `remaining_quantity`.
  */
-data class UpdateSurplusListingRequest(
+data class UpdateBulkListingRequest(
     @SerializedName("listing_id") val listingId: Int,
     @SerializedName("remaining_quantity") val remainingQuantity: Int? = null,
     @SerializedName("status") val status: String? = null,
@@ -135,11 +135,11 @@ data class UpdateSurplusListingRequest(
 )
 
 // ===========================================================================
-// SURPLUS ORDERS — the customer side
+// Bulk ORDERS — the customer side
 // ===========================================================================
 
 /**
- * Body for POST `surplus-orders.php`. Read field-for-field from the PHP.
+ * Body for POST `Bulk-orders.php`. Read field-for-field from the PHP.
  *
  * `user_id` is sent but NOT trusted: the endpoint runs it through
  * requireOwnUserId(), so a mismatched id is rejected rather than obeyed. It
@@ -147,7 +147,7 @@ data class UpdateSurplusListingRequest(
  *
  * No price of any kind is sent. The server multiplies the listing's stored
  * discounted_price by the quantity and computes delivery from weight, so an
- * amount here would be ignored — see api/surplus-orders.php.
+ * amount here would be ignored — see api/Bulk-orders.php.
  *
  * The server enforces three limits the UI should check first, so the customer
  * finds out before they fill in an address:
@@ -156,7 +156,7 @@ data class UpdateSurplusListingRequest(
  *   - minimum 20 kg for weight-based listings
  *   - maximum 1000 kg total weight
  */
-data class CreateSurplusOrderRequest(
+data class CreateBulkOrderRequest(
     @SerializedName("listing_id") val listingId: Int,
     @SerializedName("user_id") val userId: Int,
     /** Decimal: weight-based listings are ordered in kg, not whole units. */
@@ -175,21 +175,21 @@ data class CreateSurplusOrderRequest(
     }
 }
 
-// The order row itself is `SurplusOrder` in VendorAndConfigModels.kt. It is
+// The order row itself is `BulkOrder` in VendorAndConfigModels.kt. It is
 // deliberately not redeclared here: customer and vendor read the same rows from
 // the same endpoint, and a second model would drift from the first.
 
 /**
- * Response to POST `surplus-orders.php`.
+ * Response to POST `Bulk-orders.php`.
  *
  * [grandTotal] is the figure to show and the figure that will be charged; it is
  * computed server-side and is not necessarily quantity × price, because the
  * delivery fee is weight-based and waived above a threshold.
  */
-data class CreateSurplusOrderResponse(
+data class CreateBulkOrderResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("message") val message: String? = null,
-    @SerializedName("order") val order: SurplusOrder? = null,
+    @SerializedName("order") val order: BulkOrder? = null,
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
     @SerializedName("total_weight_kg") val totalWeightKg: Double = 0.0,
     @SerializedName("grand_total") val grandTotal: Double = 0.0,
@@ -203,18 +203,18 @@ data class CreateSurplusOrderResponse(
     @SerializedName("error") val error: String? = null
 )
 
-// The list response is `SurplusOrdersResponse` in VendorAndConfigModels.kt,
+// The list response is `BulkOrdersResponse` in VendorAndConfigModels.kt,
 // alongside the row model. Same endpoint, same rows, one type.
 
 /**
- * Body for PUT `surplus-orders.php` — the vendor moving their own order along.
+ * Body for PUT `Bulk-orders.php` — the vendor moving their own order along.
  *
  * The server decides who may send this: the vendor who owns the listing, or an
  * admin. It also refuses to advance an order that has not been paid for, since
  * reaching 'delivered' credits the vendor's earnings ledger and that credit
  * cannot be undone.
  */
-data class UpdateSurplusOrderStatusRequest(
+data class UpdateBulkOrderStatusRequest(
     @SerializedName("order_id") val orderId: Int,
     @SerializedName("status") val status: String
 ) {
@@ -250,12 +250,12 @@ data class UpdateSurplusOrderStatusRequest(
 }
 
 /**
- * Body for POST `surplus-quote.php` — what will this cost, before ordering?
+ * Body for POST `Bulk-quote.php` — what will this cost, before ordering?
  *
  * Coordinates are optional. Without them the server cannot compute a distance
  * and that component is simply absent from the fee, rather than guessed.
  */
-data class SurplusQuoteRequest(
+data class BulkQuoteRequest(
     @SerializedName("listing_id") val listingId: Int,
     @SerializedName("quantity") val quantity: Double,
     @SerializedName("delivery_lat") val deliveryLat: Double? = null,
@@ -269,7 +269,7 @@ data class SurplusQuoteRequest(
  * channels can be rendered by the same code. Every field is the server's
  * figure; nothing here is computed in the app.
  */
-data class SurplusFeeBreakdown(
+data class BulkFeeBreakdown(
     @SerializedName("base_fee") val baseFee: Double = 0.0,
     @SerializedName("weight_fee") val weightFee: Double = 0.0,
     @SerializedName("distance_fee") val distanceFee: Double = 0.0,
@@ -313,7 +313,7 @@ data class SurplusFeeBreakdown(
     @SerializedName("reason") val reason: String? = null
 )
 
-data class SurplusQuoteResponse(
+data class BulkQuoteResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("goods_total") val goodsTotal: Double = 0.0,
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
@@ -322,7 +322,7 @@ data class SurplusQuoteResponse(
     @SerializedName("grand_total") val grandTotal: Double = 0.0,
 
     @SerializedName("total_weight_kg") val totalWeightKg: Double = 0.0,
-    @SerializedName("breakdown") val breakdown: SurplusFeeBreakdown? = null,
+    @SerializedName("breakdown") val breakdown: BulkFeeBreakdown? = null,
 
     /** Warns before committing, rather than letting order creation refuse it. */
     @SerializedName("exceeds_stock") val exceedsStock: Boolean = false,

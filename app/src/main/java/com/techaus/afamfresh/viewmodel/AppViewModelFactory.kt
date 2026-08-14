@@ -14,7 +14,7 @@ import com.techaus.afamfresh.repository.OrderRepository
 import com.techaus.afamfresh.repository.PaymentRepository
 import com.techaus.afamfresh.repository.ProductRepository
 import com.techaus.afamfresh.repository.RiderRepository
-import com.techaus.afamfresh.repository.SurplusRepository
+import com.techaus.afamfresh.repository.BulkRepository
 import com.techaus.afamfresh.repository.TrackingRepository
 import com.techaus.afamfresh.repository.VendorRepository
 
@@ -25,7 +25,7 @@ import com.techaus.afamfresh.repository.VendorRepository
  * Previously MainActivity constructed each ViewModel by hand in onCreate() and
  * held them as Activity fields. Android destroys and recreates the Activity on
  * every rotation, so those fields were rebuilt from scratch each time — and
- * because ProductViewModel, SurplusViewModel and VendorViewModel each call a
+ * because ProductViewModel, BulkViewModel and VendorViewModel each call a
  * load function from their init block, every rotation re-fired those network
  * requests and threw away whatever had already loaded.
  *
@@ -56,7 +56,7 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
 
     private val productRepository = ProductRepository(apiService)
     private val orderRepository = OrderRepository(apiService)
-    private val surplusRepository = SurplusRepository(apiService)
+    private val BulkRepository = BulkRepository(apiService)
     private val trackingRepository = TrackingRepository(apiService)
     private val paymentRepository = PaymentRepository(apiService)
     private val vendorRepository = VendorRepository(apiService)
@@ -88,8 +88,8 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(OrderViewModel::class.java) ->
                 OrderViewModel(orderRepository)
 
-            modelClass.isAssignableFrom(SurplusViewModel::class.java) ->
-                SurplusViewModel(surplusRepository)
+            modelClass.isAssignableFrom(BulkViewModel::class.java) ->
+                BulkViewModel(BulkRepository)
 
             modelClass.isAssignableFrom(TrackingViewModel::class.java) ->
                 TrackingViewModel(trackingRepository)

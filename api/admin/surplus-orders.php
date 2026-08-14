@@ -1,10 +1,10 @@
 <?php
 // =============================================================
-// admin/surplus-orders.php
+// admin/Bulk-orders.php
 //
-// Surplus orders, and dispatching them to riders.
+// Bulk orders, and dispatching them to riders.
 //
-// Until this page existed, admin had no view of surplus orders at all: the
+// Until this page existed, admin had no view of Bulk orders at all: the
 // vendor was the only party who could move one, and delivery was theirs to
 // arrange offline. That left two holes — a vendor who stalled mid-order could
 // not be helped by anyone, and the platform collected a weight-based delivery
@@ -12,10 +12,10 @@
 //
 // WHAT DISPATCH MEANS HERE
 //
-// A surplus job is not a shop job. It is collected from the VENDOR, not the
+// A Bulk job is not a shop job. It is collected from the VENDOR, not the
 // warehouse, and it is bulk — a 250,000-shilling minimum, up to a tonne. So the
 // rider is shown a pickup address, and the fee they are paid from is the
-// surplus delivery fee rather than a mileage component surplus orders do not
+// Bulk delivery fee rather than a mileage component Bulk orders do not
 // have. See includes/rider_dispatch.php.
 //
 // WHAT IS DELIBERATELY NOT ASSIGNABLE
@@ -43,8 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $orderStmt = $dbh->prepare(
         "SELECT so.*, v.business_name, v.location AS vendor_location,
                 sl.pickup_only, i.name AS product_name
-           FROM surplus_orders so
-           JOIN surplus_listings sl ON sl.id = so.listing_id
+           FROM Bulk_orders so
+           JOIN Bulk_listings sl ON sl.id = so.listing_id
            JOIN items i ON i.id = sl.product_id
            JOIN vendors v ON v.id = sl.vendor_id
           WHERE so.id = ?"
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $order = $orderStmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order) {
-        $flashError = 'No such surplus order.';
+        $flashError = 'No such Bulk order.';
     } elseif ($action === 'assign_rider') {
         $riderId = (int)($_POST['rider_id'] ?? 0);
 
@@ -74,13 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dbh->beginTransaction();
 
                 // source is not optional. rider_assignments.order_id is shared
-                // between `orders` and `surplus_orders`, whose ids OVERLAP —
+                // between `orders` and `Bulk_orders`, whose ids OVERLAP —
                 // without it the rider app would resolve this to whichever shop
                 // order happens to share the number and show a rider the wrong
                 // customer's address entirely.
                 $existing = $dbh->prepare(
                     "SELECT id FROM rider_assignments
-                      WHERE order_id = ? AND source = 'surplus' LIMIT 1"
+                      WHERE order_id = ? AND source = 'Bulk' LIMIT 1"
                 );
                 $existing->execute([$orderId]);
                 $assignmentId = $existing->fetchColumn();
@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $dbh->prepare(
                         "INSERT INTO rider_assignments (order_id, source, rider_id, status)
-                         VALUES (?, 'surplus', ?, 'assigned')"
+                         VALUES (?, 'Bulk', ?, 'assigned')"
                     )->execute([$orderId, $riderId]);
                     $assignmentId = (int)$dbh->lastInsertId();
                 }
@@ -109,10 +109,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // — a no-op if this assignment already has one, which covers
                 // both a fresh dispatch and reassigning an order that already
                 // had its route cached.
-                cacheAssignmentRoute($dbh, 'surplus', $orderId, (int)$assignmentId);
+                cacheAssignmentRoute($dbh, 'Bulk', $orderId, (int)$assignmentId);
 
                 $dbh->prepare(
-                    "UPDATE surplus_orders SET rider_assigned_at = NOW(), updated_at = NOW() WHERE id = ?"
+                    "UPDATE Bulk_orders SET rider_assigned_at = NOW(), updated_at = NOW() WHERE id = ?"
                 )->execute([$orderId]);
 
                 $dbh->commit();
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($r && !empty($r['user_id'])) {
                         addNotification(
                             (int)$r['user_id'],
-                            'New surplus delivery assigned',
+                            'New Bulk delivery assigned',
                             'Collect ' . $order['product_name'] . ' from '
                                 . ($order['business_name'] ?: 'the vendor')
                                 . ($order['vendor_location'] ? ' (' . $order['vendor_location'] . ')' : '')
@@ -144,19 +144,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     addNotification(
                         (int)$order['user_id'],
                         'A rider is on the way',
-                        'Your surplus order #' . $orderId . ' has been assigned to a rider for delivery.',
+                        'Your Bulk order #' . $orderId . ' has been assigned to a rider for delivery.',
                         'order',
                         null,
                         ['push']
                     );
                 } catch (Throwable $e) {
-                    error_log("Surplus order $orderId assigned but notifications failed: " . $e->getMessage());
+                    error_log("Bulk order $orderId assigned but notifications failed: " . $e->getMessage());
                 }
 
                 $flash = 'Dispatched. The rider has been notified.';
             } catch (Throwable $e) {
                 if ($dbh->inTransaction()) $dbh->rollBack();
-                error_log('surplus assign_rider failed: ' . $e->getMessage());
+                error_log('Bulk assign_rider failed: ' . $e->getMessage());
                 $flashError = 'Could not assign that rider. Nothing was changed.';
             }
         }
@@ -166,12 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // someone the system no longer believes is delivering it.
         $del = $dbh->prepare(
             "DELETE FROM rider_assignments
-              WHERE order_id = ? AND source = 'surplus' AND status = 'assigned'"
+              WHERE order_id = ? AND source = 'Bulk' AND status = 'assigned'"
         );
         $del->execute([$orderId]);
 
         if ($del->rowCount() > 0) {
-            $dbh->prepare("UPDATE surplus_orders SET rider_assigned_at = NULL WHERE id = ?")
+            $dbh->prepare("UPDATE Bulk_orders SET rider_assigned_at = NULL WHERE id = ?")
                 ->execute([$orderId]);
             $flash = 'Rider removed from that order.';
         } else {
@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dbh->beginTransaction();
 
                 $dbh->prepare(
-                    "UPDATE surplus_orders
+                    "UPDATE Bulk_orders
                         SET status = 'cancelled', updated_at = NOW()
                       WHERE id = ? AND status NOT IN ('delivered','cancelled','refunded')"
                 )->execute([$orderId]);
@@ -200,13 +200,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // by remaining_quantity, not by a status value, so restoring
                 // the quantity is what makes the listing visible again.
                 $dbh->prepare(
-                    "UPDATE surplus_listings
-                        SET remaining_quantity = LEAST(remaining_quantity + ?, surplus_quantity)
+                    "UPDATE Bulk_listings
+                        SET remaining_quantity = LEAST(remaining_quantity + ?, Bulk_quantity)
                       WHERE id = ?"
                 )->execute([$order['quantity'], $order['listing_id']]);
 
                 $dbh->prepare(
-                    "DELETE FROM rider_assignments WHERE order_id = ? AND source = 'surplus'"
+                    "DELETE FROM rider_assignments WHERE order_id = ? AND source = 'Bulk'"
                 )->execute([$orderId]);
 
                 $dbh->commit();
@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 addNotification(
                     (int)$order['user_id'],
                     'Order cancelled',
-                    'Your surplus order #' . $orderId . ' was cancelled. Reason: ' . $reason
+                    'Your Bulk order #' . $orderId . ' was cancelled. Reason: ' . $reason
                         . ($order['payment_status'] === 'paid'
                             ? ' Any payment made will be refunded.' : ''),
                     'order',
@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = 'Cancelled, stock returned to the listing, and the customer told why.';
             } catch (Throwable $e) {
                 if ($dbh->inTransaction()) $dbh->rollBack();
-                error_log('surplus cancel_order failed: ' . $e->getMessage());
+                error_log('Bulk cancel_order failed: ' . $e->getMessage());
                 $flashError = 'Could not cancel that order.';
             }
         }
@@ -268,13 +268,13 @@ $sql = "SELECT so.*, sl.pickup_only, i.name AS product_name,
                u.fname, u.lname, u.mobile,
                ra.id AS assignment_id, ra.status AS assignment_status,
                ra.assigned_at, ra.rider_id, r.name AS rider_name
-          FROM surplus_orders so
-          JOIN surplus_listings sl ON sl.id = so.listing_id
+          FROM Bulk_orders so
+          JOIN Bulk_listings sl ON sl.id = so.listing_id
           JOIN items i ON i.id = sl.product_id
           JOIN vendors v ON v.id = sl.vendor_id
           JOIN users u ON u.id = so.user_id
           LEFT JOIN rider_assignments ra
-                 ON ra.order_id = so.id AND ra.source = 'surplus'
+                 ON ra.order_id = so.id AND ra.source = 'Bulk'
           LEFT JOIN riders r ON r.id = ra.rider_id";
 if ($where) {
     $sql .= " WHERE " . implode(' AND ', $where);
@@ -289,9 +289,9 @@ $riders = $dbh->query(
 // The badge count: how many are waiting on a rider right now.
 $needsRider = (int)$dbh->query(
     "SELECT COUNT(*)
-       FROM surplus_orders so
-       JOIN surplus_listings sl ON sl.id = so.listing_id
-       LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'surplus'
+       FROM Bulk_orders so
+       JOIN Bulk_listings sl ON sl.id = so.listing_id
+       LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'Bulk'
       WHERE so.payment_status IN ('paid','pending_cash')
         AND sl.pickup_only = 0
         AND so.status NOT IN ('delivered','cancelled','refunded')
@@ -303,7 +303,7 @@ $needsRider = (int)$dbh->query(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Surplus Orders — AfamFresh Admin</title>
+    <title>Bulk Orders — AfamFresh Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -312,9 +312,9 @@ $needsRider = (int)$dbh->query(
 <?php include __DIR__ . '/includes/nav.php'; ?>
 <div class="flex-1 overflow-auto">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h1 class="text-2xl font-bold text-green-800 mb-1">Surplus Orders</h1>
+        <h1 class="text-2xl font-bold text-green-800 mb-1">Bulk Orders</h1>
         <p class="text-gray-600 mb-6">
-            Bulk orders bought from the surplus marketplace. A rider collects these
+            Bulk orders bought from the Bulk marketplace. A rider collects these
             from the <strong>vendor</strong>, not the warehouse.
         </p>
 

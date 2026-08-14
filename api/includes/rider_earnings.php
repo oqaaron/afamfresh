@@ -71,18 +71,18 @@ function mileageFeeFor($dbh, $orderId) {
  * Idempotent via the UNIQUE key on rider_earnings (source, order_id) — calling
  * this twice for the same delivery (e.g. a retried request) does not double-pay.
  *
- * @param string $source 'order' for the shop, 'surplus' for surplus_orders.
+ * @param string $source 'order' for the shop, 'Bulk' for Bulk_orders.
  *                       Required because the two id spaces overlap.
  * @return array{ok: bool, error: ?string}
  */
 function creditRiderEarnings($dbh, $riderId, $orderId, $source = 'order') {
-    if (!in_array($source, ['order', 'surplus'], true)) {
+    if (!in_array($source, ['order', 'Bulk'], true)) {
         error_log("creditRiderEarnings: unknown source '$source' for order $orderId");
         return ['ok' => false, 'error' => 'Unknown order source.'];
     }
 
     // Scoped by source as well as id. Without it, shop order 41 having been
-    // credited makes surplus order 41 look already-paid: the rider does the
+    // credited makes Bulk order 41 look already-paid: the rider does the
     // work, no row is written, and nothing anywhere reports a problem.
     $existing = $dbh->prepare("SELECT id FROM rider_earnings WHERE source = ? AND order_id = ?");
     $existing->execute([$source, $orderId]);
@@ -90,11 +90,11 @@ function creditRiderEarnings($dbh, $riderId, $orderId, $source = 'order') {
         return ['ok' => true, 'error' => null];
     }
 
-    // A surplus delivery is paid from the surplus delivery fee, because that
+    // A Bulk delivery is paid from the Bulk delivery fee, because that
     // fee is charged on weight and carries no mileage component to draw from.
-    // See surplusRiderFeeFor() in includes/rider_dispatch.php.
-    $fee = $source === 'surplus'
-        ? surplusRiderFeeFor($dbh, $orderId)
+    // See BulkRiderFeeFor() in includes/rider_dispatch.php.
+    $fee = $source === 'Bulk'
+        ? BulkRiderFeeFor($dbh, $orderId)
         : mileageFeeFor($dbh, $orderId);
 
     if ($fee === null) {

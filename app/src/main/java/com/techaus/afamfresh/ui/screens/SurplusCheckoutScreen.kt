@@ -23,29 +23,29 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.Address
-import com.techaus.afamfresh.models.CreateSurplusOrderRequest
+import com.techaus.afamfresh.models.CreateBulkOrderRequest
 import com.techaus.afamfresh.models.PaymentRequest
-import com.techaus.afamfresh.models.SurplusListing
-import com.techaus.afamfresh.models.SurplusQuoteResponse
+import com.techaus.afamfresh.models.BulkListing
+import com.techaus.afamfresh.models.BulkQuoteResponse
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.PaymentViewModel
-import com.techaus.afamfresh.viewmodel.SurplusViewModel
+import com.techaus.afamfresh.viewmodel.BulkViewModel
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Buying a surplus listing.
+ * Buying a Bulk listing.
  *
  * WHY THIS IS NOT THE ORDINARY CHECKOUT
  *
- * Surplus is a bulk channel with rules the shop does not have, all enforced by
- * api/surplus-orders.php: a minimum order value of UGX 250,000, a minimum of
+ * Bulk is a bulk channel with rules the shop does not have, all enforced by
+ * api/Bulk-orders.php: a minimum order value of UGX 250,000, a minimum of
  * 20 kg on weight-based listings, and a 1000 kg ceiling. It also has no cart —
  * one listing from one vendor is one order, because the goods are perishable
- * surplus held by that vendor and cannot be pooled.
+ * Bulk held by that vendor and cannot be pooled.
  *
  * THE SHAPE OF THE FLOW
  *
@@ -58,13 +58,13 @@ import kotlin.math.roundToInt
  * That means a customer can end up with an order they never paid for. This is
  * handled rather than prevented: an unpaid order is a reservation, and one left
  * for 30 minutes is cancelled server-side and its stock returned to the listing.
- * See releaseStaleSurplusReservations() in includes/surplus_payment.php.
+ * See releaseStaleBulkReservations() in includes/Bulk_payment.php.
  *
  * THE TOTAL IS THE SERVER'S, NOT THE APP'S
  *
  * The delivery fee mixes a base charge, a per-kg rate, a per-km rate, a service
  * fee and percentages of the goods value -- all from admin-editable tables. The
- * app cannot compute any of that, so it asks: api/surplus-quote.php runs the
+ * app cannot compute any of that, so it asks: api/Bulk-quote.php runs the
  * identical function order creation will, and the figure shown here is the
  * figure charged.
  *
@@ -72,8 +72,8 @@ import kotlin.math.roundToInt
  * and the screen says so rather than implying the total is final.
  */
 @Composable
-fun SurplusCheckoutScreen(
-    listing: SurplusListing?,
+fun BulkCheckoutScreen(
+    listing: BulkListing?,
     userId: Int?,
     userEmail: String?,
     userPhone: String?,
@@ -84,7 +84,7 @@ fun SurplusCheckoutScreen(
     pinnedLat: Double?,
     pinnedLng: Double?,
     pinnedAddress: String?,
-    surplusViewModel: SurplusViewModel,
+    BulkViewModel: BulkViewModel,
     paymentViewModel: PaymentViewModel,
     onBack: () -> Unit,
     onPickLocation: () -> Unit,
@@ -99,11 +99,11 @@ fun SurplusCheckoutScreen(
         return
     }
 
-    val quote by surplusViewModel.quote.collectAsState()
-    val quoteLoading by surplusViewModel.quoteLoading.collectAsState()
-    val quoteError by surplusViewModel.quoteError.collectAsState()
-    val isPlacing by surplusViewModel.isPlacingOrder.collectAsState()
-    val orderError by surplusViewModel.orderError.collectAsState()
+    val quote by BulkViewModel.quote.collectAsState()
+    val quoteLoading by BulkViewModel.quoteLoading.collectAsState()
+    val quoteError by BulkViewModel.quoteError.collectAsState()
+    val isPlacing by BulkViewModel.isPlacingOrder.collectAsState()
+    val orderError by BulkViewModel.orderError.collectAsState()
     val paymentError by paymentViewModel.error.collectAsState()
     val isStartingPayment by paymentViewModel.isLoading.collectAsState()
 
@@ -111,10 +111,10 @@ fun SurplusCheckoutScreen(
     // by an error on a quantity the screen itself chose.
     val minQuantity = remember(listing.id) {
         val byWeight = if (listing.isWeightBased) {
-            CreateSurplusOrderRequest.MIN_WEIGHT_BASED_QUANTITY
+            CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY
         } else 1.0
         val byValue = if (listing.discountedPrice > 0) {
-            kotlin.math.ceil(CreateSurplusOrderRequest.MIN_ORDER_VALUE / listing.discountedPrice)
+            kotlin.math.ceil(CreateBulkOrderRequest.MIN_ORDER_VALUE / listing.discountedPrice)
         } else 1.0
         max(byWeight, byValue)
     }
@@ -134,11 +134,11 @@ fun SurplusCheckoutScreen(
     val goodsTotal = quantity * listing.discountedPrice
     val totalWeight = quantity * listing.weightPerUnitKg
 
-    val loyaltyPreview by surplusViewModel.loyaltyPreview.collectAsState()
+    val loyaltyPreview by BulkViewModel.loyaltyPreview.collectAsState()
     val loyaltyDiscount = loyaltyPreview?.discount ?: 0.0
 
     LaunchedEffect(pointsToRedeem, goodsTotal) {
-        surplusViewModel.quoteLoyaltyPoints(pointsToRedeem, goodsTotal)
+        BulkViewModel.quoteLoyaltyPoints(pointsToRedeem, goodsTotal)
     }
 
     // The same three limits the server enforces, checked here so the customer
@@ -147,14 +147,14 @@ fun SurplusCheckoutScreen(
         listing.isSoldOut -> "This listing is sold out."
         quantity > listing.remainingQuantity ->
             "Only ${listing.remainingQuantity} $unit left."
-        listing.isWeightBased && quantity < CreateSurplusOrderRequest.MIN_WEIGHT_BASED_QUANTITY ->
-            "Bulk listings start at ${CreateSurplusOrderRequest.MIN_WEIGHT_BASED_QUANTITY.roundToInt()} kg."
-        goodsTotal < CreateSurplusOrderRequest.MIN_ORDER_VALUE ->
-            "Surplus orders start at ${formatUgx(CreateSurplusOrderRequest.MIN_ORDER_VALUE)}. " +
+        listing.isWeightBased && quantity < CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY ->
+            "Bulk listings start at ${CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY.roundToInt()} kg."
+        goodsTotal < CreateBulkOrderRequest.MIN_ORDER_VALUE ->
+            "Bulk orders start at ${formatUgx(CreateBulkOrderRequest.MIN_ORDER_VALUE)}. " +
                 "Add more to reach it."
-        totalWeight > CreateSurplusOrderRequest.MAX_WEIGHT_KG ->
+        totalWeight > CreateBulkOrderRequest.MAX_WEIGHT_KG ->
             "That is ${totalWeight.roundToInt()} kg. The most we can move in one order is " +
-                "${CreateSurplusOrderRequest.MAX_WEIGHT_KG.roundToInt()} kg."
+                "${CreateBulkOrderRequest.MAX_WEIGHT_KG.roundToInt()} kg."
         !listing.pickupOnly && address.isBlank() ->
             "Add a delivery address, or nobody knows where this is going."
         userId == null -> "Sign in to place this order."
@@ -167,7 +167,7 @@ fun SurplusCheckoutScreen(
     LaunchedEffect(listing.id, quantity, pinnedLat, pinnedLng) {
         if (blockingReason == null || blockingReason.startsWith("Add a delivery")) {
             kotlinx.coroutines.delay(400)
-            surplusViewModel.requestQuote(listing.id, quantity, pinnedLat, pinnedLng)
+            BulkViewModel.requestQuote(listing.id, quantity, pinnedLat, pinnedLng)
         }
     }
 
@@ -208,7 +208,7 @@ fun SurplusCheckoutScreen(
                     // kilogram at a time is not a control, it is a punishment.
                     step = if (listing.isWeightBased) 5.0 else 1.0,
                     min = if (listing.isWeightBased) {
-                        CreateSurplusOrderRequest.MIN_WEIGHT_BASED_QUANTITY
+                        CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY
                     } else 1.0,
                     max = listing.remainingQuantity.toDouble(),
                     onChange = { quantity = it }
@@ -370,10 +370,10 @@ fun SurplusCheckoutScreen(
             val busy = isPlacing || isStartingPayment
             Button(
                 onClick = {
-                    surplusViewModel.clearOrderError()
+                    BulkViewModel.clearOrderError()
                     paymentViewModel.clearError()
 
-                    val request = CreateSurplusOrderRequest(
+                    val request = CreateBulkOrderRequest(
                         listingId = listing.id,
                         userId = userId ?: return@Button,
                         quantity = quantity,
@@ -389,8 +389,8 @@ fun SurplusCheckoutScreen(
                         pointsRedeem = loyaltyPreview?.pointsApplied?.takeIf { it > 0 }
                     )
 
-                    surplusViewModel.placeOrder(request) { orderId, _ ->
-                        // Paid for as a surplus order, not a shop order: the two
+                    BulkViewModel.placeOrder(request) { orderId, _ ->
+                        // Paid for as a Bulk order, not a shop order: the two
                         // id spaces overlap, and without order_type the server
                         // would look up an unrelated row in `orders`.
                         paymentViewModel.initiatePayment(
@@ -402,7 +402,7 @@ fun SurplusCheckoutScreen(
                             },
                             email = userEmail,
                             phone = userPhone,
-                            orderType = ApiService.ORDER_TYPE_SURPLUS,
+                            orderType = ApiService.ORDER_TYPE_Bulk,
                             onCashAccepted = onOrderPlacedUnpaid,
                             onRedirect = onPaymentRedirect
                         )
@@ -437,7 +437,7 @@ fun SurplusCheckoutScreen(
 }
 
 @Composable
-private fun ListingSummary(listing: SurplusListing, unit: String) {
+private fun ListingSummary(listing: BulkListing, unit: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -573,7 +573,7 @@ private fun PaymentChoice(
 @Composable
 private fun TotalsCard(
     goodsTotal: Double,
-    quote: SurplusQuoteResponse?,
+    quote: BulkQuoteResponse?,
     loading: Boolean,
     pickupOnly: Boolean,
     hasPin: Boolean,
@@ -709,7 +709,7 @@ private fun MissingListing(onBack: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Surplus sells fast and listings expire. Have another look at what is up now.",
+                "Bulk sells fast and listings expire. Have another look at what is up now.",
                 color = InkMuted,
                 fontSize = 14.sp
             )
@@ -718,7 +718,7 @@ private fun MissingListing(onBack: () -> Unit) {
                 onClick = onBack,
                 colors = ButtonDefaults.buttonColors(containerColor = Forest)
             ) {
-                Text("Back to surplus")
+                Text("Back to Bulk")
             }
         }
     }

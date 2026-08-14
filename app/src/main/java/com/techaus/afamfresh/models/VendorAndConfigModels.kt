@@ -6,8 +6,8 @@ import com.google.gson.annotations.SerializedName
  * ✅ VERIFIED against api/vendor-profile.php and the `vendors` table.
  *
  * This exists because the vendor endpoints are split between two different
- * identifiers: `vendor-products.php` and the surplus create call take the USER
- * id, while `surplus-listings.php` and `surplus-orders.php` filter on the VENDOR
+ * identifiers: `vendor-products.php` and the Bulk create call take the USER
+ * id, while `Bulk-listings.php` and `Bulk-orders.php` filter on the VENDOR
  * id. Nothing in the auth response carries the vendor id, so it has to be
  * looked up once after sign-in.
  */
@@ -24,7 +24,7 @@ data class VendorProfile(
     @SerializedName("location") val location: String? = null,
 
     /**
-     * Where riders collect surplus from. Null until the vendor pins it, in
+     * Where riders collect Bulk from. Null until the vendor pins it, in
      * which case the delivery fee measures from the depot instead and every
      * quote on their listings is flagged as estimated.
      */
@@ -64,7 +64,7 @@ data class VendorProfileResponse(
  * Approval creates the `vendors` row from what a user account can supply — the
  * person's own name as the business name, and a blank phone — so this is the
  * step that turns it into a real business record. An admin verifies it
- * afterwards, and api/surplus-listings.php refuses to create a listing until
+ * afterwards, and api/Bulk-listings.php refuses to create a listing until
  * they have.
  *
  * No user_id: api/vendor-profile.php?action=update takes the vendor from the
@@ -93,7 +93,7 @@ data class UpdateVendorProfileRequest(
  * These live in `items` alongside the admin catalogue, distinguished by
  * `vendor_id`, and carry a status an admin controls. They are not sold in the
  * main shop — a vendor product has no stock or fulfilment path there. It exists
- * so the vendor can list surplus of it, which is where customers meet it.
+ * so the vendor can list Bulk of it, which is where customers meet it.
  */
 data class VendorCatalogueProduct(
     @SerializedName("id") val id: Int = 0,
@@ -151,10 +151,10 @@ data class UpdateVendorProfileResponse(
 )
 
 /**
- * ✅ VERIFIED against api/surplus-orders.php.
+ * ✅ VERIFIED against api/Bulk-orders.php.
  *
  * `getVendorOrders` used to be typed as List<Order>, but the only per-vendor
- * order endpoint is surplus-orders.php, whose rows come from `surplus_orders` —
+ * order endpoint is Bulk-orders.php, whose rows come from `Bulk_orders` —
  * a different table with a different shape from `orders`. Catalogue orders are
  * not exposed per-vendor at all.
  *
@@ -163,7 +163,7 @@ data class UpdateVendorProfileResponse(
  * is which query parameter scopes them. Splitting this into a customer model and
  * a vendor model would give two views of one table that quietly drift apart.
  */
-data class SurplusOrder(
+data class BulkOrder(
     @SerializedName("id") val id: Int = 0,
     @SerializedName("listing_id") val listingId: Int = 0,
     @SerializedName("user_id") val userId: Int = 0,
@@ -236,7 +236,7 @@ data class SurplusOrder(
         get() = listOfNotNull(customerFirstName, customerLastName).joinToString(" ").trim()
 
     val displayTitle: String
-        get() = productName?.takeIf { it.isNotBlank() } ?: "Surplus order"
+        get() = productName?.takeIf { it.isNotBlank() } ?: "Bulk order"
 
     /** True once the order has reached a state the vendor can no longer change. */
     val isTerminal: Boolean
@@ -245,9 +245,9 @@ data class SurplusOrder(
     /**
      * Goods plus delivery — what is actually charged.
      *
-     * `orders` folds delivery into one total_amount; surplus_orders keeps them
+     * `orders` folds delivery into one total_amount; Bulk_orders keeps them
      * apart, so total_price alone is the goods only. Mirrors
-     * surplusPayableTotal() in includes/surplus_payment.php, which is the figure
+     * BulkPayableTotal() in includes/Bulk_payment.php, which is the figure
      * sent to Pesapal.
      */
     val grandTotal: Double get() = totalPrice + deliveryFee
@@ -271,14 +271,14 @@ data class SurplusOrder(
 }
 
 /**
- * The response from surplus-orders.php GET.
+ * The response from Bulk-orders.php GET.
  *
  * Was `VendorOrdersResponse`, which named the caller rather than the content —
  * the same endpoint and the same rows serve the customer's own order list.
  */
-data class SurplusOrdersResponse(
+data class BulkOrdersResponse(
     @SerializedName("success") val success: Boolean = false,
-    @SerializedName("orders") val orders: List<SurplusOrder>? = null,
+    @SerializedName("orders") val orders: List<BulkOrder>? = null,
     @SerializedName("error") val error: String? = null
 )
 
@@ -358,8 +358,8 @@ data class AppConfigResponse(
 
     val maintenanceMessage: String? get() = value("maintenance_message")
 
-    val surplusApprovalRequired: Boolean
-        get() = value("surplus_approval_required")?.lowercase() in setOf("1", "true", "yes")
+    val BulkApprovalRequired: Boolean
+        get() = value("Bulk_approval_required")?.lowercase() in setOf("1", "true", "yes")
 
     /** Dotted version strings, e.g. "1.0" — NOT integers. */
     val minVersionRequired: String? get() = value("min_version_required")
@@ -461,7 +461,7 @@ data class UnreadCountResponse(
 //
 // ✅ VERIFIED against api/vendor-earnings.php.
 //
-// A vendor is credited when a surplus order is DELIVERED, not when it is paid
+// A vendor is credited when a Bulk order is DELIVERED, not when it is paid
 // for — see creditVendorEarnings() in includes/vendor_earnings.php. The credit
 // is the goods value less the vendor's own commission_rate; the delivery fee is
 // never part of it, because that money pays the rider who carried the load.
@@ -475,7 +475,7 @@ data class VendorEarning(
     @SerializedName("id") val id: Int = 0,
     @SerializedName("order_id") val orderId: Int = 0,
 
-    /** "surplus" in practice — the shop does not credit vendors at all. */
+    /** "Bulk" in practice — the shop does not credit vendors at all. */
     @SerializedName("source") val source: String = "order",
 
     /** The goods value this was calculated from, before commission. */
@@ -489,7 +489,7 @@ data class VendorEarning(
     @SerializedName("paid_at") val paidAt: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
 
-    /** Filled in server-side for surplus rows so the row says what it was for. */
+    /** Filled in server-side for Bulk rows so the row says what it was for. */
     @SerializedName("product_name") val productName: String? = null
 ) {
     val displayTitle: String

@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.models.SurplusListing
+import com.techaus.afamfresh.models.BulkListing
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
@@ -37,7 +37,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
 fun VendorDashboardScreen(
     vendorViewModel: VendorViewModel,
     onAddListing: () -> Unit,
-    onEditListing: (SurplusListing) -> Unit,
+    onEditListing: (BulkListing) -> Unit,
     onViewOrders: () -> Unit,
     onViewProducts: () -> Unit,
     onEditBusinessDetails: () -> Unit,
@@ -51,7 +51,7 @@ fun VendorDashboardScreen(
     val canRetry by vendorViewModel.canRetry.collectAsState()
     val profile by vendorViewModel.profile.collectAsState()
 
-    // api/surplus-listings.php refuses to create a listing unless the vendor is
+    // api/Bulk-listings.php refuses to create a listing unless the vendor is
     // verified. Without this the FAB was offered anyway and the request came
     // back rejected with nothing on screen explaining why.
     val isVerified = profile?.isVerified == true
@@ -152,7 +152,7 @@ fun VendorDashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-            Text("Your surplus listings", fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp)
+            Text("Your Bulk listings", fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(10.dp))
 
             if (isLoading && listings.isEmpty()) {
@@ -166,7 +166,7 @@ fun VendorDashboardScreen(
                 EmptyState(
                     icon = Icons.Default.Inventory,
                     title = "No listings yet",
-                    detail = "Tap the + button to post surplus produce at a discount."
+                    detail = "Tap the + button to post Bulk produce at a discount."
                 )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -207,7 +207,7 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 @Composable
-private fun VendorListingRow(listing: SurplusListing, onClick: () -> Unit) {
+private fun VendorListingRow(listing: BulkListing, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

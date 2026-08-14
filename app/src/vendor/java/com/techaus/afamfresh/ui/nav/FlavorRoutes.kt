@@ -5,7 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.techaus.afamfresh.ui.screens.vendor.NewProductScreen
-import com.techaus.afamfresh.ui.screens.vendor.AddSurplusScreen
+import com.techaus.afamfresh.ui.screens.vendor.AddBulkScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorBusinessDetailsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorDashboardScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorEarningsScreen
@@ -29,8 +29,8 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
             vendorViewModel = vm,
             onNotificationsClick = { nav.navigate("notifications") },
             unreadNotifications = unread,
-            onAddListing = { nav.navigate("add_surplus") },
-            onEditListing = { listing -> nav.navigate("edit_surplus/${listing.id}") },
+            onAddListing = { nav.navigate("add_Bulk") },
+            onEditListing = { listing -> nav.navigate("edit_Bulk/${listing.id}") },
             onViewOrders = { nav.navigate("vendor_orders") },
             onViewProducts = { nav.navigate("vendor_products") },
             onEditBusinessDetails = { nav.navigate("vendor_business_details") },
@@ -86,8 +86,8 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         )
     }
 
-    composable("add_surplus") {
-        AddSurplusScreen(
+    composable("add_Bulk") {
+        AddBulkScreen(
             vendorViewModel = vm,
             onSave = { nav.navigate("vendor_dashboard") },
             onAddInventory = { nav.navigate("vendor_new_product") },
@@ -95,15 +95,15 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         )
     }
 
-    composable("edit_surplus/{listingId}") { backStackEntry ->
+    composable("edit_Bulk/{listingId}") { backStackEntry ->
         // Collected here rather than passed in, so the listing list is only
         // observed by the app that actually has vendor screens.
         val listings by vm.listings.collectAsState()
-        // surplus_listings.id is int(11), so the route argument has to be
+        // Bulk_listings.id is int(11), so the route argument has to be
         // parsed rather than string-compared against it.
         val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
         val existingListing = listingId?.let { id -> listings.find { it.id == id } }
-        AddSurplusScreen(
+        AddBulkScreen(
             vendorViewModel = vm,
             existingListing = existingListing,
             onSave = { nav.navigate("vendor_dashboard") },

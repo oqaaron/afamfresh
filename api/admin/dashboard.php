@@ -19,14 +19,14 @@ try {
         (SELECT COUNT(*) FROM orders) as total_orders,
         (SELECT COUNT(*) FROM users) as total_users,
         (SELECT COUNT(*) FROM items) as total_products,
-        (SELECT COUNT(*) FROM surplus_listings WHERE status = 'pending') as pending_surplus,
+        (SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending') as pending_Bulk,
         (SELECT COUNT(*) FROM orders WHERE status IN ('Received','Pending')) as pending_orders
     ");
     $stats = $stmt->fetch(PDO::FETCH_ASSOC);
 
     // The revenue figure here used to be `SUM(total_amount) FROM orders` with
     // no WHERE clause, counting unpaid, failed, reversed and cancelled orders
-    // as revenue while excluding the entire surplus channel. It now comes from
+    // as revenue while excluding the entire Bulk channel. It now comes from
     // one shared definition — see includes/revenue.php.
     $revenue = revenueSummary($dbh);
     $platformFees = platformFeesSummary($dbh);
@@ -87,8 +87,8 @@ try {
             <div class="bg-white p-5 rounded-xl shadow flex items-center gap-4">
                 <div class="text-3xl text-orange-600"><i class="fas fa-tags"></i></div>
                 <div>
-                    <p class="text-gray-500 text-sm">Pending Surplus</p>
-                    <p class="text-2xl font-bold"><?= number_format($stats['pending_surplus'] ?? 0) ?></p>
+                    <p class="text-gray-500 text-sm">Pending Bulk</p>
+                    <p class="text-2xl font-bold"><?= number_format($stats['pending_Bulk'] ?? 0) ?></p>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-xl shadow flex items-center gap-4">
@@ -142,8 +142,8 @@ try {
                     <p class="font-semibold">UGX <?= number_format($revenue['shop']['settled']['value']) ?></p>
                 </div>
                 <div>
-                    <p class="text-gray-500">Surplus</p>
-                    <p class="font-semibold">UGX <?= number_format($revenue['surplus']['settled']['value']) ?></p>
+                    <p class="text-gray-500">Bulk</p>
+                    <p class="font-semibold">UGX <?= number_format($revenue['Bulk']['settled']['value']) ?></p>
                 </div>
                 <?php if ($revenue['by_method'] !== null): ?>
                     <div>
@@ -197,7 +197,7 @@ try {
             </div>
             <div class="grid grid-cols-2 gap-4 text-xs text-gray-500 mt-3 pt-3 border-t">
                 <div>Shop: UGX <?= number_format($platformFees['shop']['service_fee'] + $platformFees['shop']['insurance_fee'] + $platformFees['shop']['processing_fee']) ?></div>
-                <div>Surplus: UGX <?= number_format($platformFees['surplus']['service_fee'] + $platformFees['surplus']['insurance_fee'] + $platformFees['surplus']['processing_fee']) ?></div>
+                <div>Bulk: UGX <?= number_format($platformFees['Bulk']['service_fee'] + $platformFees['Bulk']['insurance_fee'] + $platformFees['Bulk']['processing_fee']) ?></div>
             </div>
         </div>
         <?php endif; ?>
@@ -226,7 +226,7 @@ try {
             </a>
             <div class="bg-white p-6 rounded-xl shadow flex items-center justify-between">
                 <div><i class="fas fa-tags text-3xl text-orange-600"></i></div>
-                <div><span class="font-medium">Surplus Approvals</span> <span class="text-gray-400">→</span></div>
+                <div><span class="font-medium">Bulk Approvals</span> <span class="text-gray-400">→</span></div>
             </div>
         </div>
     </div>

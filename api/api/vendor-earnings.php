@@ -41,12 +41,12 @@ try {
         // Fetch earnings.
         //
         // The join is scoped to source='order'. vendor_earnings.order_id points
-        // at `orders` or at `surplus_orders` depending on `source`, and the two
-        // id spaces overlap — unscoped, a surplus earning joins to whichever
+        // at `orders` or at `Bulk_orders` depending on `source`, and the two
+        // id spaces overlap — unscoped, a Bulk earning joins to whichever
         // shop order happens to share its number and reports that order as the
         // source of the money.
         //
-        // The product name is filled in separately for surplus rows, which is
+        // The product name is filled in separately for Bulk rows, which is
         // every row in practice: the shop does not credit vendors at all.
         $stmt = $dbh->prepare("
             SELECT ve.*, o.orderid
@@ -63,26 +63,26 @@ try {
 
         // Name what each credit was for. A ledger of bare amounts and dates is
         // not something a vendor can check against their own records.
-        $surplusIds = array_values(array_unique(array_map(
+        $BulkIds = array_values(array_unique(array_map(
             fn($e) => (int)$e['order_id'],
-            array_filter($earnings, fn($e) => ($e['source'] ?? 'order') === 'surplus')
+            array_filter($earnings, fn($e) => ($e['source'] ?? 'order') === 'Bulk')
         )));
-        if ($surplusIds) {
-            $in = implode(',', array_fill(0, count($surplusIds), '?'));
+        if ($BulkIds) {
+            $in = implode(',', array_fill(0, count($BulkIds), '?'));
             $namesStmt = $dbh->prepare(
                 "SELECT so.id, i.name
-                   FROM surplus_orders so
-                   JOIN surplus_listings sl ON sl.id = so.listing_id
+                   FROM Bulk_orders so
+                   JOIN Bulk_listings sl ON sl.id = so.listing_id
                    JOIN items i ON i.id = sl.product_id
                   WHERE so.id IN ($in)"
             );
-            $namesStmt->execute($surplusIds);
+            $namesStmt->execute($BulkIds);
             $names = [];
             foreach ($namesStmt->fetchAll(PDO::FETCH_ASSOC) as $n) {
                 $names[(int)$n['id']] = $n['name'];
             }
             foreach ($earnings as &$e) {
-                if (($e['source'] ?? 'order') === 'surplus') {
+                if (($e['source'] ?? 'order') === 'Bulk') {
                     $e['product_name'] = $names[(int)$e['order_id']] ?? null;
                 }
             }
