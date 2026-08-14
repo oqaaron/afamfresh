@@ -81,7 +81,7 @@ if (!$userId) fail('Not logged in', 401, 'UNAUTHENTICATED');
  * is exactly why this is explicit rather than guessed from the id.
  */
 $orderType = strtolower(trim((string)param('order_type', 'shop')));
-if (!in_array($orderType, ['shop', 'Bulk'], true)) {
+if (!in_array($orderType, ['shop', 'bulk'], true)) {
     fail('Unknown order_type', 400, 'BAD_REQUEST');
 }
 
@@ -160,7 +160,7 @@ switch ($action) {
         $orderId = (int)param('order_id', 0);
         if ($orderId <= 0) fail('order_id is required', 400, 'BAD_REQUEST');
 
-        if ($orderType === 'Bulk') {
+        if ($orderType === 'bulk') {
             $order = loadOwnedBulkOrder($dbh, $orderId, (int)$userId);
             if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
 
@@ -393,7 +393,7 @@ switch ($action) {
             fail('transaction_id or order_id is required', 400, 'BAD_REQUEST');
         }
 
-        if ($orderType === 'Bulk') {
+        if ($orderType === 'bulk') {
             if ($orderId > 0) {
                 $order = loadOwnedBulkOrder($dbh, $orderId, (int)$userId);
                 if (!$order) fail('Order not found', 404, 'ORDER_NOT_FOUND');
