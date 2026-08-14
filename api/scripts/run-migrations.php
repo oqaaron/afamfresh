@@ -65,14 +65,22 @@ $dbh->exec("
 // brief old/new overlap. Render's `starter` plan is single-instance
 // today, but this is cheap insurance against that ever changing.
 $lockName = 'afamfresh_schema_migrations';
-$got = $dbh->query("SELECT GET_LOCK(" . $dbh->quote($lockName) . ", 30)")->fetchColumn();
+$lockStmt = $dbh->query("SELECT GET_LOCK(" . $dbh->quote($lockName) . ", 30)");
+$got = $lockStmt->fetchColumn();
+$lockStmt->closeCursor();
 if ((int)$got !== 1) {
     fail("could not acquire migration lock '$lockName' within 30s -- another instance may be migrating");
 }
 
 try {
-    $applied = $dbh->query("SELECT filename FROM schema_migrations")
-        ->fetchAll(PDO::FETCH_COLUMN);
+    // closeCursor() explicitly, rather than trusting MYSQL_ATTR_USE_BUFFERED_QUERY
+    // alone: that attribute did not prevent "Cannot execute queries while
+    // other unbuffered queries are active" here in practice, so every
+    // query()/fetch pair below now closes its own cursor before the next
+    // statement runs on this connection.
+    $appliedStmt = $dbh->query("SELECT filename FROM schema_migrations");
+    $applied = $appliedStmt->fetchAll(PDO::FETCH_COLUMN);
+    $appliedStmt->closeCursor();
     $appliedSet = array_flip($applied);
 
     $files = glob(__DIR__ . '/../migrations/*.sql');
@@ -96,7 +104,14 @@ try {
 
         foreach (splitSqlStatements($sql) as $statement) {
             try {
-                $dbh->exec($statement);
+                // query(), not exec(): several migration files include
+                // read-only sanity-check SELECTs (for a human pasting this by
+                // hand to eyeball). exec() on a SELECT never drains its
+                // result set, which left it "active" and broke the very next
+                // statement with the same unbuffered-query error this file
+                // already worked around once for GET_LOCK/RELEASE_LOCK above
+                // -- this was the actual cause, not those.
+                $dbh->query($statement)->closeCursor();
             } catch (PDOException $e) {
                 fail("$filename failed on statement:\n" . $statement . "\n\n" . $e->getMessage()
                     . "\n(not marked applied -- fix and redeploy to retry)");
