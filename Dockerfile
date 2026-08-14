@@ -65,11 +65,18 @@ done\n' > /usr/local/bin/notify-worker.sh \
 # www-data could then neither read nor replace it. Every API response came back
 # with "Permission denied" warnings and no usable CA. A background job has no
 # business holding privileges the web server does not.
+#
+# Migrations run here too, as www-data for the same reason, before anything
+# else touches the database: after the port rewrite, before the notify-worker
+# is backgrounded, before Apache starts serving traffic. `set -e` above means
+# a failed migration aborts the container start instead of serving requests
+# against a half-migrated schema. See scripts/run-migrations.php.
 RUN printf '#!/bin/sh\n\
 set -e\n\
 PORT="${PORT:-80}"\n\
 sed -i "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf\n\
 sed -i "s/<VirtualHost \\*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf\n\
+su -s /bin/sh -c "php /var/www/html/scripts/run-migrations.php" www-data\n\
 su -s /bin/sh -c /usr/local/bin/notify-worker.sh www-data &\n\
 exec apache2-foreground\n' > /usr/local/bin/start.sh \
     && chmod +x /usr/local/bin/start.sh
