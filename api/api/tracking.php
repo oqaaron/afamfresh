@@ -59,6 +59,7 @@ try {
     $assignStmt = $dbh->prepare(
         "SELECT ra.id, ra.rider_id, ra.status, ra.assigned_at, ra.delivered_at,
                 ra.route_polyline, ra.route_distance_km, ra.route_duration_min,
+                ra.route_fetched_at,
                 r.name AS rider_name, r.phone AS rider_phone,
                 r.vehicle_type, r.avg_rating, r.user_id AS rider_user_id
            FROM rider_assignments ra
@@ -115,6 +116,30 @@ try {
     $inProgress = in_array($assignmentStatus, ['picked_up', 'on_way'], true);
     $finished = $assignmentStatus === 'delivered'
         || in_array(strtolower((string)$deliverable['status']), ['delivered', 'cancelled', 'refunded'], true);
+
+    // --- reroute if the rider has drifted off the cached route -----------
+    // Only once actually en route to the customer ('on_way') — before that,
+    // the rider isn't on the pickup->dropoff polyline at all (they're on a
+    // different, ungeometried leg travelling TO pickup), so a distance check
+    // against it here would be comparing against the wrong thing.
+    if ($assignmentStatus === 'on_way' && $last
+        && $deliverable['dest_lat'] !== null && $deliverable['dest_lng'] !== null) {
+        $rerouted = rerouteIfNeeded(
+            $dbh,
+            (int)$assignment['id'],
+            $assignment['route_polyline'] ?? null,
+            $assignment['route_fetched_at'] ?? null,
+            (float)$last['lat'], (float)$last['lng'],
+            (float)$deliverable['dest_lat'], (float)$deliverable['dest_lng']
+        );
+        if ($rerouted) {
+            // So the response built below serves the corrected route on this
+            // same poll, rather than one more cycle of the stale line.
+            $assignment['route_polyline'] = $rerouted['polyline'];
+            $assignment['route_distance_km'] = $rerouted['distance_km'];
+            $assignment['route_duration_min'] = $rerouted['duration_min'];
+        }
+    }
 
     // --- ETA -------------------------------------------------------------
     // Straight-line remaining distance over a rolling median speed. Deliberately

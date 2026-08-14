@@ -331,3 +331,88 @@ function cacheAssignmentRoute(PDO $dbh, string $source, int $orderId, int $assig
         $assignmentId,
     ]);
 }
+
+/** Off-route distance that counts as a genuine deviation, not GPS noise. */
+const REROUTE_DISTANCE_METERS = 200;
+
+/** Minimum time between reroute fetches for the same assignment. */
+const REROUTE_COOLDOWN_SECONDS = 60;
+
+/**
+ * Refetches the cached route from the rider's CURRENT position to the
+ * destination when they have drifted meaningfully off the last one — the
+ * "recalculating..." behaviour every turn-by-turn app has, which this one
+ * never did: cacheAssignmentRoute() fetches pickup->dropoff exactly once, at
+ * dispatch, and nothing before this ever revisited it.
+ *
+ * Deliberately conservative on cost. The distance-to-route check itself is
+ * free (pure PHP against an already-decoded polyline) and can run on every
+ * poll; the Google call behind it only fires when BOTH:
+ *   - the rider is genuinely off-route (REROUTE_DISTANCE_METERS — well past
+ *     the accuracy-usable and marker-ratchet tolerances used elsewhere, so
+ *     this never fires on ordinary GPS noise or road width), AND
+ *   - the last reroute was over REROUTE_COOLDOWN_SECONDS ago, so the
+ *     customer's poll and the rider's poll hitting this within the same
+ *     window cannot double the call rate, and a rider who stays off-route
+ *     gets re-centered at most once a minute rather than once a poll.
+ *
+ * Self-stabilizing beyond that: a successful reroute's new route starts
+ * AT the rider's current position, so the very next check reads ~0m
+ * off-route and does not refire unless they drift again.
+ *
+ * @return array{polyline:string,distance_km:float,duration_min:float}|null
+ *         The fresh route if one was fetched — callers should use it
+ *         immediately rather than serving the now-stale value they already
+ *         had for one more poll cycle. Null when nothing needed to change,
+ *         or when a refetch was attempted but no provider could give
+ *         geometry (in which case the OLD route is left in place; a
+ *         stale-but-roughly-right line beats no line).
+ */
+function rerouteIfNeeded(
+    PDO $dbh, int $assignmentId, ?string $currentPolyline, ?string $routeFetchedAt,
+    float $riderLat, float $riderLng, float $destLat, float $destLng
+): ?array {
+    if (!$currentPolyline) return null;
+
+    if ($routeFetchedAt !== null) {
+        $ageSeconds = time() - strtotime($routeFetchedAt);
+        if ($ageSeconds < REROUTE_COOLDOWN_SECONDS) return null;
+    }
+
+    require_once __DIR__ . '/google_routes.php';
+
+    $points = decodeEncodedPolyline($currentPolyline);
+    if (count($points) < 2) return null;
+
+    $offRouteMeters = distanceFromRouteMeters($points, $riderLat, $riderLng);
+    if ($offRouteMeters <= REROUTE_DISTANCE_METERS) return null;
+
+    $fresh = roadDistanceBetween($riderLat, $riderLng, $destLat, $destLng, true);
+    if (empty($fresh['polyline'])) {
+        error_log("reroute: assignment $assignmentId is off-route but no provider returned geometry, keeping previous route");
+        return null;
+    }
+
+    $dbh->prepare(
+        "UPDATE rider_assignments
+            SET route_polyline = ?, route_distance_km = ?,
+                route_duration_min = ?, route_fetched_at = NOW()
+          WHERE id = ?"
+    )->execute([
+        $fresh['polyline'],
+        round($fresh['km'], 2),
+        round($fresh['minutes'], 1),
+        $assignmentId,
+    ]);
+
+    error_log(sprintf(
+        'reroute: assignment %d was %dm off-route, refetched via %s',
+        $assignmentId, (int)round($offRouteMeters), $fresh['source']
+    ));
+
+    return [
+        'polyline' => $fresh['polyline'],
+        'distance_km' => round($fresh['km'], 2),
+        'duration_min' => round($fresh['minutes'], 1),
+    ];
+}

@@ -201,3 +201,66 @@ function roadDistanceBetween(float $originLat, float $originLng,
         'polyline' => null,
     ];
 }
+
+/**
+ * Decodes a Google encoded polyline into `[[lat, lng], ...]`.
+ *
+ * Nothing server-side has ever needed to reason about a route's actual
+ * geometry before — every polyline this file produces is stored opaquely and
+ * handed to the client, which decodes it (see PolylineDecoder.kt). This is
+ * the same standard algorithm, ported here because the rerouting check in
+ * rider_dispatch.php's rerouteIfNeeded() needs to measure the rider's
+ * distance from the cached route, server-side.
+ */
+function decodeEncodedPolyline(string $encoded): array {
+    $points = [];
+    $index = 0;
+    $len = strlen($encoded);
+    $lat = 0;
+    $lng = 0;
+
+    while ($index < $len) {
+        $shift = 0;
+        $result = 0;
+        do {
+            $b = ord($encoded[$index++]) - 63;
+            $result |= ($b & 0x1f) << $shift;
+            $shift += 5;
+        } while ($b >= 0x20 && $index < $len);
+        $deltaLat = ($result & 1) ? ~($result >> 1) : ($result >> 1);
+        $lat += $deltaLat;
+
+        $shift = 0;
+        $result = 0;
+        do {
+            $b = ord($encoded[$index++]) - 63;
+            $result |= ($b & 0x1f) << $shift;
+            $shift += 5;
+        } while ($b >= 0x20 && $index < $len);
+        $deltaLng = ($result & 1) ? ~($result >> 1) : ($result >> 1);
+        $lng += $deltaLng;
+
+        $points[] = [$lat / 1e5, $lng / 1e5];
+    }
+
+    return $points;
+}
+
+/**
+ * Metres from (lat, lng) to the nearest VERTEX of a decoded route — not the
+ * true nearest point on a segment. The same simplification
+ * RoutePolyline.kt's nearestPointIndex() already makes client-side: decoded
+ * Google polylines are dense enough that the difference does not matter for
+ * a threshold check, and a per-poll segment projection is more math than the
+ * question needs.
+ */
+function distanceFromRouteMeters(array $points, float $lat, float $lng): float {
+    $best = INF;
+    foreach ($points as $p) {
+        $d = calculateDistance($lat, $lng, $p[0], $p[1]) * 1000; // km -> m
+        if ($d < $best) {
+            $best = $d;
+        }
+    }
+    return $best;
+}
