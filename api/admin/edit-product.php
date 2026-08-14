@@ -86,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="flex-1 overflow-y-auto">
     <div class="p-6">
     <div class="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow">
+        <a href="dashboard.php" class="text-blue-600 hover:text-blue-800 inline-block mb-4"><i class="fas fa-arrow-left mr-1"></i>Back to dashboard</a>
         <h1 class="text-2xl font-bold text-green-800 mb-6">Edit Product</h1>
 
         <?php if ($error): ?>
