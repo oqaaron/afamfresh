@@ -93,6 +93,42 @@ fun OrderTrackingScreen(
     val riderPos = tracking?.position?.let { p ->
         if (p.lat != null && p.lng != null) LatLng(p.lat, p.lng) else null
     }
+
+    // The raw GPS fix is rarely exactly on the decoded route polyline — GPS
+    // noise, road width, the fix arriving mid-turn — so drawing the marker at
+    // riderPos directly puts the bike visibly off the road. Snapped onto the
+    // nearest point on the route instead; falls back to the raw fix when
+    // there is no route yet (rider not collected, or Google unreachable).
+    val riderRouteIndex = if (route.size >= 2 && riderPos != null) {
+        nearestPointIndex(route, riderPos.latitude, riderPos.longitude)
+    } else null
+    val snappedRiderPos = riderRouteIndex?.let { route[it] } ?: riderPos
+
+    // Distance walked along the route, in metres, rather than a lat/lng
+    // target — see positionAtDistance's doc for why: animating two floats
+    // straight toward a new snapped vertex lerps across whatever the road
+    // does between here and there, cutting corners on a bend. Walking the
+    // polyline instead confines that same straight-line lerp to one short
+    // segment.
+    val distances = remember(route) { cumulativeDistances(route) }
+    val targetDistanceM = riderRouteIndex?.let { distances.getOrNull(it) }
+
+    // Monotonic ratchet: the nearest-vertex index can regress slightly poll
+    // to poll from GPS noise even while the rider moves forward, which would
+    // make the marker visibly twitch backward. Small regressions are
+    // absorbed; a regression bigger than the same 100m accuracy-usability
+    // margin api/rider.php's `location` action already applies server-side
+    // (with headroom) is treated as a genuine backtrack — a wrong turn, or
+    // the rider actually reversing — and let through rather than stuck.
+    // Reset when the route itself changes: a reassignment mid-delivery means
+    // the old distances no longer mean anything.
+    var displayDistanceM by remember(route) { mutableStateOf(0.0) }
+    targetDistanceM?.let { target ->
+        if (target >= displayDistanceM || displayDistanceM - target > 150.0) {
+            displayDistanceM = target
+        }
+    }
+
     val pickup = tracking?.pickup?.let { p ->
         if (p.lat != null && p.lng != null) LatLng(p.lat, p.lng) else null
     }
@@ -127,14 +163,19 @@ fun OrderTrackingScreen(
     // animation lasts exactly as long as the gap between updates — finishing
     // just as the next position arrives.
     val pollMs = ((tracking?.pollAfterSeconds ?: 10).coerceIn(3, 30)) * 1000
-    val animLat by animateFloatAsState(
-        targetValue = (riderPos?.latitude ?: 0.0).toFloat(),
-        animationSpec = tween(pollMs), label = "riderLat"
+    val animDistance by animateFloatAsState(
+        targetValue = displayDistanceM.toFloat(),
+        animationSpec = tween(pollMs), label = "riderDistance"
     )
-    val animLng by animateFloatAsState(
-        targetValue = (riderPos?.longitude ?: 0.0).toFloat(),
-        animationSpec = tween(pollMs), label = "riderLng"
-    )
+
+    // Walks the polyline for a route; falls back to the raw/snapped fix when
+    // there is no route yet (route.size < 2 — rider not collected, or Google
+    // unreachable), since there is nothing to walk.
+    val animatedRiderPos = if (route.size >= 2) {
+        positionAtDistance(route, distances, animDistance.toDouble())
+    } else {
+        snappedRiderPos
+    }
 
     Scaffold(containerColor = Cream) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -152,9 +193,7 @@ fun OrderTrackingScreen(
                     when {
                         route.size >= 2 -> RoutePolyline(
                             points = route,
-                            progressIndex = riderPos?.let {
-                                nearestPointIndex(route, it.latitude, it.longitude)
-                            } ?: 0
+                            progressIndex = riderRouteIndex ?: 0
                         )
                         // No geometry yet — the rider has not collected, or
                         // Google was unreachable. A dashed line is visibly not a
@@ -176,14 +215,12 @@ fun OrderTrackingScreen(
                         )
                     }
 
-                    if (riderPos != null) {
+                    if (riderPos != null && animatedRiderPos != null) {
                         MarkerComposable(
                             // Content is constant; only the state moves. See the
                             // header for why that is not merely a preference.
                             keys = arrayOf("rider"),
-                            state = MarkerState(
-                                position = LatLng(animLat.toDouble(), animLng.toDouble())
-                            ),
+                            state = MarkerState(position = animatedRiderPos),
                             rotation = (tracking?.position?.headingDeg ?: 0).toFloat(),
                             flat = true,
                             zIndex = 3f
