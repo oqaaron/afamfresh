@@ -95,7 +95,8 @@ if (!in_array($orderType, ['shop', 'surplus'], true)) {
 function loadOwnedOrder(PDO $dbh, int $orderId, int $userId): array {
     $stmt = $dbh->prepare("
         SELECT orderid, user_id, total_amount, payment_status, status,
-               pesapal_tracking_id, fname, lname, mobile, address, area
+               pesapal_tracking_id, fname, lname, mobile, address, area,
+               points_redeemed
         FROM orders
         WHERE orderid = ? AND user_id = ?
     ");
@@ -449,6 +450,11 @@ switch ($action) {
             $mapped = $pesapal->mapStatus($status);
             applySurplusPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
+            if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0) {
+                require_once __DIR__ . '/../includes/loyalty.php';
+                settleLoyaltyRedemption($dbh, (int)$userId, 'surplus', $orderId, (int)$order['points_redeemed']);
+            }
+
             // Persist how it was paid. Pesapal's own wording was already being
             // read here and returned to the app, then thrown away -- so the one
             // authoritative statement of the instrument used was never stored.
@@ -547,6 +553,11 @@ switch ($action) {
 
         $mapped = $pesapal->mapStatus($status);
         applyPaymentStatus($dbh, $orderId, $mapped, $trackingId);
+
+        if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0) {
+            require_once __DIR__ . '/../includes/loyalty.php';
+            settleLoyaltyRedemption($dbh, (int)$userId, 'order', $orderId, (int)$order['points_redeemed']);
+        }
 
         // Told once the status is settled — 'pending' is still in flight and
         // says nothing worth interrupting the customer for. This is the path

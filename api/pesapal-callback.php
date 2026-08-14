@@ -87,14 +87,14 @@ try {
 
 $orderId = null;
 try {
-    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $fromRef = (int)explode('-', $merchantRef)[0];
         if ($fromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE orderid = ?");
             $stmt->execute([$fromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -119,6 +119,11 @@ try {
             } elseif ($mapped !== 'pending') {
                 $stmt = $dbh->prepare("UPDATE orders SET payment_status = ? WHERE orderid = ?");
                 $stmt->execute([$mapped, $orderId]);
+            }
+
+            if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0 && !empty($order['user_id'])) {
+                require_once __DIR__ . '/includes/loyalty.php';
+                settleLoyaltyRedemption($dbh, (int)$order['user_id'], 'order', $orderId, (int)$order['points_redeemed']);
             }
 
             // Same notification api/payment.php's verify action sends.

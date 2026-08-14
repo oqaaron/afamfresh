@@ -21,7 +21,13 @@
  * charging total_price alone would deliver every order for free.
  */
 function surplusPayableTotal(array $order): float {
-    return (float)$order['total_price'] + (float)($order['delivery_fee'] ?? 0);
+    // loyalty_discount is deliberately never subtracted from total_price or
+    // delivery_fee themselves — those feed the vendor's and rider's payouts
+    // respectively (creditVendorEarnings(), surplusRiderFeeFor()), and a
+    // loyalty discount is the platform's cost, not theirs. See the
+    // 2026-08-14 loyalty-points migration.
+    return (float)$order['total_price'] + (float)($order['delivery_fee'] ?? 0)
+         - (float)($order['loyalty_discount'] ?? 0);
 }
 
 /**
@@ -36,6 +42,7 @@ function surplusPayableTotal(array $order): float {
 function loadOwnedSurplusOrder(PDO $dbh, int $orderId, int $userId): ?array {
     $stmt = $dbh->prepare("
         SELECT so.id, so.user_id, so.listing_id, so.total_price, so.delivery_fee,
+               so.loyalty_discount, so.points_redeemed,
                so.status, so.payment_status, so.pesapal_tracking_id,
                so.delivery_address, so.delivery_area,
                u.fname, u.lname, u.mobile, u.email

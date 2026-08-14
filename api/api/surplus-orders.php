@@ -312,6 +312,21 @@ try {
         $delivery_fee_breakdown = $feeBreakdown;
         $delivery_distance_km = $feeBreakdown['distance'];
 
+        // Loyalty redemption, if requested. Quoted against total_price,
+        // which is already goods-only for a surplus order. The discount is
+        // stored SEPARATELY (loyalty_discount), never subtracted from
+        // total_price or delivery_fee themselves — those feed the vendor's
+        // and rider's payouts, and a loyalty discount is the platform's
+        // cost, not theirs. surplusPayableTotal() (includes/surplus_payment.php)
+        // is what actually nets it out of the Pesapal charge. The point
+        // DEBIT itself waits for payment to confirm — see
+        // settleLoyaltyRedemption(), called from api/payment.php's verify
+        // action and the Pesapal IPN/callback handlers.
+        require_once __DIR__ . '/../includes/loyalty.php';
+        $pointsToRedeem = intval($input['points_redeem'] ?? 0);
+        $redeemQuote = quoteLoyaltyRedemption($dbh, $user_id, $pointsToRedeem, (float)$total_price);
+        $loyalty_discount = $redeemQuote['discount'];
+
         // Generate pickup code if pickup-only
         $pickup_code = null;
         if ($listing['pickup_only']) {
@@ -320,14 +335,15 @@ try {
         
         // Insert order
         $stmt = $dbh->prepare("
-            INSERT INTO surplus_orders 
-            (listing_id, user_id, quantity, total_price, total_weight_kg, status, 
-             delivery_address, delivery_area, delivery_lat, delivery_lng, 
+            INSERT INTO surplus_orders
+            (listing_id, user_id, quantity, total_price, total_weight_kg, status,
+             delivery_address, delivery_area, delivery_lat, delivery_lng,
              delivery_fee, delivery_fee_breakdown, delivery_distance_km, pickup_code,
-             scheduled_delivery_date, scheduled_delivery_slot, order_notes)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             scheduled_delivery_date, scheduled_delivery_slot, order_notes,
+             points_redeemed, loyalty_discount)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        
+
         $result = $stmt->execute([
             $listing_id,
             $user_id,
@@ -344,7 +360,9 @@ try {
             $pickup_code,
             $scheduled_delivery_date ?: null,
             $scheduled_delivery_slot ?: null,
-            $order_notes ?: null
+            $order_notes ?: null,
+            $redeemQuote['points_applied'],
+            $loyalty_discount
         ]);
         
         if (!$result) {
@@ -388,6 +406,10 @@ try {
         // exist. A failure to notify is logged, never surfaced: the order is
         // real and paid-for regardless of whether the message went out.
         $grand_total = $total_price + $delivery_fee;
+        // What the customer is actually asked to pay — mirrors
+        // surplusPayableTotal() so this message and the real Pesapal charge
+        // never disagree.
+        $payable_total = $grand_total - $loyalty_discount;
         try {
             addNotification(
                 (int)$listing['vendor_user_id'],
@@ -409,7 +431,7 @@ try {
                 (int)$user_id,
                 'Order placed: ' . $listing['product_name'],
                 'Your surplus order #' . $order_id . ' from ' . $listing['business_name']
-                    . ' totals UGX ' . number_format($grand_total, 0)
+                    . ' totals UGX ' . number_format($payable_total, 0)
                     . ($delivery_fee > 0 ? ' including UGX ' . number_format($delivery_fee, 0) . ' delivery' : '')
                     . '. We will confirm once payment is received.',
                 'order',
@@ -426,7 +448,10 @@ try {
             'order' => $order,
             'delivery_fee' => $delivery_fee,
             'total_weight_kg' => $totalWeightKg,
-            'grand_total' => $grand_total
+            'grand_total' => $grand_total,
+            'points_applied' => $redeemQuote['points_applied'],
+            'loyalty_discount' => $loyalty_discount,
+            'payable_total' => $payable_total
         ]);
 
     } elseif ($method === 'PUT') {
@@ -525,6 +550,24 @@ try {
             $credit = creditVendorEarnings($dbh, $order_id);
             if (!$credit['ok']) {
                 error_log("Surplus order $order_id delivered but vendor not credited: " . $credit['error']);
+            }
+
+            // Customer loyalty points — idempotent per (source, order_id),
+            // see earnLoyaltyPoints()'s own doc, so this is a safe no-op if
+            // api/rider.php already awarded them for the same order (a
+            // surplus order can reach 'delivered' via either path).
+            require_once __DIR__ . '/../includes/loyalty.php';
+            $customerIdStmt = $dbh->prepare("SELECT user_id FROM surplus_orders WHERE id = ?");
+            $customerIdStmt->execute([$order_id]);
+            $customerId = (int)($customerIdStmt->fetchColumn() ?: 0);
+            if ($customerId > 0) {
+                $goodsValue = goodsValueForOrder($dbh, 'surplus', $order_id);
+                if ($goodsValue !== null) {
+                    $earn = earnLoyaltyPoints($dbh, $customerId, 'surplus', $order_id, $goodsValue);
+                    if (!$earn['ok']) {
+                        error_log("surplus-orders.php: loyalty earn failed for order $order_id: " . ($earn['error'] ?? ''));
+                    }
+                }
             }
         }
 

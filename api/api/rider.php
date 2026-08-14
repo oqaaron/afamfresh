@@ -458,6 +458,26 @@ if ($action === 'update_status') {
                     throw new RuntimeException($vendorCredit['error']);
                 }
             }
+
+            // Customer loyalty points, same transaction as the delivery — a
+            // delivery that rolls back should not have granted points
+            // either. Unlike the rider/vendor credits above, a failed earn
+            // is never a reason to abort: see earnLoyaltyPoints()'s own doc.
+            require_once __DIR__ . '/../includes/loyalty.php';
+            $customerIdStmt = $source === 'order'
+                ? $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?")
+                : $dbh->prepare("SELECT user_id FROM surplus_orders WHERE id = ?");
+            $customerIdStmt->execute([$orderId]);
+            $customerId = (int)($customerIdStmt->fetchColumn() ?: 0);
+            if ($customerId > 0) {
+                $goodsValue = goodsValueForOrder($dbh, $source, $orderId);
+                if ($goodsValue !== null) {
+                    $earn = earnLoyaltyPoints($dbh, $customerId, $source, $orderId, $goodsValue);
+                    if (!$earn['ok']) {
+                        error_log("rider.php: loyalty earn failed for $source order $orderId: " . ($earn['error'] ?? ''));
+                    }
+                }
+            }
         } else {
             $dbh->prepare("UPDATE rider_assignments SET status = ? WHERE id = ?")
                 ->execute([$next, $assignment['id']]);

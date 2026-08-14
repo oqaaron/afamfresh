@@ -220,10 +220,10 @@ try {
                 <div><i class="fas fa-motorcycle text-3xl text-yellow-600"></i></div>
                 <div><span class="font-medium">Manage Riders</span> <span class="text-gray-400">→</span></div>
             </a>
-            <div class="bg-white p-6 rounded-xl shadow flex items-center justify-between">
+            <a href="configuration.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
                 <div><i class="fas fa-cog text-3xl text-gray-600"></i></div>
                 <div><span class="font-medium">Configuration</span> <span class="text-gray-400">→</span></div>
-            </div>
+            </a>
             <div class="bg-white p-6 rounded-xl shadow flex items-center justify-between">
                 <div><i class="fas fa-tags text-3xl text-orange-600"></i></div>
                 <div><span class="font-medium">Surplus Approvals</span> <span class="text-gray-400">→</span></div>

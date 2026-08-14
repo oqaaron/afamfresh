@@ -46,6 +46,7 @@ if (!$user) {
 // api/rider.php checks users.account_type as well as the riders link, so the
 // role would be inert. Offering only the valid option keeps the panel honest.
 require_once __DIR__ . '/../includes/account_type.php';
+require_once __DIR__ . '/../includes/loyalty.php';
 $accountType = accountTypeOf($dbh, $id) ?: 'customer';
 $ROLES = $accountType === 'customer' ? ['user'] : [$accountType];
 
@@ -87,17 +88,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dbh->beginTransaction();
 
             if ($newPassword !== '') {
-                $sql = "UPDATE users SET fname=?, lname=?, email=?, mobile=?, area=?, address=?, `current_role`=?, loyalty_points=?, password=? WHERE id=?";
+                $sql = "UPDATE users SET fname=?, lname=?, email=?, mobile=?, area=?, address=?, `current_role`=?, password=? WHERE id=?";
                 $params = [$fname, $lname, $emailValue, $mobileValue, $areaValue, $addressValue,
-                           $role, (int)$loyalty, password_hash($newPassword, PASSWORD_DEFAULT), $id];
+                           $role, password_hash($newPassword, PASSWORD_DEFAULT), $id];
             } else {
                 // password omitted entirely, so a blank box cannot clear the
                 // existing hash (or hand a Google-only account an empty one).
-                $sql = "UPDATE users SET fname=?, lname=?, email=?, mobile=?, area=?, address=?, `current_role`=?, loyalty_points=? WHERE id=?";
+                $sql = "UPDATE users SET fname=?, lname=?, email=?, mobile=?, area=?, address=?, `current_role`=? WHERE id=?";
                 $params = [$fname, $lname, $emailValue, $mobileValue, $areaValue, $addressValue,
-                           $role, (int)$loyalty, $id];
+                           $role, $id];
             }
             $dbh->prepare($sql)->execute($params);
+
+            // Ledger-backed rather than a bare overwrite — records who
+            // changed the balance, when, and by how much, instead of just
+            // silently replacing the number. See includes/loyalty.php.
+            adjustLoyaltyPointsAdmin(
+                $dbh, $id, (int)$loyalty,
+                isset($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null,
+                'Adjusted via admin panel'
+            );
 
             // Keep user_roles in step with the role just granted.
             //
@@ -147,6 +157,7 @@ $heldRoles = $heldStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $isGoogle   = !empty($user['google_id']);
 $hasPassword = !empty($user['password']);
+$loyaltyHistory = loyaltyHistoryFor($dbh, $id, 10);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -259,6 +270,36 @@ $hasPassword = !empty($user['password']);
                         <a href="users.php" class="bg-gray-300 hover:bg-gray-400 px-6 py-2 rounded">Back to Users</a>
                     </div>
                 </form>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow mt-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-4">Loyalty points history</h2>
+                <?php if (empty($loyaltyHistory)): ?>
+                    <p class="text-gray-400 text-sm">No loyalty activity recorded yet.</p>
+                <?php else: ?>
+                    <table class="w-full text-sm">
+                        <thead class="text-left text-gray-500 border-b">
+                            <tr>
+                                <th class="py-2">When</th><th class="py-2">Event</th>
+                                <th class="py-2">Change</th><th class="py-2">Balance after</th>
+                                <th class="py-2">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($loyaltyHistory as $row): ?>
+                            <tr class="border-b last:border-0">
+                                <td class="py-2 whitespace-nowrap"><?= htmlspecialchars($row['created_at']) ?></td>
+                                <td class="py-2"><?= htmlspecialchars($row['event']) ?></td>
+                                <td class="py-2 <?= $row['points_delta'] >= 0 ? 'text-green-700' : 'text-red-700' ?>">
+                                    <?= $row['points_delta'] >= 0 ? '+' : '' ?><?= (int)$row['points_delta'] ?>
+                                </td>
+                                <td class="py-2"><?= (int)$row['balance_after'] ?></td>
+                                <td class="py-2 text-gray-500"><?= htmlspecialchars($row['reason'] ?? '—') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
             </div>
         </div>
     </div>
