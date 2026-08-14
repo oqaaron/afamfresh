@@ -47,6 +47,7 @@ fun MainScreen(
     roleGateViewModel: RoleGateViewModel,
     addressViewModel: AddressViewModel,
     notificationViewModel: NotificationViewModel,
+    favoritesViewModel: FavoritesViewModel,
     trackingViewModel: TrackingViewModel,
     deliveryRepository: DeliveryRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
@@ -237,6 +238,7 @@ fun MainScreen(
                     onCartClick = { navController.navigate("cart") },
                     productViewModel = productViewModel,
                     cartViewModel = cartViewModel,
+                    favoritesViewModel = favoritesViewModel,
                     unreadNotifications = unreadNotifications,
                     onNotificationsClick = { navController.navigate("notifications") }
                 )
@@ -685,8 +687,11 @@ fun MainScreen(
                 val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
                 val products by productViewModel.products.collectAsState()
                 val product = productId?.let { id -> products.find { it.id == id } }
+                val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
                 ProductDetailScreen(
                     product = product,
+                    isFavorite = productId != null && productId in favoriteIds,
+                    onToggleFavorite = { productId?.let { favoritesViewModel.toggleFavorite(it) } },
                     onBack = { navController.navigate("home") },
                     onAddToCart = { productToAdd, quantity ->
                         cartViewModel.addToCart(productToAdd, quantity)

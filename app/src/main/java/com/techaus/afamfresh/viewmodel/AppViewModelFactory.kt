@@ -8,6 +8,7 @@ import com.techaus.afamfresh.repository.AddressRepository
 import com.techaus.afamfresh.repository.AppRepository
 import com.techaus.afamfresh.repository.AuthRepository
 import com.techaus.afamfresh.repository.DeliveryRepository
+import com.techaus.afamfresh.repository.FavoritesRepository
 import com.techaus.afamfresh.repository.ServerAddressRepository
 import com.techaus.afamfresh.repository.NotificationRepository
 import com.techaus.afamfresh.repository.OrderRepository
@@ -68,6 +69,7 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
     private val addressRepository: AddressRepository = ServerAddressRepository(apiService)
 
     private val notificationRepository = NotificationRepository(apiService)
+    private val favoritesRepository = FavoritesRepository(apiService)
 
     // Takes a Context as well: proof-of-delivery photos are read and compressed
     // through the ContentResolver before upload, like avatars.
@@ -115,6 +117,9 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
 
             modelClass.isAssignableFrom(NotificationViewModel::class.java) ->
                 NotificationViewModel(notificationRepository)
+
+            modelClass.isAssignableFrom(FavoritesViewModel::class.java) ->
+                FavoritesViewModel(favoritesRepository)
 
             modelClass.isAssignableFrom(RiderViewModel::class.java) ->
                 RiderViewModel(riderRepository)

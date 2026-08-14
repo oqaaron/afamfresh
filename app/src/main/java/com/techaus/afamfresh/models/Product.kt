@@ -140,3 +140,15 @@ data class CartItem(
     /** Uses the discounted price so the cart total matches what is displayed. */
     val lineTotal: Double get() = product.effectivePrice * quantity
 }
+
+data class FavoritesResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("product_ids") val productIds: List<Int>? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+data class ToggleFavoriteResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("is_favorite") val isFavorite: Boolean? = null,
+    @SerializedName("error") val error: String? = null
+)

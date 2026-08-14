@@ -659,6 +659,25 @@ interface ApiService {
         @Field("id") id: String
     ): Call<BaseResponse>
 
+    // ============================================================
+    // PRODUCT FAVORITES
+    // ============================================================
+    //
+    // Backs FavoritesRepository. Verified against api/favorites.php:
+    // action-routed, session-scoped, same style as addresses.php.
+
+    @GET("favorites.php")
+    fun getFavorites(
+        @Query("action") action: String = "list"
+    ): Call<FavoritesResponse>
+
+    @POST("favorites.php")
+    @FormUrlEncoded
+    fun toggleFavorite(
+        @Query("action") action: String = "toggle",
+        @Field("product_id") productId: Int
+    ): Call<ToggleFavoriteResponse>
+
     // ------------------------------------------------------------
     // FCM TOKEN REGISTRATION
     // ------------------------------------------------------------

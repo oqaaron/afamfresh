@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
@@ -32,6 +33,8 @@ import com.techaus.afamfresh.utils.formatUgx
 @Composable
 fun ProductDetailScreen(
     product: Product?,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onBack: () -> Unit,
     onAddToCart: (Product, Int) -> Unit
 ) {
@@ -101,10 +104,14 @@ fun ProductDetailScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                     }
                     IconButton(
-                        onClick = { /* favorite - not wired to backend yet */ },
+                        onClick = onToggleFavorite,
                         modifier = Modifier.clip(CircleShape).background(CardWhite.copy(alpha = 0.9f))
                     ) {
-                        Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorite", tint = Ink)
+                        Icon(
+                            if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) Tomato else Ink
+                        )
                     }
                 }
 

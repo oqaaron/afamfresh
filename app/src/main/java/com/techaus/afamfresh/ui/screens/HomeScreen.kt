@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
@@ -42,6 +43,7 @@ import com.techaus.afamfresh.ui.components.ProductGridSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.CartViewModel
+import com.techaus.afamfresh.viewmodel.FavoritesViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
 import kotlinx.coroutines.delay
 
@@ -81,6 +83,7 @@ fun HomeScreen(
     onCartClick: () -> Unit,
     productViewModel: ProductViewModel,
     cartViewModel: CartViewModel,
+    favoritesViewModel: FavoritesViewModel,
     unreadNotifications: Int,
     onNotificationsClick: () -> Unit
 ) {
@@ -88,6 +91,7 @@ fun HomeScreen(
     val isLoadingProducts by productViewModel.isLoading.collectAsState()
     val productsError by productViewModel.error.collectAsState()
     val canRetryProducts by productViewModel.canRetry.collectAsState()
+    val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf<HomeFilter>(HomeFilter.All) }
 
@@ -338,8 +342,10 @@ fun HomeScreen(
                     items(visibleProducts, key = { it.id }) { product ->
                         MockupStyleProductCard(
                             product = product,
+                            isFavorite = product.id in favoriteIds,
                             onClick = { onProductClick(product) },
-                            onQuickAdd = { cartViewModel.addToCart(product, 1) }
+                            onQuickAdd = { cartViewModel.addToCart(product, 1) },
+                            onToggleFavorite = { favoritesViewModel.toggleFavorite(product.id) }
                         )
                     }
                 }
@@ -408,8 +414,10 @@ private fun CategoryPill(
 @Composable
 private fun MockupStyleProductCard(
     product: Product,
+    isFavorite: Boolean,
     onClick: () -> Unit,
-    onQuickAdd: () -> Unit
+    onQuickAdd: () -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     // Brief "Added" confirmation so a tap has visible effect beyond the cart
     // badge changing off-screen — reverts on its own, no user action needed.
@@ -450,7 +458,7 @@ private fun MockupStyleProductCard(
 
             // Favorite Icon Overlay
             IconButton(
-                onClick = { /* toggle favorite */ },
+                onClick = onToggleFavorite,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(4.dp)
@@ -459,9 +467,9 @@ private fun MockupStyleProductCard(
                     .background(CardWhite)
             ) {
                 Icon(
-                    Icons.Default.FavoriteBorder,
+                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = InkMuted,
+                    tint = if (isFavorite) Tomato else InkMuted,
                     modifier = Modifier.size(15.dp)
                 )
             }
