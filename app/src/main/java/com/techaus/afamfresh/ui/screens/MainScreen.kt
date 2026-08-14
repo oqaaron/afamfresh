@@ -147,8 +147,20 @@ fun MainScreen(
         }
     }
 
+    // Hidden on the two full-screen map views — a bottom bar under a rider's
+    // follow-camera navigation, or a customer's live tracking map, eats
+    // screen space that matters most exactly there. Compared against the
+    // route PATTERN (currentDestination is "track/{orderId}/{source}", not
+    // the filled-in values), matching how these two routes are registered in
+    // the customer/rider FlavorRoutes.kt files.
+    val hideBottomBar = currentDestination in setOf(
+        "track/{orderId}/{source}",
+        "rider_navigate/{orderId}/{source}"
+    )
+
     Scaffold(
-        bottomBar = {
+        bottomBar = bottomBar@{
+            if (hideBottomBar) return@bottomBar
             NavigationBar {
                 // Each app gets its own tabs. A rider has no cart and a vendor
                 // has no surplus basket, so showing the customer bar in those

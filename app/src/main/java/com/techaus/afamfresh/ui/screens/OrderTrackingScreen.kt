@@ -34,6 +34,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.techaus.afamfresh.ui.map.*
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.DeliveryPushBus
+import com.techaus.afamfresh.utils.GkmaBounds
 import com.techaus.afamfresh.utils.PolylineDecoder
 import com.techaus.afamfresh.viewmodel.TrackingViewModel
 
@@ -94,15 +95,23 @@ fun OrderTrackingScreen(
         if (p.lat != null && p.lng != null) LatLng(p.lat, p.lng) else null
     }
 
+    // The cached polyline is the PICKUP -> DROPOFF leg only (see
+    // cacheAssignmentRoute() server-side) — it says nothing about the road
+    // the rider takes to REACH pickup. Snapping is only meaningful once
+    // they've actually started that leg; before then, every fix is nearest
+    // to vertex 0 (pickup itself) regardless of where the rider actually is,
+    // which pins the marker there and makes it look frozen. Same gate
+    // api/tracking.php's server-side reroute check already uses.
+    val onDeliveryLeg = tracking?.status == "on_way"
+
     // The raw GPS fix is rarely exactly on the decoded route polyline — GPS
     // noise, road width, the fix arriving mid-turn — so drawing the marker at
     // riderPos directly puts the bike visibly off the road. Snapped onto the
     // nearest point on the route instead; falls back to the raw fix when
-    // there is no route yet (rider not collected, or Google unreachable).
-    val riderRouteIndex = if (route.size >= 2 && riderPos != null) {
+    // there is no route yet, or the rider hasn't started this leg.
+    val riderRouteIndex = if (onDeliveryLeg && route.size >= 2 && riderPos != null) {
         nearestPointIndex(route, riderPos.latitude, riderPos.longitude)
     } else null
-    val snappedRiderPos = riderRouteIndex?.let { route[it] } ?: riderPos
 
     // Distance walked along the route, in metres, rather than a lat/lng
     // target — see positionAtDistance's doc for why: animating two floats
@@ -146,7 +155,15 @@ fun OrderTrackingScreen(
     var framed by remember { mutableStateOf(false) }
     LaunchedEffect(riderPos, pickup, dropoff) {
         if (framed) return@LaunchedEffect
+        // Filtered to plausible points before framing: a single wildly wrong
+        // coordinate (a GPS glitch, a stale cached fix from a different city,
+        // bad data on an old order) blows the bounds out to fit it, and the
+        // camera zooms out until the actual delivery is a speck next to
+        // whatever else got dragged into frame. GkmaBounds.contains() already
+        // exists for exactly this "is this plausibly a real pin" question —
+        // see includes/service_area.php, which the server checks the same way.
         val points = listOfNotNull(riderPos, pickup, dropoff)
+            .filter { GkmaBounds.contains(it.latitude, it.longitude) }
         if (points.size >= 2) {
             val b = LatLngBounds.builder().apply { points.forEach { include(it) } }.build()
             runCatching { cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(b, 140)) }
@@ -168,13 +185,25 @@ fun OrderTrackingScreen(
         animationSpec = tween(pollMs), label = "riderDistance"
     )
 
-    // Walks the polyline for a route; falls back to the raw/snapped fix when
-    // there is no route yet (route.size < 2 — rider not collected, or Google
-    // unreachable), since there is nothing to walk.
-    val animatedRiderPos = if (route.size >= 2) {
+    // Before the rider starts the pickup->dropoff leg (or if there's simply
+    // no route yet), there's no polyline worth walking along — animate the
+    // raw fix directly instead, so the marker still glides smoothly while
+    // approaching pickup rather than sitting frozen until on_way.
+    val rawAnimLat by animateFloatAsState(
+        targetValue = (riderPos?.latitude ?: 0.0).toFloat(),
+        animationSpec = tween(pollMs), label = "riderRawLat"
+    )
+    val rawAnimLng by animateFloatAsState(
+        targetValue = (riderPos?.longitude ?: 0.0).toFloat(),
+        animationSpec = tween(pollMs), label = "riderRawLng"
+    )
+
+    val animatedRiderPos = if (onDeliveryLeg && route.size >= 2) {
         positionAtDistance(route, distances, animDistance.toDouble())
+    } else if (riderPos != null) {
+        LatLng(rawAnimLat.toDouble(), rawAnimLng.toDouble())
     } else {
-        snappedRiderPos
+        null
     }
 
     Scaffold(containerColor = Cream) { padding ->
@@ -184,10 +213,13 @@ fun OrderTrackingScreen(
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
-                    // NOT clamped to the service area: a rider who strays outside
-                    // it is a real situation, and a camera that refused to follow
-                    // would look broken at the worst possible moment.
-                    properties = rememberAfamFreshMapProperties(clampToServiceArea = false),
+                    // Clamped to Greater Kampala (Kampala, Wakiso, Mpigi,
+                    // Mukono — GkmaBounds/GKMA_CAMERA_BOUNDS) so the camera
+                    // can never zoom or pan out to whatever city a bad
+                    // coordinate happened to point at. A rider genuinely
+                    // outside this box is presently not a case this app
+                    // delivers to anyway.
+                    properties = rememberAfamFreshMapProperties(clampToServiceArea = true),
                     uiSettings = rememberAfamFreshMapUiSettings()
                 ) {
                     when {

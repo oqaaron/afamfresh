@@ -16,11 +16,13 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,9 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapsComposeExperimentalApi
+import com.google.maps.android.compose.MarkerComposable
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.techaus.afamfresh.models.RiderActionState
 import com.techaus.afamfresh.ui.map.*
@@ -61,6 +66,7 @@ import com.techaus.afamfresh.viewmodel.TrackingViewModel
  * the whole point of this screen is that a rider is no longer forced out of
  * the app to navigate, but nothing here stops them choosing to leave.
  */
+@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 fun RiderNavigationScreen(
     orderId: Int,
@@ -204,8 +210,12 @@ fun RiderNavigationScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
+                    // Google's own blue "my location" dot is off — a custom
+                    // bike marker is drawn instead, below, so the rider sees
+                    // the same TwoWheeler icon the customer's tracking screen
+                    // shows for them, not the generic system puck.
                     cameraPositionState = cameraPositionState,
-                    properties = rememberAfamFreshMapProperties(showMyLocation = granted, clampToServiceArea = false),
+                    properties = rememberAfamFreshMapProperties(showMyLocation = false, clampToServiceArea = false),
                     uiSettings = rememberAfamFreshMapUiSettings(allowScroll = true),
                     onMapClick = { following = false }
                 ) {
@@ -224,6 +234,32 @@ fun RiderNavigationScreen(
                             label = delivery?.addressOrDash ?: "Drop-off",
                             sub = delivery?.area
                         )
+                    }
+
+                    val lat = myLat; val lng = myLng
+                    if (lat != null && lng != null) {
+                        MarkerComposable(
+                            // Content is constant; only the state moves —
+                            // MarkerComposable at this maps-compose version
+                            // does not reliably re-render on content change.
+                            keys = arrayOf("me"),
+                            state = MarkerState(position = LatLng(lat, lng)),
+                            rotation = myBearing,
+                            flat = true,
+                            zIndex = 3f
+                        ) {
+                            Box(
+                                modifier = Modifier.size(36.dp).clip(CircleShape).background(Forest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.TwoWheeler,
+                                    contentDescription = "You",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
