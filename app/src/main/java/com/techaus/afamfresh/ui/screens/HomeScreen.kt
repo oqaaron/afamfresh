@@ -1,6 +1,7 @@
 package com.techaus.afamfresh.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -9,15 +10,12 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,21 +24,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
-import com.techaus.afamfresh.ui.components.ProductGridSkeleton
 import com.techaus.afamfresh.ui.components.NetworkImage
-import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.ui.components.ProductGridSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
 
-// ⚠️ INFERRED screen. Signature matches the exact call in MainScreen.kt's
-// composable("home") block. Visual design follows the reference mockup
-// (location header, search bar, category pills, 2-col product grid).
 @Composable
 fun HomeScreen(
     userName: String,
@@ -78,27 +74,44 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // ===== Top bar: location + menu (menu -> profile, mirrors mockup's hamburger) =====
+            // ===== Header matching the mockup styling =====
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = Forest)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Hi, $userName", fontWeight = FontWeight.SemiBold, color = Ink)
+                    IconButton(
+                        onClick = onProfileClick,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(PillGray)
+                    ) {
+                        Icon(
+                            Icons.Default.Menu,
+                            contentDescription = "Menu",
+                            tint = Ink,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Hello, $userName",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        color = Ink
+                    )
                 }
-                Row {
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onNotificationsClick) {
                         BadgedBox(
                             badge = {
                                 if (unreadNotifications > 0) {
                                     Badge(containerColor = Tomato) {
-                                        // Cap the label so a large count cannot
-                                        // stretch the badge across the bar.
                                         Text(
                                             if (unreadNotifications > 99) "99+" else "$unreadNotifications",
                                             color = Color.White,
@@ -110,11 +123,7 @@ fun HomeScreen(
                         ) {
                             Icon(
                                 Icons.Default.Notifications,
-                                contentDescription = if (unreadNotifications > 0) {
-                                    "Notifications, $unreadNotifications unread"
-                                } else {
-                                    "Notifications"
-                                },
+                                contentDescription = "Notifications",
                                 tint = Ink
                             )
                         }
@@ -122,79 +131,82 @@ fun HomeScreen(
                     IconButton(onClick = onCartClick) {
                         Icon(Icons.Default.ShoppingCart, contentDescription = "Cart", tint = Ink)
                     }
-                    IconButton(
-                        onClick = onProfileClick,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(PillGray)
-                    ) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Ink)
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                buildString { append("Find The Best") },
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = Ink
-            )
-            Text(
-                "Food Around You",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = Ink
+            // ===== Search Pill Bar (Rounded pill shape from mockup) =====
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = {
+                    Text(
+                        "Search here...",
+                        color = InkMuted,
+                        fontSize = 14.sp
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = InkMuted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = CircleShape,
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = CardWhite,
+                    focusedContainerColor = CardWhite,
+                    unfocusedBorderColor = ForestSurface,
+                    focusedBorderColor = Forest
+                )
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ===== Search bar =====
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search your favourite food") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = { Icon(Icons.Default.Tune, contentDescription = "Filter") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = CardWhite,
-                    focusedContainerColor = CardWhite
-                )
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // ===== Filter pills =====
+            // ===== Section Title & Category Filter Pills =====
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                filters.forEach { filter ->
-                    val selected = filter == selectedFilter
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) Forest else PillGray)
-                            .clickable { selectedFilter = filter }
-                            .padding(horizontal = 18.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = filter,
-                            color = if (selected) Color.White else Ink,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp
-                        )
+                Text(
+                    text = "Products",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Ink
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    filters.forEach { filter ->
+                        val selected = filter == selectedFilter
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selected) Forest else PillGray)
+                                .clickable { selectedFilter = filter }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = filter,
+                                color = if (selected) Color.White else Ink,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // ===== Product grid =====
+            // ===== Product Grid Area =====
             if (isLoadingProducts && products.isEmpty()) {
                 ProductGridSkeleton(modifier = Modifier.weight(1f))
             } else if (productsError != null && products.isEmpty()) {
@@ -204,9 +216,6 @@ fun HomeScreen(
                     onRetry = if (canRetryProducts) ({ productViewModel.loadProducts() }) else null
                 )
             } else if (visibleProducts.isEmpty()) {
-                // Two genuinely different empty cases: nothing matched the
-                // search, versus the catalogue itself being empty. Telling the
-                // user to clear a search they did not make would be confusing.
                 if (searchQuery.isNotBlank()) {
                     EmptyState(
                         icon = Icons.Default.Search,
@@ -220,7 +229,7 @@ fun HomeScreen(
                     EmptyState(
                         icon = Icons.Default.ShoppingCart,
                         title = "Nothing available yet",
-                        detail = "There are no products to show right now. Pull again in a moment.",
+                        detail = "There are no products to show right now.",
                         modifier = Modifier.weight(1f),
                         actionLabel = "REFRESH",
                         onAction = { productViewModel.loadProducts() }
@@ -229,17 +238,13 @@ fun HomeScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.weight(1f)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    // Without a stable key, Compose identifies items by index,
-                    // so any change to the list (search, category filter, a
-                    // refresh) recomposes every visible cell and drops their
-                    // loaded images. Keying by product id means only genuinely
-                    // changed items recompose.
                     items(visibleProducts, key = { it.id }) { product ->
-                        ProductGridCard(
+                        MockupStyleProductCard(
                             product = product,
                             onClick = { onProductClick(product) },
                             onQuickAdd = { cartViewModel.addToCart(product, 1) }
@@ -252,84 +257,119 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ProductGridCard(
+private fun MockupStyleProductCard(
     product: Product,
     onClick: () -> Unit,
     onQuickAdd: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
             .background(CardWhite)
             .clickable { onClick() }
-            .padding(10.dp)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        // Image Container with Soft Card Background
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(115.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(ForestSurface),
+            contentAlignment = Alignment.Center
+        ) {
             NetworkImage(
                 model = product.imageUrl,
                 contentDescription = product.name,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(ForestSurface)
+                    .fillMaxSize()
+                    .padding(8.dp)
             )
+
+            // Favorite Icon Overlay
             IconButton(
-                onClick = { /* toggle favorite - not wired to backend yet */ },
+                onClick = { /* toggle favorite */ },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(28.dp)
+                    .padding(4.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
                     .background(CardWhite)
             ) {
                 Icon(
                     Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = Ink,
-                    modifier = Modifier.size(16.dp)
+                    tint = InkMuted,
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(product.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Ink)
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Was prep time and a star rating. Neither exists on `items`, so both
-        // were always null and this row rendered empty on every card. Shows the
-        // pack size and any discount instead — columns that carry real data.
-        Spacer(modifier = Modifier.height(2.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            product.packLabel?.let {
-                Text(it, fontSize = 12.sp, color = InkMuted)
-                Spacer(modifier = Modifier.width(8.dp))
-            }
+        // Product Name
+        Text(
+            text = product.name,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = Ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        // Pack Size / Weight & Discount
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = product.packLabel ?: "1 unit",
+                fontSize = 12.sp,
+                color = InkMuted
+            )
             if (product.hasDiscount) {
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    "-${product.discountPercent.toInt()}%",
-                    fontSize = 12.sp,
+                    text = "-${product.discountPercent.toInt()}%",
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Tomato
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Price
+        Text(
+            text = formatUgx(product.price),
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.sp,
+            color = Ink
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Mockup-style "Add to Cart" Pill Button
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CircleShape)
+                .border(1.dp, Forest, CircleShape)
+                .clickable { onQuickAdd() }
+                .padding(vertical = 7.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(formatUgx(product.price), fontWeight = FontWeight.Bold, color = Ink)
-            IconButton(
-                onClick = onQuickAdd,
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Forest)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Quick add", tint = Color.White, modifier = Modifier.size(18.dp))
-            }
+            Text(
+                text = "Add to Cart",
+                color = Forest,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
