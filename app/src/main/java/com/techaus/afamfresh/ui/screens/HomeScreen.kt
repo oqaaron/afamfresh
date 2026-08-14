@@ -3,18 +3,23 @@ package com.techaus.afamfresh.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +42,28 @@ import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
+
+/**
+ * Replaces the discontinued web storefront's homepage curation
+ * (`items.homepage`/`offer`/`weekly_deal`) with real, in-app browsing. Only
+ * one filter is active at a time, so "what is the customer looking at right
+ * now" always has a single answer.
+ */
+private sealed class HomeFilter {
+    object All : HomeFilter()
+    object HotSale : HomeFilter()
+    object Promos : HomeFilter()
+    object FlashSales : HomeFilter()
+    data class Category(val name: String) : HomeFilter()
+}
+
+private fun Product.matches(filter: HomeFilter): Boolean = when (filter) {
+    HomeFilter.All -> true
+    HomeFilter.HotSale -> hasDiscount
+    HomeFilter.Promos -> isOffer
+    HomeFilter.FlashSales -> isWeeklyDeal
+    is HomeFilter.Category -> category == filter.name
+}
 
 @Composable
 fun HomeScreen(
@@ -59,12 +87,20 @@ fun HomeScreen(
     val productsError by productViewModel.error.collectAsState()
     val canRetryProducts by productViewModel.canRetry.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember { mutableStateOf<HomeFilter>(HomeFilter.All) }
 
-    val filters = listOf("All", "Hot sale", "Popularity")
-    val visibleProducts = remember(products, searchQuery) {
-        if (searchQuery.isBlank()) products
-        else products.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    // Derived from whatever is already loaded — no separate categories call
+    // needed, the full catalogue is already in `products`.
+    val categories = remember(products) {
+        products.mapNotNull { it.category?.trim()?.takeIf { c -> c.isNotEmpty() } }
+            .distinct()
+            .sorted()
+    }
+
+    val visibleProducts = remember(products, searchQuery, selectedFilter) {
+        products
+            .filter { it.matches(selectedFilter) }
+            .filter { searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) }
     }
 
     Scaffold(containerColor = Cream) { padding ->
@@ -170,6 +206,42 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // ===== Status quick-access row: Hot Sale / Promos / Flash Sales =====
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatusTile(
+                    icon = Icons.Default.LocalFireDepartment,
+                    label = "Hot Sale",
+                    selected = selectedFilter == HomeFilter.HotSale,
+                    onClick = {
+                        selectedFilter =
+                            if (selectedFilter == HomeFilter.HotSale) HomeFilter.All else HomeFilter.HotSale
+                    }
+                )
+                StatusTile(
+                    icon = Icons.Default.Sell,
+                    label = "Promos",
+                    selected = selectedFilter == HomeFilter.Promos,
+                    onClick = {
+                        selectedFilter =
+                            if (selectedFilter == HomeFilter.Promos) HomeFilter.All else HomeFilter.Promos
+                    }
+                )
+                StatusTile(
+                    icon = Icons.Default.Bolt,
+                    label = "Flash Sales",
+                    selected = selectedFilter == HomeFilter.FlashSales,
+                    onClick = {
+                        selectedFilter =
+                            if (selectedFilter == HomeFilter.FlashSales) HomeFilter.All else HomeFilter.FlashSales
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // ===== Section Title & Category Filter Pills =====
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -182,25 +254,27 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                     color = Ink
                 )
+            }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    filters.forEach { filter ->
-                        val selected = filter == selectedFilter
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (selected) Forest else PillGray)
-                                .clickable { selectedFilter = filter }
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = filter,
-                                color = if (selected) Color.White else Ink,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CategoryPill(
+                    label = "All",
+                    selected = selectedFilter == HomeFilter.All,
+                    onClick = { selectedFilter = HomeFilter.All }
+                )
+                categories.forEach { category ->
+                    CategoryPill(
+                        label = category,
+                        selected = selectedFilter == HomeFilter.Category(category),
+                        onClick = { selectedFilter = HomeFilter.Category(category) }
+                    )
                 }
             }
 
@@ -224,6 +298,22 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         actionLabel = "CLEAR SEARCH",
                         onAction = { searchQuery = "" }
+                    )
+                } else if (selectedFilter != HomeFilter.All) {
+                    val filterLabel = when (val filter = selectedFilter) {
+                        HomeFilter.HotSale -> "Hot Sale"
+                        HomeFilter.Promos -> "Promos"
+                        HomeFilter.FlashSales -> "Flash Sales"
+                        is HomeFilter.Category -> filter.name
+                        HomeFilter.All -> ""
+                    }
+                    EmptyState(
+                        icon = Icons.Default.Search,
+                        title = "Nothing in $filterLabel right now",
+                        detail = "Check back later, or browse everything instead.",
+                        modifier = Modifier.weight(1f),
+                        actionLabel = "CLEAR FILTER",
+                        onAction = { selectedFilter = HomeFilter.All }
                     )
                 } else {
                     EmptyState(
@@ -253,6 +343,63 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatusTile(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(if (selected) Forest else ForestSurface),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) Color.White else Forest,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) Forest else Ink
+        )
+    }
+}
+
+@Composable
+private fun CategoryPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) Forest else PillGray)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Color.White else Ink,
+            fontWeight = FontWeight.Medium,
+            fontSize = 12.sp
+        )
     }
 }
 
