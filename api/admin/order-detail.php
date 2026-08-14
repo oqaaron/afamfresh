@@ -81,6 +81,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([$riderId, $orderId]);
 
                 $dbh->commit();
+
+                // Same notification as admin/orders.php's assign_rider — this
+                // file duplicates that action, so it duplicates this too.
+                try {
+                    require_once __DIR__ . '/../includes/notifications.php';
+                    $riderUser = $dbh->prepare("SELECT user_id FROM riders WHERE id = ?");
+                    $riderUser->execute([$riderId]);
+                    $riderUserId = $riderUser->fetchColumn();
+                    if ($riderUserId) {
+                        addNotification(
+                            (int)$riderUserId,
+                            'New delivery assigned',
+                            "You've been assigned order #{$orderId}. Head to the warehouse to collect it.",
+                            'order', null, ['push'],
+                            ['order_id' => (string)$orderId, 'source' => 'order']
+                        );
+                    }
+                } catch (Throwable $e) {
+                    error_log('order-detail assign_rider notification failed: ' . $e->getMessage());
+                }
             } catch (PDOException $e) {
                 if ($dbh->inTransaction()) $dbh->rollBack();
                 error_log('order-detail assign_rider failed: ' . $e->getMessage());

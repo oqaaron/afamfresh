@@ -87,14 +87,14 @@ try {
 
 $orderId = null;
 try {
-    $stmt = $dbh->prepare("SELECT orderid, payment_status FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $fromRef = (int)explode('-', $merchantRef)[0];
         if ($fromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE orderid = ?");
             $stmt->execute([$fromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -119,6 +119,24 @@ try {
             } elseif ($mapped !== 'pending') {
                 $stmt = $dbh->prepare("UPDATE orders SET payment_status = ? WHERE orderid = ?");
                 $stmt->execute([$mapped, $orderId]);
+            }
+
+            // Same notification api/payment.php's verify action sends.
+            if (($mapped === 'paid' || $mapped === 'failed') && !empty($order['user_id'])) {
+                try {
+                    require_once __DIR__ . '/includes/notifications.php';
+                    addNotification(
+                        (int)$order['user_id'],
+                        $mapped === 'paid' ? 'Payment confirmed' : 'Payment failed',
+                        $mapped === 'paid'
+                            ? "Your payment for order #{$orderId} was confirmed."
+                            : "Your payment for order #{$orderId} didn't go through. Tap to retry.",
+                        'order', null, ['push'],
+                        ['order_id' => (string)$orderId, 'source' => 'order']
+                    );
+                } catch (Throwable $e) {
+                    error_log("Pesapal callback notification failed for order $orderId: " . $e->getMessage());
+                }
             }
         }
     } else {

@@ -81,6 +81,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([$riderId, $orderId]);
 
                 $dbh->commit();
+
+                // Told after commit, never inside the transaction: a
+                // notification failure must not roll back a real assignment.
+                // Same shape as admin/surplus-orders.php's own rider-assigned
+                // notification, which shop orders never had.
+                try {
+                    require_once __DIR__ . '/../includes/notifications.php';
+                    $riderUser = $dbh->prepare("SELECT user_id FROM riders WHERE id = ?");
+                    $riderUser->execute([$riderId]);
+                    $riderUserId = $riderUser->fetchColumn();
+                    if ($riderUserId) {
+                        addNotification(
+                            (int)$riderUserId,
+                            'New delivery assigned',
+                            "You've been assigned order #{$orderId}. Head to the warehouse to collect it.",
+                            'order', null, ['push'],
+                            ['order_id' => (string)$orderId, 'source' => 'order']
+                        );
+                    }
+                } catch (Throwable $e) {
+                    error_log('assign_rider notification failed: ' . $e->getMessage());
+                }
             } catch (PDOException $e) {
                 if ($dbh->inTransaction()) $dbh->rollBack();
                 error_log('assign_rider failed: ' . $e->getMessage());

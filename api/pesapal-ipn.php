@@ -130,14 +130,14 @@ try {
         ipnDone('processed', ['surplus_order_id' => $surplusId, 'payment_status' => $mapped]);
     }
 
-    $stmt = $dbh->prepare("SELECT orderid, payment_status FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $orderIdFromRef = (int)explode('-', $merchantRef)[0];
         if ($orderIdFromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE orderid = ?");
             $stmt->execute([$orderIdFromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -186,6 +186,27 @@ try {
               WHERE orderid = ? AND payment_method IN ('unknown','mobile_money','card')"
         )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
     }
+
+    // Same notification api/payment.php's verify action sends — added here
+    // for whenever the IPN host actually has a DNS record and this path
+    // starts firing in practice (it doesn't today, per known ops gap).
+    if (($mapped === 'paid' || $mapped === 'failed') && !empty($order['user_id'])) {
+        try {
+            require_once __DIR__ . '/includes/notifications.php';
+            addNotification(
+                (int)$order['user_id'],
+                $mapped === 'paid' ? 'Payment confirmed' : 'Payment failed',
+                $mapped === 'paid'
+                    ? "Your payment for order #{$orderId} was confirmed."
+                    : "Your payment for order #{$orderId} didn't go through. Tap to retry.",
+                'order', null, ['push'],
+                ['order_id' => (string)$orderId, 'source' => 'order']
+            );
+        } catch (Throwable $e) {
+            error_log("Pesapal IPN notification failed for order $orderId: " . $e->getMessage());
+        }
+    }
+
     // Recorded even when $mapped changed nothing. An IPN that arrived and did
     // not move the order is exactly the evidence wanted in a dispute -- it
     // proves the notification was received and what it said.
