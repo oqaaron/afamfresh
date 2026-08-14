@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../admin/includes/config.php';
+require_once __DIR__ . '/notifications.php';
 
 /**
  * Add a role to a user
@@ -442,6 +443,16 @@ function approveRoleRequest($requestId) {
         $updateStmt = $dbh->prepare("UPDATE role_requests SET status = 'approved' WHERE id = ?");
         $updateStmt->execute([$requestId]);
 
+        try {
+            addNotification(
+                (int)$userId, 'Application approved',
+                "Your {$requestedRole} application has been approved. You can now switch to your new role.",
+                'account', null, ['push', 'email']
+            );
+        } catch (Throwable $e) {
+            error_log("Role approval notification failed: " . $e->getMessage());
+        }
+
         return true;
     } catch (PDOException $e) {
         error_log("Approve role request error: " . $e->getMessage());
@@ -457,8 +468,28 @@ function approveRoleRequest($requestId) {
 function rejectRoleRequest($requestId) {
     global $dbh;
     try {
-        $stmt = $dbh->prepare("UPDATE role_requests SET status = 'rejected' WHERE id = ?");
-        return $stmt->execute([$requestId]);
+        // Fetched first (rather than a bare UPDATE) so the applicant can be
+        // told — the AND status='pending' guard mirrors approveRoleRequest()
+        // and stops a double-reject sending a second notification.
+        $stmt = $dbh->prepare("SELECT user_id, requested_role FROM role_requests WHERE id = ? AND status = 'pending'");
+        $stmt->execute([$requestId]);
+        $request = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$request) return false;
+
+        $updateStmt = $dbh->prepare("UPDATE role_requests SET status = 'rejected' WHERE id = ?");
+        $updateStmt->execute([$requestId]);
+
+        try {
+            addNotification(
+                (int)$request['user_id'], 'Application update',
+                "Your {$request['requested_role']} application was not approved this time.",
+                'account', null, ['push', 'email']
+            );
+        } catch (Throwable $e) {
+            error_log("Role rejection notification failed: " . $e->getMessage());
+        }
+
+        return true;
     } catch (PDOException $e) {
         error_log("Reject role request error: " . $e->getMessage());
         return false;

@@ -33,16 +33,25 @@ require_once __DIR__ . '/../admin/includes/config.php';
  *                          unsubscribe. Reserved for the two moments a customer
  *                          needs to know without opening anything — their order
  *                          was placed, and it is on its way.
+ * @param array $extraData - Raw keys merged into the FCM data payload
+ *                          alongside 'link' (e.g. ['order_id'=>'123',
+ *                          'source'=>'order']). Optional; most callers don't
+ *                          need this — it exists for notifications a client
+ *                          needs to deep-link into a specific order.
  * @return bool - Success status
  */
-function addNotification($userId, $title, $message, $type = 'system', $link = null, array $channels = ['push']) {
+function addNotification($userId, $title, $message, $type = 'system', $link = null, array $channels = ['push'], array $extraData = []) {
     try {
         $event = new NotificationEvent(
             (int)$userId,
             $type,
             $title,
             $message,
-            $link !== null ? ['link' => $link] : [],
+            // $extraData lets a caller put raw keys (order_id, source) into
+            // the FCM data payload alongside link — needed so the client's
+            // tap-to-open can resolve which order/table a notification is
+            // about, which $link alone (a URL string) cannot give it.
+            array_merge($link !== null ? ['link' => $link] : [], $extraData),
             $channels
         );
 

@@ -548,6 +548,29 @@ switch ($action) {
         $mapped = $pesapal->mapStatus($status);
         applyPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
+        // Told once the status is settled — 'pending' is still in flight and
+        // says nothing worth interrupting the customer for. This is the path
+        // that actually fires in practice: the app polls this action
+        // directly (PaymentConfirmingScreen), unlike the IPN/callback paths,
+        // which have their own equivalent notification calls for whenever
+        // those become reachable.
+        if ($mapped === 'paid' || $mapped === 'failed') {
+            try {
+                require_once __DIR__ . '/../includes/notifications.php';
+                addNotification(
+                    (int)$userId,
+                    $mapped === 'paid' ? 'Payment confirmed' : 'Payment failed',
+                    $mapped === 'paid'
+                        ? "Your payment for order #{$orderId} was confirmed."
+                        : "Your payment for order #{$orderId} didn't go through. Tap to retry.",
+                    'order', null, ['push'],
+                    ['order_id' => (string)$orderId, 'source' => 'order']
+                );
+            } catch (Throwable $e) {
+                error_log("payment verify notification failed for order $orderId: " . $e->getMessage());
+            }
+        }
+
         // Same as the surplus branch: record the instrument rather than
         // reporting it to the app and discarding it. The guard on
         // payment_method stops a verify overwriting a confirmed cash collection.
