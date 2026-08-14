@@ -109,7 +109,7 @@ try {
 
     log_line('done: ' . count($pending) . ' migration(s) applied');
 } finally {
-    $dbh->exec("SELECT RELEASE_LOCK(" . $dbh->quote($lockName) . ")");
+    $dbh->query("SELECT RELEASE_LOCK(" . $dbh->quote($lockName) . ")")->closeCursor();
 }
 
 /**

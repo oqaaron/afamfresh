@@ -58,7 +58,19 @@ if (file_exists(DB_SOCKET)) {
 // DB_SSL_CA holds the PEM itself rather than a path, because the platforms
 // this runs on inject configuration as environment variables and have no
 // persistent disk to put a file on.
-$pdoOptions = [];
+//
+// MYSQL_ATTR_USE_BUFFERED_QUERY: without it, a true (non-emulated) prepared
+// statement's result stays "unbuffered" until every row is read AND the
+// cursor is explicitly closed. scripts/run-migrations.php hit this directly
+// -- a `query(...)->fetchColumn()` for GET_LOCK() left its single-row result
+// open, and the very next statement on the same connection failed with
+// "SQLSTATE[HY000]: General error: 2014 Cannot execute queries while other
+// unbuffered queries are active." HTTP endpoints mostly dodge this because
+// each request is a fresh connection with one query in flight at a time, but
+// a long-running CLI script issuing several queries in sequence hits it
+// reliably. Buffered is also simply the safer default here -- nothing in
+// this app streams a result set large enough to need unbuffered mode.
+$pdoOptions = [PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true];
 $sslCa = trim((string)env('DB_SSL_CA', ''));
 if ($sslCa !== '' && !file_exists(DB_SOCKET)) {
     // The filename carries the effective uid. Two processes share this
