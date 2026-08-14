@@ -132,11 +132,36 @@ data class OrderDetailResponse(
     @SerializedName("error") val error: String? = null
 )
 
+/**
+ * Body for `loyalty-quote.php` — shared by shop and surplus checkout, since
+ * the calculation is identical once you have a goods value: how many of the
+ * REQUESTED points can actually be redeemed, and the resulting discount.
+ * Read-only; writes nothing.
+ */
+data class LoyaltyQuoteRequest(
+    @SerializedName("points") val points: Int,
+    @SerializedName("goods_value") val goodsValue: Double
+)
+
+data class LoyaltyQuoteResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("points_applied") val pointsApplied: Int = 0,
+    @SerializedName("discount") val discount: Double = 0.0,
+    /** True when the requested amount got capped by max_redeem_percent. */
+    @SerializedName("capped") val capped: Boolean = false,
+    @SerializedName("balance") val balance: Int = 0,
+    @SerializedName("error") val error: String? = null
+)
+
 data class OrderCreateResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("order_id") val orderId: String? = null,
     @SerializedName("message") val message: String? = null,
-    @SerializedName("error") val error: String? = null
+    @SerializedName("error") val error: String? = null,
+    // Both null on any app build that never sends points_redeem — additive,
+    // backward compatible.
+    @SerializedName("points_applied") val pointsApplied: Int? = null,
+    @SerializedName("loyalty_discount") val loyaltyDiscount: Double? = null
 )
 
 // Confirmed field names — this exact shape is constructed in MainScreen.kt's

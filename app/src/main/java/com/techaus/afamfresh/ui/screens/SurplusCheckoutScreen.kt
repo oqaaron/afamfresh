@@ -89,7 +89,8 @@ fun SurplusCheckoutScreen(
     onBack: () -> Unit,
     onPickLocation: () -> Unit,
     onPaymentRedirect: (paymentUrl: String, transactionId: String) -> Unit,
-    onOrderPlacedUnpaid: () -> Unit
+    onOrderPlacedUnpaid: () -> Unit,
+    availableLoyaltyPoints: Int = 0
 ) {
     if (listing == null) {
         // Reached by id from a list that has since been reloaded, or a deep
@@ -127,10 +128,18 @@ fun SurplusCheckoutScreen(
     var area by remember { mutableStateOf(defaultAddress?.area.orEmpty()) }
     var notes by remember { mutableStateOf("") }
     var payWithCash by remember { mutableStateOf(false) }
+    var pointsToRedeem by remember { mutableStateOf(0) }
 
     val unit = listing.unit?.takeIf { it.isNotBlank() } ?: if (listing.isWeightBased) "kg" else "units"
     val goodsTotal = quantity * listing.discountedPrice
     val totalWeight = quantity * listing.weightPerUnitKg
+
+    val loyaltyPreview by surplusViewModel.loyaltyPreview.collectAsState()
+    val loyaltyDiscount = loyaltyPreview?.discount ?: 0.0
+
+    LaunchedEffect(pointsToRedeem, goodsTotal) {
+        surplusViewModel.quoteLoyaltyPoints(pointsToRedeem, goodsTotal)
+    }
 
     // The same three limits the server enforces, checked here so the customer
     // learns before filling in an address rather than after submitting.
@@ -278,6 +287,42 @@ fun SurplusCheckoutScreen(
                 )
             }
 
+            if (availableLoyaltyPoints > 0) {
+                SectionCard(title = "Loyalty points") {
+                    Text(
+                        "You have $availableLoyaltyPoints points available.",
+                        fontSize = 13.sp,
+                        color = InkMuted
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { pointsToRedeem = (pointsToRedeem - 50).coerceAtLeast(0) },
+                            enabled = pointsToRedeem > 0
+                        ) { Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Forest) }
+
+                        Text(
+                            "$pointsToRedeem points",
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = Ink
+                        )
+
+                        IconButton(
+                            onClick = {
+                                pointsToRedeem = (pointsToRedeem + 50).coerceAtMost(availableLoyaltyPoints)
+                            },
+                            enabled = pointsToRedeem < availableLoyaltyPoints
+                        ) { Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Forest) }
+                    }
+                    if (loyaltyPreview?.capped == true) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("Capped to what this order can apply.", fontSize = 11.sp, color = InkMuted)
+                    }
+                }
+            }
+
             SectionCard(title = "How you'll pay") {
                 PaymentChoice(
                     label = "Mobile money or card",
@@ -299,7 +344,9 @@ fun SurplusCheckoutScreen(
                 quote = quote,
                 loading = quoteLoading,
                 pickupOnly = listing.pickupOnly,
-                hasPin = pinnedLat != null
+                hasPin = pinnedLat != null,
+                loyaltyPointsApplied = loyaltyPreview?.pointsApplied ?: 0,
+                loyaltyDiscount = loyaltyDiscount
             )
 
             quoteError?.let { e ->
@@ -338,7 +385,8 @@ fun SurplusCheckoutScreen(
                         // charge for a journey that was never measured.
                         deliveryLat = pinnedLat ?: defaultAddress?.lat,
                         deliveryLng = pinnedLng ?: defaultAddress?.lng,
-                        orderNotes = notes.takeIf { it.isNotBlank() }
+                        orderNotes = notes.takeIf { it.isNotBlank() },
+                        pointsRedeem = loyaltyPreview?.pointsApplied?.takeIf { it > 0 }
                     )
 
                     surplusViewModel.placeOrder(request) { orderId, _ ->
@@ -528,7 +576,9 @@ private fun TotalsCard(
     quote: SurplusQuoteResponse?,
     loading: Boolean,
     pickupOnly: Boolean,
-    hasPin: Boolean
+    hasPin: Boolean,
+    loyaltyPointsApplied: Int = 0,
+    loyaltyDiscount: Double = 0.0
 ) {
     val b = quote?.breakdown
 
@@ -575,6 +625,11 @@ private fun TotalsCard(
             FeeLine("Delivery", if (loading) "Working it out…" else "—", bold = false)
         }
 
+        if (loyaltyDiscount > 0) {
+            Spacer(Modifier.height(6.dp))
+            FeeLine("Loyalty points ($loyaltyPointsApplied)", "-${formatUgx(loyaltyDiscount)}", bold = false)
+        }
+
         Spacer(Modifier.height(10.dp))
         HorizontalDivider()
         Spacer(Modifier.height(10.dp))
@@ -586,7 +641,7 @@ private fun TotalsCard(
                 color = Ink
             )
             Text(
-                formatUgx(quote?.grandTotal ?: goodsTotal),
+                formatUgx((quote?.grandTotal ?: goodsTotal) - loyaltyDiscount),
                 fontWeight = FontWeight.Bold,
                 color = Forest
             )

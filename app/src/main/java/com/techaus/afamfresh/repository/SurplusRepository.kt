@@ -4,6 +4,8 @@ import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.CreateSurplusOrderRequest
 import com.techaus.afamfresh.models.CreateSurplusOrderResponse
+import com.techaus.afamfresh.models.LoyaltyQuoteRequest
+import com.techaus.afamfresh.models.LoyaltyQuoteResponse
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusListingsResponse
 import com.techaus.afamfresh.models.SurplusOrder
@@ -137,5 +139,21 @@ class SurplusRepository(
                 else -> callback(false, ApiError.reported(body?.error))
             }
         }
+    }
+
+    /** How many requested points can actually be redeemed, and the discount. */
+    fun getLoyaltyQuote(
+        points: Int,
+        goodsValue: Double,
+        callback: (LoyaltyQuoteResponse?, ApiError?) -> Unit
+    ) {
+        apiService.getLoyaltyQuote(LoyaltyQuoteRequest(points, goodsValue))
+            .enqueueApi<LoyaltyQuoteResponse>("SurplusRepo", "getLoyaltyQuote") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
     }
 }

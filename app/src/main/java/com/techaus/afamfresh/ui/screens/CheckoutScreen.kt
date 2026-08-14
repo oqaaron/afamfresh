@@ -45,7 +45,8 @@ fun CheckoutScreen(
     deliveryResultViewModel: DeliveryResultViewModel,
     addressViewModel: AddressViewModel,
     userEmail: String?,
-    userPhone: String?
+    userPhone: String?,
+    availableLoyaltyPoints: Int = 0
 ) {
     val deliveryResult by deliveryResultViewModel.deliveryResult.collectAsState()
     val savedAddresses by addressViewModel.addresses.collectAsState()
@@ -90,7 +91,16 @@ fun CheckoutScreen(
 
     val subtotal = cartItems.sumOf { it.lineTotal }
     val deliveryCost = deliveryResult?.cost ?: 0.0
-    val total = subtotal + deliveryCost
+
+    var pointsToRedeem by remember { mutableStateOf(0) }
+    val loyaltyPreview by checkoutViewModel.loyaltyPreview.collectAsState()
+    val loyaltyDiscount = loyaltyPreview?.discount ?: 0.0
+
+    LaunchedEffect(pointsToRedeem, subtotal) {
+        checkoutViewModel.quoteLoyaltyPoints(pointsToRedeem, subtotal)
+    }
+
+    val total = subtotal + deliveryCost - loyaltyDiscount
     val isBusy = isPlacingOrder || isPaying
 
     fun submitOrder() {
@@ -102,7 +112,8 @@ fun CheckoutScreen(
             area = area,
             address = address,
             email = email,
-            deliveryResult = deliveryResult
+            deliveryResult = deliveryResult,
+            pointsRedeem = loyaltyPreview?.pointsApplied ?: 0
         ) { placed ->
             if (placed == null) return@placeOrder
 
@@ -258,6 +269,48 @@ fun CheckoutScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (availableLoyaltyPoints > 0) {
+                SectionCard(title = "Loyalty points") {
+                    Text(
+                        "You have $availableLoyaltyPoints points available.",
+                        fontSize = 13.sp,
+                        color = InkMuted
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { pointsToRedeem = (pointsToRedeem - 50).coerceAtLeast(0) },
+                            enabled = pointsToRedeem > 0
+                        ) { Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Forest) }
+
+                        Text(
+                            "$pointsToRedeem points",
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = Ink
+                        )
+
+                        IconButton(
+                            onClick = {
+                                pointsToRedeem = (pointsToRedeem + 50).coerceAtMost(availableLoyaltyPoints)
+                            },
+                            enabled = pointsToRedeem < availableLoyaltyPoints
+                        ) { Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Forest) }
+                    }
+                    if (loyaltyPreview?.capped == true) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Capped to what this order can apply.",
+                            fontSize = 11.sp,
+                            color = InkMuted
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             SectionCard(title = "Payment method") {
                 PaymentOptionRow(
                     label = "Mobile Money / Card (Pesapal)",
@@ -298,6 +351,13 @@ fun CheckoutScreen(
                         deliveryResult?.let { formatUgx(it.cost) } ?: "Select location above",
                         color = InkMuted
                     )
+                }
+                if (loyaltyDiscount > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Loyalty points (${loyaltyPreview?.pointsApplied ?: 0})", color = Forest)
+                        Text("-${formatUgx(loyaltyDiscount)}", color = Forest)
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

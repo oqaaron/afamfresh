@@ -365,7 +365,8 @@ fun MainScreen(
                         navController.navigate("surplus_orders") {
                             popUpTo("surplus") { inclusive = false }
                         }
-                    }
+                    },
+                    availableLoyaltyPoints = user?.loyaltyPoints ?: 0
                 )
             }
 
@@ -600,7 +601,8 @@ fun MainScreen(
                     deliveryResultViewModel = deliveryResultViewModel,
                     addressViewModel = addressViewModel,
                     userEmail = user?.email,
-                    userPhone = user?.mobile
+                    userPhone = user?.mobile,
+                    availableLoyaltyPoints = user?.loyaltyPoints ?: 0
                 )
             }
 

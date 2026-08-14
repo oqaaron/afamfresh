@@ -1,15 +1,19 @@
 package com.techaus.afamfresh.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.techaus.afamfresh.models.CartItem
 import com.techaus.afamfresh.models.DeliveryResult
 import com.techaus.afamfresh.repository.OrderRepository
 import com.techaus.afamfresh.utils.OrderCalc
 import com.techaus.afamfresh.repository.PaymentRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // Constructor confirmed by MainActivity.kt:
 //   checkoutViewModel = CheckoutViewModel(orderRepository, paymentRepository)
@@ -35,6 +39,36 @@ class CheckoutViewModel(
     private val _orderPlaced = MutableStateFlow<OrderPlaced?>(null)
     val orderPlaced: StateFlow<OrderPlaced?> = _orderPlaced.asStateFlow()
 
+    data class LoyaltyPreview(val pointsApplied: Int, val discount: Double, val capped: Boolean)
+
+    private val _loyaltyPreview = MutableStateFlow<LoyaltyPreview?>(null)
+    val loyaltyPreview: StateFlow<LoyaltyPreview?> = _loyaltyPreview.asStateFlow()
+
+    private var quoteJob: Job? = null
+
+    /**
+     * Debounced live quote as the customer adjusts how many points to
+     * redeem — calls the server (loyalty-quote.php via OrderRepository) so
+     * this preview can never disagree with what create-order actually
+     * applies for the same requested amount; see quoteLoyaltyRedemption()
+     * server-side.
+     */
+    fun quoteLoyaltyPoints(points: Int, goodsValue: Double) {
+        quoteJob?.cancel()
+        if (points <= 0 || goodsValue <= 0) {
+            _loyaltyPreview.value = null
+            return
+        }
+        quoteJob = viewModelScope.launch {
+            delay(350L)
+            orderRepository.getLoyaltyQuote(points, goodsValue) { body, _ ->
+                _loyaltyPreview.value = body?.let {
+                    LoyaltyPreview(it.pointsApplied, it.discount, it.capped)
+                }
+            }
+        }
+    }
+
     fun placeOrder(
         cartItems: List<CartItem>,
         fname: String,
@@ -44,6 +78,7 @@ class CheckoutViewModel(
         address: String,
         email: String,
         deliveryResult: DeliveryResult?,
+        pointsRedeem: Int = 0,
         onResult: (OrderPlaced?) -> Unit
     ) {
         if (cartItems.isEmpty()) {
@@ -83,7 +118,8 @@ class CheckoutViewModel(
             dropoffLat = deliveryResult?.dropoffLat ?: 0.0,
             dropoffLng = deliveryResult?.dropoffLng ?: 0.0,
             distanceKm = deliveryResult?.distanceKm ?: 0.0,
-            deliveryCost = deliveryCost
+            deliveryCost = deliveryCost,
+            pointsRedeem = pointsRedeem
         ) { response, error ->
             _isLoading.value = false
             if (response?.success == true && response.orderId != null) {

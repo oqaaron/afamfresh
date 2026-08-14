@@ -170,8 +170,21 @@ interface ApiService {
         @Field("dropoff_lat") dropoffLat: Double = 0.0,
         @Field("dropoff_lng") dropoffLng: Double = 0.0,
         @Field("distance_km") distanceKm: Double = 0.0,
-        @Field("delivery_cost") deliveryCost: Double = 0.0
+        @Field("delivery_cost") deliveryCost: Double = 0.0,
+        @Field("points_redeem") pointsRedeem: Int = 0
     ): Call<OrderCreateResponse>
+
+    /**
+     * How many of a customer's requested loyalty points can actually be
+     * redeemed against a goods value, and the resulting discount — before
+     * committing to an order. Shared by shop and surplus checkout; see
+     * LoyaltyQuoteRequest's own doc.
+     */
+    @POST("loyalty-quote.php")
+    @Headers("Content-Type: application/json")
+    fun getLoyaltyQuote(
+        @Body request: LoyaltyQuoteRequest
+    ): Call<LoyaltyQuoteResponse>
 
     // ✅ Update Order.
     //

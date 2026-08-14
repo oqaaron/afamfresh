@@ -1,15 +1,19 @@
 package com.techaus.afamfresh.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.techaus.afamfresh.models.CreateSurplusOrderRequest
 import com.techaus.afamfresh.models.SurplusListing
 import com.techaus.afamfresh.models.SurplusOrder
 import com.techaus.afamfresh.models.SurplusQuoteRequest
 import com.techaus.afamfresh.models.SurplusQuoteResponse
 import com.techaus.afamfresh.repository.SurplusRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 // Constructor confirmed by MainActivity.kt: SurplusViewModel(surplusRepository)
 class SurplusViewModel(
@@ -96,6 +100,34 @@ class SurplusViewModel(
     fun clearQuote() {
         _quote.value = null
         _quoteError.value = null
+    }
+
+    // ---------------------------------------------------------------
+    // Loyalty redemption preview
+    // ---------------------------------------------------------------
+
+    data class LoyaltyPreview(val pointsApplied: Int, val discount: Double, val capped: Boolean)
+
+    private val _loyaltyPreview = MutableStateFlow<LoyaltyPreview?>(null)
+    val loyaltyPreview: StateFlow<LoyaltyPreview?> = _loyaltyPreview.asStateFlow()
+
+    private var loyaltyQuoteJob: Job? = null
+
+    /** Debounced live quote — see CheckoutViewModel.quoteLoyaltyPoints's own doc. */
+    fun quoteLoyaltyPoints(points: Int, goodsValue: Double) {
+        loyaltyQuoteJob?.cancel()
+        if (points <= 0 || goodsValue <= 0) {
+            _loyaltyPreview.value = null
+            return
+        }
+        loyaltyQuoteJob = viewModelScope.launch {
+            delay(350L)
+            surplusRepository.getLoyaltyQuote(points, goodsValue) { body, _ ->
+                _loyaltyPreview.value = body?.let {
+                    LoyaltyPreview(it.pointsApplied, it.discount, it.capped)
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------

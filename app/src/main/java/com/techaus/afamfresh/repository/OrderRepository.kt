@@ -3,6 +3,8 @@ package com.techaus.afamfresh.repository
 import android.util.Log
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.BaseResponse
+import com.techaus.afamfresh.models.LoyaltyQuoteRequest
+import com.techaus.afamfresh.models.LoyaltyQuoteResponse
 import com.techaus.afamfresh.models.Order
 import com.techaus.afamfresh.models.OrderCreateResponse
 import com.techaus.afamfresh.models.OrderDetailResponse
@@ -36,6 +38,7 @@ class OrderRepository(
         dropoffLng: Double = 0.0,
         distanceKm: Double = 0.0,
         deliveryCost: Double = 0.0,
+        pointsRedeem: Int = 0,
         callback: (OrderCreateResponse?, ApiError?) -> Unit
     ) {
         try {
@@ -56,7 +59,8 @@ class OrderRepository(
                 dropoffLat = dropoffLat,
                 dropoffLng = dropoffLng,
                 distanceKm = distanceKm,
-                deliveryCost = deliveryCost
+                deliveryCost = deliveryCost,
+                pointsRedeem = pointsRedeem
             ).enqueueApi<OrderCreateResponse>("OrderRepo", "createOrder") { body, error ->
                 when {
                     error != null -> callback(null, error)
@@ -175,5 +179,21 @@ class OrderRepository(
                 else -> callback(false, ApiError.reported(body?.error))
             }
         }
+    }
+
+    /** How many requested points can actually be redeemed, and the discount. */
+    fun getLoyaltyQuote(
+        points: Int,
+        goodsValue: Double,
+        callback: (LoyaltyQuoteResponse?, ApiError?) -> Unit
+    ) {
+        apiService.getLoyaltyQuote(LoyaltyQuoteRequest(points, goodsValue))
+            .enqueueApi<LoyaltyQuoteResponse>("OrderRepo", "getLoyaltyQuote") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true -> callback(body, null)
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
     }
 }

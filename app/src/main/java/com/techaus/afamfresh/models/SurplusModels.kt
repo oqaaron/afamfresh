@@ -165,7 +165,8 @@ data class CreateSurplusOrderRequest(
     @SerializedName("delivery_area") val deliveryArea: String? = null,
     @SerializedName("delivery_lat") val deliveryLat: Double? = null,
     @SerializedName("delivery_lng") val deliveryLng: Double? = null,
-    @SerializedName("order_notes") val orderNotes: String? = null
+    @SerializedName("order_notes") val orderNotes: String? = null,
+    @SerializedName("points_redeem") val pointsRedeem: Int? = null
 ) {
     companion object {
         const val MIN_ORDER_VALUE = 250_000.0
@@ -192,6 +193,12 @@ data class CreateSurplusOrderResponse(
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
     @SerializedName("total_weight_kg") val totalWeightKg: Double = 0.0,
     @SerializedName("grand_total") val grandTotal: Double = 0.0,
+    // Both null on any app build that never sends points_redeem — additive,
+    // backward compatible.
+    @SerializedName("points_applied") val pointsApplied: Int? = null,
+    @SerializedName("loyalty_discount") val loyaltyDiscount: Double? = null,
+    /** What's actually charged — grandTotal minus loyaltyDiscount. */
+    @SerializedName("payable_total") val payableTotal: Double? = null,
     // Failures come back as {"error": "..."} with no success flag.
     @SerializedName("error") val error: String? = null
 )
