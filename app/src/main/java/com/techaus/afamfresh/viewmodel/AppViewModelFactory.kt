@@ -8,7 +8,7 @@ import com.techaus.afamfresh.repository.AddressRepository
 import com.techaus.afamfresh.repository.AppRepository
 import com.techaus.afamfresh.repository.AuthRepository
 import com.techaus.afamfresh.repository.DeliveryRepository
-import com.techaus.afamfresh.repository.LocalAddressRepository
+import com.techaus.afamfresh.repository.ServerAddressRepository
 import com.techaus.afamfresh.repository.NotificationRepository
 import com.techaus.afamfresh.repository.OrderRepository
 import com.techaus.afamfresh.repository.PaymentRepository
@@ -65,7 +65,7 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
      * Declared as the interface, not the concrete class, so replacing this one
      * line with a network-backed implementation is the whole migration.
      */
-    private val addressRepository: AddressRepository = LocalAddressRepository(appContext)
+    private val addressRepository: AddressRepository = ServerAddressRepository(apiService)
 
     private val notificationRepository = NotificationRepository(apiService)
 

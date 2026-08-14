@@ -4,7 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.models.Address
+import com.techaus.afamfresh.models.AddressesResponse
+import com.techaus.afamfresh.models.BaseResponse
+import com.techaus.afamfresh.models.SaveAddressResponse
+import com.techaus.afamfresh.utils.enqueueApi
 import java.util.UUID
 
 /**
@@ -147,5 +152,66 @@ class LocalAddressRepository(context: Context) : AddressRepository {
         val updated = readAll().map { it.copy(isDefault = it.id == id) }
         writeAll(updated)
         callback(true)
+    }
+}
+
+/**
+ * Network-backed implementation, talking to `api/addresses.php` — the
+ * endpoint contract [LocalAddressRepository]'s KDoc above specifies.
+ *
+ * [newId] returns an empty string rather than a UUID: the ViewModel always
+ * calls it before [saveAddress] when creating (see
+ * `AddressViewModel.save()`), so a blank id is how [saveAddress] tells a
+ * create from an update. The server assigns the real id; [saveAddress]'s
+ * caller never needs it directly, since [AddressViewModel] always calls
+ * [getAddresses] again right after a save completes.
+ */
+class ServerAddressRepository(
+    private val apiService: ApiService
+) : AddressRepository {
+
+    private companion object {
+        const val TAG = "AddressRepo"
+    }
+
+    override fun newId(): String = ""
+
+    override fun getAddresses(callback: (List<Address>) -> Unit) {
+        apiService.getAddresses().enqueueApi<AddressesResponse>(TAG, "getAddresses") { body, error ->
+            if (error != null || body?.success != true) {
+                Log.e(TAG, "getAddresses failed: ${error?.userMessage ?: body?.error}")
+                callback(emptyList())
+            } else {
+                callback(body.addresses ?: emptyList())
+            }
+        }
+    }
+
+    override fun saveAddress(address: Address, callback: (Boolean) -> Unit) {
+        val action = if (address.id.isBlank()) "create" else "update"
+        apiService.saveAddress(action, address).enqueueApi<SaveAddressResponse>(TAG, "saveAddress") { body, error ->
+            if (error != null || body?.success != true) {
+                Log.e(TAG, "saveAddress ($action) failed: ${error?.userMessage ?: body?.error}")
+            }
+            callback(error == null && body?.success == true)
+        }
+    }
+
+    override fun deleteAddress(id: String, callback: (Boolean) -> Unit) {
+        apiService.deleteAddress(id = id).enqueueApi<BaseResponse>(TAG, "deleteAddress") { body, error ->
+            if (error != null || body?.success != true) {
+                Log.e(TAG, "deleteAddress failed: ${error?.userMessage}")
+            }
+            callback(error == null && body?.success == true)
+        }
+    }
+
+    override fun setDefaultAddress(id: String, callback: (Boolean) -> Unit) {
+        apiService.setDefaultAddress(id = id).enqueueApi<BaseResponse>(TAG, "setDefaultAddress") { body, error ->
+            if (error != null || body?.success != true) {
+                Log.e(TAG, "setDefaultAddress failed: ${error?.userMessage}")
+            }
+            callback(error == null && body?.success == true)
+        }
     }
 }

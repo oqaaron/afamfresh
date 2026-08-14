@@ -622,6 +622,43 @@ interface ApiService {
         @Query("action") action: String = "mark-all-read"
     ): Call<BaseResponse>
 
+    // ============================================================
+    // SAVED ADDRESSES
+    // ============================================================
+    //
+    // Backs ServerAddressRepository (repository/AddressRepository.kt).
+    // Verified against api/addresses.php: action-routed, session-scoped to
+    // $_SESSION['user_id'], same style as notifications.php.
+
+    @GET("addresses.php")
+    fun getAddresses(
+        @Query("action") action: String = "list"
+    ): Call<AddressesResponse>
+
+    // Reuses the Address model itself as the request body — it already
+    // carries the @SerializedName values the create/update contract needs.
+    // action is "create" or "update", chosen by the caller.
+    @POST("addresses.php")
+    @Headers("Content-Type: application/json")
+    fun saveAddress(
+        @Query("action") action: String,
+        @Body address: Address
+    ): Call<SaveAddressResponse>
+
+    @POST("addresses.php")
+    @FormUrlEncoded
+    fun deleteAddress(
+        @Query("action") action: String = "delete",
+        @Field("id") id: String
+    ): Call<BaseResponse>
+
+    @POST("addresses.php")
+    @FormUrlEncoded
+    fun setDefaultAddress(
+        @Query("action") action: String = "set_default",
+        @Field("id") id: String
+    ): Call<BaseResponse>
+
     // ------------------------------------------------------------
     // FCM TOKEN REGISTRATION
     // ------------------------------------------------------------

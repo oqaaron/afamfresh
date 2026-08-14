@@ -42,3 +42,15 @@ data class Address(
     val summary: String
         get() = listOf(addressLine, area).filter { it.isNotBlank() }.joinToString(", ")
 }
+
+data class AddressesResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("addresses") val addresses: List<Address>? = null,
+    @SerializedName("error") val error: String? = null
+)
+
+data class SaveAddressResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("address") val address: Address? = null,
+    @SerializedName("error") val error: String? = null
+)
