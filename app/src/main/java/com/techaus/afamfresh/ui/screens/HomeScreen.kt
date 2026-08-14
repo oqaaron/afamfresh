@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
@@ -42,6 +43,7 @@ import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
+import kotlinx.coroutines.delay
 
 /**
  * Replaces the discontinued web storefront's homepage curation
@@ -409,6 +411,16 @@ private fun MockupStyleProductCard(
     onClick: () -> Unit,
     onQuickAdd: () -> Unit
 ) {
+    // Brief "Added" confirmation so a tap has visible effect beyond the cart
+    // badge changing off-screen — reverts on its own, no user action needed.
+    var justAdded by remember { mutableStateOf(false) }
+    LaunchedEffect(justAdded) {
+        if (justAdded) {
+            delay(900)
+            justAdded = false
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -501,22 +513,47 @@ private fun MockupStyleProductCard(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Mockup-style "Add to Cart" Pill Button
+        // Mockup-style "Add to Cart" Pill Button — fills solid green with a
+        // check for a moment on tap, then reverts to the outlined resting state.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(CircleShape)
-                .border(1.dp, Forest, CircleShape)
-                .clickable { onQuickAdd() }
+                .then(
+                    if (justAdded) Modifier.background(Forest)
+                    else Modifier.border(1.dp, Forest, CircleShape)
+                )
+                .clickable {
+                    onQuickAdd()
+                    justAdded = true
+                }
                 .padding(vertical = 7.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "Add to Cart",
-                color = Forest,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            if (justAdded) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Added",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else {
+                Text(
+                    text = "Add to Cart",
+                    color = Forest,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.ui.components.EmptyState
@@ -167,49 +168,69 @@ fun CartScreen(
 
 @Composable
 private fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -> Unit) {
-    Row(
+    // Two rows, not one: cramming the image, a possibly-long product name, the
+    // quantity stepper, and the line total into a single Row squeezed the name's
+    // weighted Column down to a sliver on some devices, and its text ran into
+    // the stepper/total next to it. Splitting into name-row + totals-row gives
+    // each its own full-width line, so nothing has to fight for space.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(CardWhite)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(12.dp)
     ) {
-        NetworkImage(
-            model = item.product.imageUrl,
-            contentDescription = item.product.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(ForestSurface)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(item.product.name, fontWeight = FontWeight.SemiBold, color = Ink)
-            Text(formatUgx(item.product.price), fontSize = 13.sp, color = InkMuted)
-        }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = onDecrease,
-                modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
-            ) {
-                Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(14.dp))
-            }
-            Text(
-                "%02d".format(item.quantity),
-                modifier = Modifier.padding(horizontal = 10.dp),
-                fontWeight = FontWeight.Medium
+            NetworkImage(
+                model = item.product.imageUrl,
+                contentDescription = item.product.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(ForestSurface)
             )
-            IconButton(
-                onClick = onIncrease,
-                modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    item.product.name,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(formatUgx(item.product.price), fontSize = 13.sp, color = InkMuted)
             }
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(formatUgx(item.lineTotal), fontWeight = FontWeight.Bold, color = Ink)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onDecrease,
+                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
+                ) {
+                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+                Text(
+                    "%02d".format(item.quantity),
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                    fontWeight = FontWeight.Medium
+                )
+                IconButton(
+                    onClick = onIncrease,
+                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+            Text(formatUgx(item.lineTotal), fontWeight = FontWeight.Bold, color = Ink)
+        }
     }
 }
 
