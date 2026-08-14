@@ -172,7 +172,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ===== Search Pill Bar (Rounded pill shape from mockup) =====
             OutlinedTextField(
@@ -206,7 +206,7 @@ fun HomeScreen(
                 )
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ===== Status quick-access row: Hot Sale / Promos / Flash Sales =====
             Row(
@@ -242,7 +242,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ===== Section Title & Category Filter Pills =====
             Row(
@@ -258,7 +258,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier
@@ -280,7 +280,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ===== Product Grid Area =====
             if (isLoadingProducts && products.isEmpty()) {
@@ -361,7 +361,7 @@ private fun StatusTile(
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(44.dp)
                 .clip(CircleShape)
                 .background(if (selected) Forest else ForestSurface),
             contentAlignment = Alignment.Center
@@ -370,7 +370,7 @@ private fun StatusTile(
                 icon,
                 contentDescription = label,
                 tint = if (selected) Color.White else Forest,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
         Spacer(modifier = Modifier.height(6.dp))
