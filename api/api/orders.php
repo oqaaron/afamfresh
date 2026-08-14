@@ -255,13 +255,24 @@ switch ($action) {
         // ------------------------------------------------------------------
         // CREATE ORDER – SUPPORTS JSON AND FORM DATA
         // ------------------------------------------------------------------
+        //
+        // total, delivery_cost, distance_km, and each item's price/
+        // product_name are deliberately NOT read from the request. They used
+        // to be — the client sent the final total and per-line prices, and
+        // this endpoint stored them verbatim. A raw POST with a fabricated
+        // total and item prices bought real products at any price the
+        // request claimed, and api/payment.php later charged exactly that
+        // number: it reads total_amount from the orders row rather than the
+        // request, which is correct, but that row had already been poisoned
+        // here at creation. Only product_id/quantity are trusted from the
+        // client now; price, delivery fee, and the final total are all
+        // computed from the database below.
         $fname = trim(getParam('fname', ''));
         $lname = trim(getParam('lname', ''));
         $mobile = trim(getParam('mobile', ''));
         $area = trim(getParam('area', ''));
         $address = trim(getParam('address', ''));
         $itemsJson = getParam('items', '[]');
-        $total = floatval(getParam('total', 0));
         $paymentMethod = getParam('payment_method', 'mobile_money');
         $email = trim(getParam('email', ''));
         $pickupAddress = trim(getParam('pickup_address', ''));
@@ -270,12 +281,10 @@ switch ($action) {
         $pickupLng = floatval(getParam('pickup_lng', 0));
         $dropoffLat = floatval(getParam('dropoff_lat', 0));
         $dropoffLng = floatval(getParam('dropoff_lng', 0));
-        $distanceKm = floatval(getParam('distance_km', 0));
-        $deliveryCost = floatval(getParam('delivery_cost', 0));
         $pointsToRedeem = intval(getParam('points_redeem', 0));
 
         // Log extracted values
-        error_log("Extracted: fname=$fname, lname=$lname, mobile=$mobile, area=$area, address=$address, total=$total");
+        error_log("Extracted: fname=$fname, lname=$lname, mobile=$mobile, area=$area, address=$address");
 
         // Validate
         if (empty($fname) || empty($lname) || empty($mobile) || empty($area) || empty($address)) {
@@ -322,40 +331,107 @@ switch ($action) {
             exit;
         }
 
-        // calculateDeliveryFee() derives service_fee/insurance_fee/
-        // processing_fee from $total alone — they don't need a distance to
-        // be knowable, unlike mileage_fee. Called unconditionally so those
-        // three are always captured, even when distance_km is absent.
-        //
-        // mileage_fee stays the one column that legitimately stays NULL
-        // without a distance: that's what lets rider earnings later tell
-        // "no distance data" apart from "genuinely zero" (is_estimated flag
-        // in includes/rider_earnings.php). The app already sends distance_km
-        // at checkout — it was just never kept, only the combined total
-        // reached this endpoint before today.
-        $breakdown = calculateDeliveryFee($total, $distanceKm);
-        $mileageFee = $distanceKm > 0 ? $breakdown['distance_fee'] : null;
-        $serviceFee = (float)$breakdown['service_fee'];
-        $insuranceFee = (float)$breakdown['insurance_fee'];
-        $processingFee = (float)$breakdown['processing_fee'];
-
         try {
             $dbh->beginTransaction();
 
-            // Loyalty redemption, if requested. $total here is
-            // subtotal + deliveryCost (CheckoutScreen.kt) and deliveryCost
-            // already bundles service/insurance/processing/mileage into one
-            // number, so goods value — what points are quoted against — is
-            // simply the difference. Only the DISCOUNT is applied now; the
-            // point DEBIT itself waits for payment to actually confirm (see
-            // settleLoyaltyRedemption(), called from api/payment.php's
-            // verify action and the Pesapal IPN/callback handlers) so an
-            // abandoned or failed order never costs the customer points
-            // they never actually spent.
+            // ------------------------------------------------------------
+            // Price every line from the database, not the request. Only
+            // product_id/quantity are trusted from $items now.
+            // ------------------------------------------------------------
+            $productIds = [];
+            $quantityByProduct = [];
+            foreach ($items as $item) {
+                $productId = (int)($item['product_id'] ?? $item['id'] ?? 0);
+                $quantity = isset($item['quantity']) ? (int)$item['quantity'] : 1;
+                if ($productId <= 0 || $quantity < 1) {
+                    $dbh->rollBack();
+                    echo json_encode(['success' => false, 'error' => 'Invalid item in cart']);
+                    exit;
+                }
+                $productIds[] = $productId;
+                // Same product id appearing twice in the cart sums correctly.
+                $quantityByProduct[$productId] = ($quantityByProduct[$productId] ?? 0) + $quantity;
+            }
+            $productIds = array_values(array_unique($productIds));
+
+            $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+            $itemLookup = $dbh->prepare(
+                "SELECT id, name, price, discount, stock_qty, status, vendor_id
+                 FROM items WHERE id IN ($placeholders)"
+            );
+            $itemLookup->execute($productIds);
+            $rowsById = [];
+            foreach ($itemLookup->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $rowsById[(int)$row['id']] = $row;
+            }
+
+            $subtotal = 0.0;
+            $orderLines = []; // [product_id, name, unit_price, quantity]
+            foreach ($productIds as $productId) {
+                $row = $rowsById[$productId] ?? null;
+                // Same rule products.php's own list/detail actions enforce —
+                // a product that isn't in the public catalogue (vendor-owned,
+                // or awaiting/rejected approval) can't be bought here either.
+                if ($row === null || $row['vendor_id'] !== null || $row['status'] !== 'approved') {
+                    $dbh->rollBack();
+                    echo json_encode(['success' => false, 'error' => 'One of these products is no longer available.']);
+                    exit;
+                }
+                if ($row['stock_qty'] !== null && (int)$row['stock_qty'] === 0) {
+                    $dbh->rollBack();
+                    echo json_encode(['success' => false, 'error' => $row['name'] . ' is out of stock.']);
+                    exit;
+                }
+
+                $quantity = $quantityByProduct[$productId];
+                // Mirrors Product.kt's effectivePrice exactly, so what is
+                // charged matches what the listing displayed.
+                $discount = (float)($row['discount'] ?? 0.0);
+                $unitPrice = (float)$row['price'] * (1 - $discount / 100);
+
+                $subtotal += $unitPrice * $quantity;
+                $orderLines[] = [
+                    'product_id' => $productId,
+                    'name' => $row['name'],
+                    'price' => $unitPrice,
+                    'quantity' => $quantity,
+                ];
+            }
+
+            // ------------------------------------------------------------
+            // Delivery fee, computed server-side from the real subtotal —
+            // the exact function api/calculate-delivery-fee.php already uses
+            // for the checkout screen's live preview, so the final charge
+            // agrees with what the customer was shown.
+            // ------------------------------------------------------------
+            $feeResult = calculateDeliveryFeeFromAddress(
+                $address, $area, $subtotal,
+                $hasDropoffPoint ? $dropoffLat : null,
+                $hasDropoffPoint ? $dropoffLng : null
+            );
+            if (!$feeResult['success']) {
+                $dbh->rollBack();
+                echo json_encode(['success' => false, 'error' => $feeResult['error']]);
+                exit;
+            }
+            $deliveryCost = (float)$feeResult['fee'];
+            $mileageFee = (float)$feeResult['breakdown']['distance_fee'];
+            $serviceFee = (float)$feeResult['breakdown']['service_fee'];
+            $insuranceFee = (float)$feeResult['breakdown']['insurance_fee'];
+            $processingFee = (float)$feeResult['breakdown']['processing_fee'];
+
+            // Loyalty redemption, if requested. $subtotal is already
+            // goods-only, so it's exactly the value points are quoted
+            // against — no delivery-fee subtraction needed, unlike when this
+            // came from a client-combined total. Only the DISCOUNT is
+            // applied now; the point DEBIT itself waits for payment to
+            // actually confirm (see settleLoyaltyRedemption(), called from
+            // api/payment.php's verify action and the Pesapal IPN/callback
+            // handlers) so an abandoned or failed order never costs the
+            // customer points they never actually spent.
             require_once __DIR__ . '/../includes/loyalty.php';
-            $goodsValue = max(0.0, $total - $deliveryCost);
-            $redeemQuote = quoteLoyaltyRedemption($dbh, (int)$user_id, $pointsToRedeem, $goodsValue);
-            $total -= $redeemQuote['discount'];
+            $redeemQuote = quoteLoyaltyRedemption($dbh, (int)$user_id, $pointsToRedeem, $subtotal);
+            $total = $subtotal + $deliveryCost - $redeemQuote['discount'];
 
             // Generate unique order ID
             do {
@@ -409,18 +485,13 @@ switch ($action) {
                 throw new Exception("Insert failed: " . $errorInfo[2]);
             }
 
-            // Insert order items
+            // Insert order items — from $orderLines (the DB-validated
+            // name/price computed above), not the client's $items.
             $itemStmt = $dbh->prepare("INSERT INTO order_items (order_id, product_id, product_name, quantity, price) VALUES (?, ?, ?, ?, ?)");
-            foreach ($items as $item) {
-                // The Android app serialises cart lines as `product_id`; the web
-                // checkout sends `id`. Reading only `id` silently wrote 0 for
-                // every app order (see order_items rows 471-476), which severs
-                // the row from the items table. Accept either spelling.
-                $productId = (int)($item['product_id'] ?? $item['id'] ?? 0);
-                $productName = $item['product_name'] ?? $item['name'] ?? 'Unknown';
-                $quantity = isset($item['quantity']) ? (int)$item['quantity'] : 1;
-                $price = isset($item['price']) ? (float)$item['price'] : 0;
-                $itemStmt->execute([$orderId, $productId, $productName, $quantity, $price]);
+            foreach ($orderLines as $line) {
+                $itemStmt->execute([
+                    $orderId, $line['product_id'], $line['name'], $line['quantity'], $line['price']
+                ]);
             }
 
             $dbh->commit();
