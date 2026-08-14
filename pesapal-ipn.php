@@ -89,14 +89,14 @@ try {
     // because the two id spaces overlap and a bare id would be ambiguous.
     $looksSurplus = stripos($merchantRef, 'SUR-') === 0;
 
-    $surplus = $dbh->prepare("SELECT id, payment_status FROM surplus_orders WHERE pesapal_tracking_id = ?");
+    $surplus = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM surplus_orders WHERE pesapal_tracking_id = ?");
     $surplus->execute([$trackingId]);
     $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
 
     if (!$surplusOrder && $looksSurplus) {
         $idFromRef = (int)(explode('-', $merchantRef)[1] ?? 0);
         if ($idFromRef > 0) {
-            $surplus = $dbh->prepare("SELECT id, payment_status FROM surplus_orders WHERE id = ?");
+            $surplus = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM surplus_orders WHERE id = ?");
             $surplus->execute([$idFromRef]);
             $surplusOrder = $surplus->fetch(PDO::FETCH_ASSOC);
         }
@@ -108,6 +108,11 @@ try {
             ipnDone('already paid', ['surplus_order_id' => $surplusId]);
         }
         applySurplusPaymentStatus($dbh, $surplusId, $mapped, $trackingId);
+
+        if ($mapped === 'paid' && (int)($surplusOrder['points_redeemed'] ?? 0) > 0) {
+            require_once __DIR__ . '/includes/loyalty.php';
+            settleLoyaltyRedemption($dbh, (int)$surplusOrder['user_id'], 'surplus', $surplusId, (int)$surplusOrder['points_redeemed']);
+        }
 
         $channel = $status['payment_method'] ?? null;
         if ($mapped === 'paid') {
@@ -130,14 +135,14 @@ try {
         ipnDone('processed', ['surplus_order_id' => $surplusId, 'payment_status' => $mapped]);
     }
 
-    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $orderIdFromRef = (int)explode('-', $merchantRef)[0];
         if ($orderIdFromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE orderid = ?");
             $stmt->execute([$orderIdFromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -185,6 +190,11 @@ try {
             "UPDATE orders SET payment_method = ?, payment_channel = ?
               WHERE orderid = ? AND payment_method IN ('unknown','mobile_money','card')"
         )->execute([classifyPaymentChannel($channel), $channel, $orderId]);
+    }
+
+    if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0 && !empty($order['user_id'])) {
+        require_once __DIR__ . '/includes/loyalty.php';
+        settleLoyaltyRedemption($dbh, (int)$order['user_id'], 'order', $orderId, (int)$order['points_redeemed']);
     }
 
     // Same notification api/payment.php's verify action sends — added here

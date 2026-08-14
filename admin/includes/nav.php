@@ -94,6 +94,7 @@ try {
 
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
+    ['configuration.php',    'Configuration',      'fa-cog'],
     ['products.php',         'Products',           'fa-box'],
     ['orders.php',           'Orders',             'fa-shopping-cart'],
     ['users.php',            'Users',              'fa-users'],

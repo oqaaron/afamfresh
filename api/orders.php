@@ -272,6 +272,7 @@ switch ($action) {
         $dropoffLng = floatval(getParam('dropoff_lng', 0));
         $distanceKm = floatval(getParam('distance_km', 0));
         $deliveryCost = floatval(getParam('delivery_cost', 0));
+        $pointsToRedeem = intval(getParam('points_redeem', 0));
 
         // Log extracted values
         error_log("Extracted: fname=$fname, lname=$lname, mobile=$mobile, area=$area, address=$address, total=$total");
@@ -321,20 +322,40 @@ switch ($action) {
             exit;
         }
 
-        // The distance component of $deliveryCost, recomputed server-side
-        // from $distanceKm rather than trusted from the client. This is what
-        // lets rider earnings be computed later without re-deriving distance
-        // from coordinates: the app already sends distance_km at checkout,
-        // it was just never kept — only the combined total reached this
-        // endpoint before today.
-        $mileageFee = null;
-        if ($distanceKm > 0) {
-            $breakdown = calculateDeliveryFee($total, $distanceKm);
-            $mileageFee = $breakdown['distance_fee'];
-        }
+        // calculateDeliveryFee() derives service_fee/insurance_fee/
+        // processing_fee from $total alone — they don't need a distance to
+        // be knowable, unlike mileage_fee. Called unconditionally so those
+        // three are always captured, even when distance_km is absent.
+        //
+        // mileage_fee stays the one column that legitimately stays NULL
+        // without a distance: that's what lets rider earnings later tell
+        // "no distance data" apart from "genuinely zero" (is_estimated flag
+        // in includes/rider_earnings.php). The app already sends distance_km
+        // at checkout — it was just never kept, only the combined total
+        // reached this endpoint before today.
+        $breakdown = calculateDeliveryFee($total, $distanceKm);
+        $mileageFee = $distanceKm > 0 ? $breakdown['distance_fee'] : null;
+        $serviceFee = (float)$breakdown['service_fee'];
+        $insuranceFee = (float)$breakdown['insurance_fee'];
+        $processingFee = (float)$breakdown['processing_fee'];
 
         try {
             $dbh->beginTransaction();
+
+            // Loyalty redemption, if requested. $total here is
+            // subtotal + deliveryCost (CheckoutScreen.kt) and deliveryCost
+            // already bundles service/insurance/processing/mileage into one
+            // number, so goods value — what points are quoted against — is
+            // simply the difference. Only the DISCOUNT is applied now; the
+            // point DEBIT itself waits for payment to actually confirm (see
+            // settleLoyaltyRedemption(), called from api/payment.php's
+            // verify action and the Pesapal IPN/callback handlers) so an
+            // abandoned or failed order never costs the customer points
+            // they never actually spent.
+            require_once __DIR__ . '/../includes/loyalty.php';
+            $goodsValue = max(0.0, $total - $deliveryCost);
+            $redeemQuote = quoteLoyaltyRedemption($dbh, (int)$user_id, $pointsToRedeem, $goodsValue);
+            $total -= $redeemQuote['discount'];
 
             // Generate unique order ID
             do {
@@ -349,13 +370,15 @@ switch ($action) {
                 ordertime, total_amount, payment_status, status,
                 delivery_lat, delivery_lng, delivery_address,
                 dest_lat, dest_lng,
-                delivery_fee, mileage_fee, service_fee, insurance_fee, processing_fee, small_order_surcharge
+                delivery_fee, mileage_fee, service_fee, insurance_fee, processing_fee, small_order_surcharge,
+                points_redeemed
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?,
                 NOW(), ?, ?, ?,
                 ?, ?, ?,
                 ?, ?,
-                ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?,
+                ?
             )";
 
             $stmt = $dbh->prepare($sql);
@@ -377,7 +400,8 @@ switch ($action) {
                 $dropoffLng,
                 $deliveryCost,
                 $mileageFee,
-                0.0, 0.0, 0.0, 0.0
+                $serviceFee, $insuranceFee, $processingFee, 0.0,
+                $redeemQuote['points_applied']
             ]);
 
             if (!$result) {
@@ -421,7 +445,9 @@ switch ($action) {
             echo json_encode([
                 'success' => true,
                 'order_id' => $orderId,
-                'message' => 'Order placed successfully'
+                'message' => 'Order placed successfully',
+                'points_applied' => $redeemQuote['points_applied'],
+                'loyalty_discount' => $redeemQuote['discount']
             ]);
 
         } catch (Exception $e) {
