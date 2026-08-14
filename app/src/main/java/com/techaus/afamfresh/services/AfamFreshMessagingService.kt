@@ -28,7 +28,11 @@ import kotlin.random.Random
  *   {
  *     "title":    "Order confirmed",
  *     "body":     "Your order #1234 is being prepared",
- *     "order_id": "1234"        // deep-links to that order when present
+ *     "order_id": "1234",       // deep-links to that order when present
+ *     "source":   "order"       // "order" or "surplus" — which table
+ *                                // order_id means; the two id spaces
+ *                                // overlap, so this decides where a tap
+ *                                // navigates. Absent = treated as "order".
  *   }
  *
  * Send these as a `data` payload rather than a `notification` payload.
@@ -41,6 +45,11 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
     companion object {
         const val CHANNEL_ID = "afamfresh_orders"
         const val EXTRA_ORDER_ID = "notification_order_id"
+        // "order" or "surplus" — the two id spaces overlap (a shop order and
+        // a surplus order can share a numeric id), so a tap cannot resolve
+        // which table order_id means without this. Absent on older/legacy
+        // payloads; the receiving end treats that the same as "order".
+        const val EXTRA_SOURCE = "notification_source"
         private const val TAG = "FCMService"
     }
 
@@ -70,6 +79,7 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
 
         val data = message.data
         val orderId = data["order_id"]
+        val source = data["source"]
 
         // Delivery transitions come in ahead of the body check on purpose.
         //
@@ -79,22 +89,23 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
         if (data["type"] == "delivery_status") {
             val id = orderId?.toIntOrNull()
             if (id != null) {
-                DeliveryPushBus.publish(id, data["source"] ?: "order")
+                DeliveryPushBus.publish(id, source ?: "order")
             }
         }
 
         val title = data["title"] ?: message.notification?.title ?: "AfamFresh"
         val body = data["body"] ?: message.notification?.body ?: return
 
-        showNotification(title, body, orderId)
+        showNotification(title, body, orderId, source)
     }
 
-    private fun showNotification(title: String, body: String, orderId: String?) {
+    private fun showNotification(title: String, body: String, orderId: String?, source: String?) {
         createChannel()
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             orderId?.let { putExtra(EXTRA_ORDER_ID, it) }
+            source?.let { putExtra(EXTRA_SOURCE, it) }
         }
 
         val pendingIntent = PendingIntent.getActivity(

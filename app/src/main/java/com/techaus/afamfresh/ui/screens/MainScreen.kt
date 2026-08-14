@@ -51,6 +51,10 @@ fun MainScreen(
     deliveryRepository: DeliveryRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
     pendingOrderId: String? = null,
+    /** "order" or "surplus" — which table [pendingOrderId] means. The two id
+     *  spaces overlap, so this decides where a tap navigates; null (legacy
+     *  payloads with no source) is treated the same as "order". */
+    pendingOrderSource: String? = null,
     onPendingOrderHandled: () -> Unit = {},
     onLogout: () -> Unit,
     onProductClick: (Product) -> Unit,
@@ -121,14 +125,23 @@ fun MainScreen(
 
     // A push was tapped: jump straight to that order once, then clear the flag
     // so returning to home later does not re-navigate.
-    LaunchedEffect(pendingOrderId) {
+    LaunchedEffect(pendingOrderId, pendingOrderSource) {
         pendingOrderId?.let {
             // Guarded: "edit_order" is a customer route and is not registered
             // in the Rider or Vendor apps. Navigating to a route that does not
             // exist throws, so an order push landing on a rider's phone would
             // have crashed the app rather than being ignored.
             if (isCustomerApp) {
-                navController.navigate("edit_order/$it")
+                if (pendingOrderSource == "surplus") {
+                    // No per-item surplus deep link exists. "edit_order" is
+                    // the SHOP order table — sending a surplus id there would
+                    // either find nothing or, worse, silently open an
+                    // unrelated shop order that happens to share the number.
+                    // The list is the closest correct destination.
+                    navController.navigate("surplus_orders")
+                } else {
+                    navController.navigate("edit_order/$it")
+                }
             }
             onPendingOrderHandled()
         }

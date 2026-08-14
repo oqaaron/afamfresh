@@ -68,6 +68,7 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
 
     /** Order id carried by a tapped push notification. */
     private val pendingOrderId = mutableStateOf<String?>(null)
+    private val pendingOrderSource = mutableStateOf<String?>(null)
 
     /** Reset token from an `afamfresh://reset-password?token=...` deep link. */
     private val pendingResetToken = mutableStateOf<String?>(null)
@@ -301,7 +302,11 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
                                             trackingViewModel = trackingViewModel,
                                             deliveryRepository = viewModelFactory.deliveryRepository,
                                             pendingOrderId = pendingOrderId.value,
-                                            onPendingOrderHandled = { pendingOrderId.value = null },
+                                            pendingOrderSource = pendingOrderSource.value,
+                                            onPendingOrderHandled = {
+                                                pendingOrderId.value = null
+                                                pendingOrderSource.value = null
+                                            },
                                             onLogout = {
                                                 authViewModel.logout()
                                                 isLoggedIn = false
@@ -354,6 +359,7 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
         intent.getStringExtra(AfamFreshMessagingService.EXTRA_ORDER_ID)?.let {
             Log.d("MainActivity", "Opened from notification for order $it")
             pendingOrderId.value = it
+            pendingOrderSource.value = intent.getStringExtra(AfamFreshMessagingService.EXTRA_SOURCE)
         }
 
         // afamfresh://reset-password?token=XYZ — and the per-flavor variants
