@@ -205,19 +205,25 @@ function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null)
     $shopStmt = $dbh->prepare(
         "SELECT COALESCE(SUM(service_fee), 0)    AS service_fee,
                 COALESCE(SUM(insurance_fee), 0)  AS insurance_fee,
-                COALESCE(SUM(processing_fee), 0) AS processing_fee
+                COALESCE(SUM(processing_fee), 0) AS processing_fee,
+                COALESCE(SUM(small_order_surcharge), 0) AS small_order_surcharge
            FROM orders
           WHERE payment_status = 'paid' $shopDateSql"
     );
     $shopStmt->execute($shopDateParams);
     $shop = array_map('floatval', $shopStmt->fetch(PDO::FETCH_ASSOC));
 
+    // Bulk has no small_order_surcharge column of its own -- the same figure
+    // lives inside delivery_fee_breakdown under the key calculateDeliveryFee()
+    // actually returns it as, 'profit_margin' (see includes/delivery-fee.php),
+    // not renamed to match the shop-side column name.
     [$BulkDateSql, $BulkDateParams] = revenueDateClause('created_at', $from, $to);
     $BulkStmt = $dbh->prepare(
         "SELECT
             COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.service_fee')) AS DECIMAL(12,2))), 0)    AS service_fee,
             COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.insurance_fee')) AS DECIMAL(12,2))), 0)  AS insurance_fee,
-            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.processing_fee')) AS DECIMAL(12,2))), 0) AS processing_fee
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.processing_fee')) AS DECIMAL(12,2))), 0) AS processing_fee,
+            COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(delivery_fee_breakdown, '$.profit_margin')) AS DECIMAL(12,2))), 0)  AS small_order_surcharge
            FROM Bulk_orders
           WHERE payment_status = 'paid' $BulkDateSql"
     );
@@ -227,11 +233,13 @@ function platformFeesSummary(PDO $dbh, ?string $from = null, ?string $to = null)
     $add = fn(string $k) => $shop[$k] + $Bulk[$k];
 
     return [
-        'service_fee'    => $add('service_fee'),
-        'insurance_fee'  => $add('insurance_fee'),
-        'processing_fee' => $add('processing_fee'),
-        'total'          => $add('service_fee') + $add('insurance_fee') + $add('processing_fee'),
-        'shop'           => $shop,
-        'Bulk'        => $Bulk,
+        'service_fee'            => $add('service_fee'),
+        'insurance_fee'          => $add('insurance_fee'),
+        'processing_fee'         => $add('processing_fee'),
+        'small_order_surcharge'  => $add('small_order_surcharge'),
+        'total'                  => $add('service_fee') + $add('insurance_fee')
+                                   + $add('processing_fee') + $add('small_order_surcharge'),
+        'shop'                   => $shop,
+        'Bulk'                   => $Bulk,
     ];
 }

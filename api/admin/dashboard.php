@@ -175,9 +175,9 @@ try {
         <div class="bg-white p-5 rounded-xl shadow mb-8">
             <div class="flex justify-between items-center mb-3">
                 <h2 class="font-semibold text-gray-800">Platform fees collected</h2>
-                <span class="text-xs text-gray-400">service + insurance + processing, settled orders only</span>
+                <span class="text-xs text-gray-400">service + insurance + processing + small-order surcharge, settled orders only</span>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
                     <p class="text-gray-500 text-xs uppercase tracking-wide">Service fee</p>
                     <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['service_fee']) ?></p>
@@ -190,14 +190,18 @@ try {
                     <p class="text-gray-500 text-xs uppercase tracking-wide">Processing fee</p>
                     <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['processing_fee']) ?></p>
                 </div>
+                <div>
+                    <p class="text-gray-500 text-xs uppercase tracking-wide">Small order surcharge</p>
+                    <p class="text-xl font-bold text-gray-800">UGX <?= number_format($platformFees['small_order_surcharge']) ?></p>
+                </div>
                 <div class="border-l-4 border-green-600 pl-3">
                     <p class="text-gray-500 text-xs uppercase tracking-wide">Total</p>
                     <p class="text-xl font-bold text-green-800">UGX <?= number_format($platformFees['total']) ?></p>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-4 text-xs text-gray-500 mt-3 pt-3 border-t">
-                <div>Shop: UGX <?= number_format($platformFees['shop']['service_fee'] + $platformFees['shop']['insurance_fee'] + $platformFees['shop']['processing_fee']) ?></div>
-                <div>Bulk: UGX <?= number_format($platformFees['Bulk']['service_fee'] + $platformFees['Bulk']['insurance_fee'] + $platformFees['Bulk']['processing_fee']) ?></div>
+                <div>Shop: UGX <?= number_format($platformFees['shop']['service_fee'] + $platformFees['shop']['insurance_fee'] + $platformFees['shop']['processing_fee'] + $platformFees['shop']['small_order_surcharge']) ?></div>
+                <div>Bulk: UGX <?= number_format($platformFees['Bulk']['service_fee'] + $platformFees['Bulk']['insurance_fee'] + $platformFees['Bulk']['processing_fee'] + $platformFees['Bulk']['small_order_surcharge']) ?></div>
             </div>
         </div>
         <?php endif; ?>
