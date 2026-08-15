@@ -74,8 +74,6 @@ fun VendorBusinessDetailsScreen(
         "market_vendor" to "Market vendor",
         "farmer" to "Farmer",
         "wholesaler" to "Wholesaler",
-        "store" to "Store",
-        "Fish Products" to "Fish products"
     )
 
     val saving = saveState is VendorDetailsSaveState.Saving

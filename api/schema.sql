@@ -1076,7 +1076,7 @@ CREATE TABLE `vendors` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
   `business_name` varchar(255) NOT NULL,
-  `business_type` enum('farmer','market_vendor','wholesaler','store','Fish Products') DEFAULT 'market_vendor',
+  `business_type` enum('farmer','market_vendor','wholesaler') DEFAULT 'market_vendor',
   `phone` varchar(25) NOT NULL,
   `email` varchar(255) DEFAULT NULL,
   `location` varchar(255) DEFAULT NULL,

@@ -16,7 +16,7 @@ data class VendorProfile(
     @SerializedName("user_id") val userId: Int = 0,
     @SerializedName("business_name") val businessName: String = "",
 
-    /** farmer | market_vendor | wholesaler | store | Fish Products */
+    /** farmer | market_vendor | wholesaler */
     @SerializedName("business_type") val businessType: String? = null,
 
     @SerializedName("phone") val phone: String? = null,

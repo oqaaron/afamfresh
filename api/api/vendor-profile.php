@@ -47,7 +47,7 @@ if (($_GET['action'] ?? '') === 'update') {
     // Whitelisted rather than passed through: business_type is an ENUM, and
     // MySQL answers an unknown value with a truncation warning and an empty
     // string, not an error.
-    $allowedTypes = ['farmer', 'market_vendor', 'wholesaler', 'store', 'Fish Products'];
+    $allowedTypes = ['farmer', 'market_vendor', 'wholesaler'];
     if (!in_array($businessType, $allowedTypes, true)) {
         $businessType = 'market_vendor';
     }
