@@ -55,7 +55,15 @@ fun rememberAfamFreshMapProperties(
             ),
             isMyLocationEnabled = showMyLocation,
             latLngBoundsForCameraTarget = if (clampToServiceArea) GKMA_CAMERA_BOUNDS else null,
-            minZoomPreference = 9f
+            // latLngBoundsForCameraTarget only clamps where the camera's
+            // CENTER can go -- it does not clip the visible viewport. At the
+            // old 9f, a typical phone's viewport at that zoom spans roughly
+            // 3x the ~130km GKMA box, so a user could zoom out and see far
+            // past Kampala/Wakiso/Mpigi/Mukono while the center pin stayed
+            // technically inside the box ("map is blown out beyond the
+            // geofenced area"). 10.5f keeps the visible width close to the
+            // box's own size on a typical screen.
+            minZoomPreference = if (clampToServiceArea) 10.5f else 9f
         )
     }
 }
