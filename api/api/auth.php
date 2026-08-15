@@ -521,16 +521,24 @@ if ($action == 'forgot_password') {
                 ? $requestedScheme
                 : 'afamfresh';   // installs predating this send nothing
 
-            // An https link to our own bridge page, which then hands off to the
-            // app — not the raw afamfresh:// scheme.
+            // An https link, on a per-app path the corresponding flavor
+            // registers as a verified Android App Link (see AndroidManifest.xml
+            // and api/.htaccess's /go/<scheme>/reset-password rewrite) — not
+            // the raw afamfresh:// scheme.
             //
             // The custom scheme was both a spam signal (these emails were
             // landing in spam) and frequently dead: many mail clients will not
-            // linkify a non-HTTP href, and some strip it. reset-password.php
-            // does the handoff and explains itself when the app is missing.
+            // linkify a non-HTTP href, and some strip it. Now, on a device with
+            // the matching app installed, Android opens the app directly for
+            // this URL with no browser hop at all — and a plain https URL is
+            // also the only shape Digital Asset Links verification can bind to
+            // a specific app, closing the old gap where any app claiming the
+            // same custom scheme could intercept the token. reset-password.php
+            // (reached via the /go/.../reset-password rewrite, which sets
+            // ?scheme=) still exists to hand off manually and explain itself
+            // when the app is missing or unverified.
             require_once __DIR__ . '/../includes/user_payload.php';
-            $resetLink = appBaseUrl() . '/reset-password.php?token=' . rawurlencode($rawToken)
-                       . '&scheme=' . rawurlencode($scheme);
+            $resetLink = appBaseUrl() . '/go/' . $scheme . '/reset-password?token=' . rawurlencode($rawToken);
             $subject = 'Reset your AfamFresh password';
 
             // Sent through Brevo, not mail(). PHP's mail() needs a local MTA,

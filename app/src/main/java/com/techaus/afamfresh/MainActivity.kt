@@ -364,21 +364,32 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
             pendingOrderSource.value = intent.getStringExtra(AfamFreshMessagingService.EXTRA_SOURCE)
         }
 
-        // afamfresh://reset-password?token=XYZ — and the per-flavor variants
-        // afamfresh-rider:// and afamfresh-vendor://.
+        // Two shapes reach here for the same reset flow:
         //
-        // Compared against BuildConfig.DEEP_LINK_SCHEME, not the literal
-        // "afamfresh". The manifest registers whichever scheme the flavor
-        // declares, so Android does launch the Rider and Vendor apps on their
-        // own links — but a hardcoded "afamfresh" here then failed to match,
-        // dropped the token, and left the reset silently doing nothing in two
-        // of the three apps.
+        //   1. afamfresh://reset-password?token=XYZ (and the per-flavor
+        //      variants afamfresh-rider://, afamfresh-vendor://) — the
+        //      custom-scheme fallback, still used when Android hasn't
+        //      verified the https App Link (or can't, e.g. a debug build
+        //      against a local backend with no assetlinks.json).
+        //   2. https://<appLinkHost>/go/<DEEP_LINK_SCHEME>/reset-password?token=XYZ
+        //      — the verified Android App Link. Preferred: it can't be
+        //      claimed by another app the way the custom scheme can, since
+        //      Digital Asset Links ties it to this app's signing cert.
+        //
+        // Both are compared against BuildConfig.DEEP_LINK_SCHEME, not a
+        // literal "afamfresh" — the manifest registers whichever scheme/path
+        // the flavor declares, so a hardcoded literal here would drop the
+        // token silently in two of the three apps, as it once did.
         val data = intent.data
-        if (data != null &&
+        val isCustomSchemeReset = data != null &&
             data.scheme == BuildConfig.DEEP_LINK_SCHEME &&
             data.host == "reset-password"
-        ) {
-            val token = data.getQueryParameter("token")
+        val isAppLinkReset = data != null &&
+            data.scheme == "https" &&
+            (data.path ?: "").trimStart('/').startsWith("go/${BuildConfig.DEEP_LINK_SCHEME}/reset-password")
+
+        if (isCustomSchemeReset || isAppLinkReset) {
+            val token = data?.getQueryParameter("token")
             if (token.isNullOrBlank()) {
                 Log.w("MainActivity", "Reset-password link had no token")
             } else {

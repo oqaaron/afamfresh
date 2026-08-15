@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ (API 31+) backup/transfer rules. allowBackup stays true —
+    losing cart/preference data on device restore is a worse user experience
+    than no backup at all — but the auth token and session cookie must never
+    leave the device in a cloud backup or device-to-device transfer, since
+    SecurePrefs.kt's Keystore-bound encryption key doesn't travel with them
+    anyway (a restored copy just fails to decrypt and falls back to an empty
+    store) and the legacy plaintext files are deleted after first migration
+    but excluded here too in case a backup runs before that migration does.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="auth_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="cookie_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="auth_prefs.xml" />
+        <exclude domain="sharedpref" path="cookie_prefs.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="auth_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="cookie_prefs_secure.xml" />
+        <exclude domain="sharedpref" path="auth_prefs.xml" />
+        <exclude domain="sharedpref" path="cookie_prefs.xml" />
+    </device-transfer>
+</data-extraction-rules>

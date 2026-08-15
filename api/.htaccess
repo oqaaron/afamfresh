@@ -31,8 +31,13 @@
 # Source files that are not pages. An ApiService.kt copied into api/ was
 # served with HTTP 200 and handed the whole endpoint list to anyone who
 # guessed the name; nothing here is meant to be fetched, and the only
-# non-PHP file this app actually serves is admin-dashboard.html.
-<FilesMatch "\.(kt|java|kts|gradle|py|rb|sh|pl|json|md|txt|lock|dist|conf|pem|key|crt|p12|jks|keystore)$">
+# non-PHP files this app actually serves are admin-dashboard.html and
+# .well-known/assetlinks.json (Android App Links verification — Google's
+# verifier fetches that exact path unauthenticated, so it's carved out of
+# the .json block by name via negative lookahead rather than moved
+# somewhere this rule can't reach, since the path is fixed by the Digital
+# Asset Links spec and can't be relocated).
+<FilesMatch "^(?!assetlinks\.json$).*\.(kt|java|kts|gradle|py|rb|sh|pl|json|md|txt|lock|dist|conf|pem|key|crt|p12|jks|keystore)$">
     Require all denied
 </FilesMatch>
 
@@ -43,6 +48,25 @@
 
 # Never list a directory that has no index file.
 Options -Indexes
+
+# =============================================================
+# ANDROID APP LINKS — friendly per-app paths for password reset
+# =============================================================
+# The three flavors (customer/rider/vendor) need distinct URL paths, not
+# just distinct query strings, because an Android intent-filter's <data>
+# element matches on host+path, never on a query parameter. Without this,
+# all three apps would have to register the same https://host/reset-password.php
+# URL, and if more than one flavor is installed on the same device Android
+# shows a disambiguation dialog on every reset link — the exact chooser
+# problem the per-app custom schemes were built to avoid.
+#
+# These rewrite to the existing reset-password.php?scheme=... contract
+# (unchanged) so the page itself needed no changes. QSA keeps ?token=...
+# intact across the rewrite.
+RewriteEngine On
+RewriteRule ^go/afamfresh-rider/reset-password/?$ reset-password.php?scheme=afamfresh-rider [L,QSA]
+RewriteRule ^go/afamfresh-vendor/reset-password/?$ reset-password.php?scheme=afamfresh-vendor [L,QSA]
+RewriteRule ^go/afamfresh/reset-password/?$ reset-password.php?scheme=afamfresh [L,QSA]
 
 # =============================================================
 # SESSION COOKIE HARDENING

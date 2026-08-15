@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pre-Android-12 (API less than 31) equivalent of data_extraction_rules.xml.
+    Same exclusions, older syntax: both files are needed since minSdk is 24.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="auth_prefs_secure.xml" />
+    <exclude domain="sharedpref" path="cookie_prefs_secure.xml" />
+    <exclude domain="sharedpref" path="auth_prefs.xml" />
+    <exclude domain="sharedpref" path="cookie_prefs.xml" />
+</full-backup-content>

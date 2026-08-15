@@ -1,0 +1,35 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.techaus.afamfresh",
+      "sha256_cert_fingerprints": [
+        "87:2E:BA:04:85:F1:32:25:06:45:1E:78:36:EF:01:76:E2:B7:41:D6:9E:5A:DD:B1:E0:18:4F:F7:05:A3:0E:B2",
+        "67:23:34:82:28:78:99:4C:DC:98:41:54:BD:30:2E:62:A5:DB:A7:6E:BC:D2:42:A9:AC:ED:69:04:92:C6:CD:3B"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.techaus.afamfresh.rider",
+      "sha256_cert_fingerprints": [
+        "87:2E:BA:04:85:F1:32:25:06:45:1E:78:36:EF:01:76:E2:B7:41:D6:9E:5A:DD:B1:E0:18:4F:F7:05:A3:0E:B2",
+        "67:23:34:82:28:78:99:4C:DC:98:41:54:BD:30:2E:62:A5:DB:A7:6E:BC:D2:42:A9:AC:ED:69:04:92:C6:CD:3B"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.techaus.afamfresh.vendor",
+      "sha256_cert_fingerprints": [
+        "87:2E:BA:04:85:F1:32:25:06:45:1E:78:36:EF:01:76:E2:B7:41:D6:9E:5A:DD:B1:E0:18:4F:F7:05:A3:0E:B2",
+        "67:23:34:82:28:78:99:4C:DC:98:41:54:BD:30:2E:62:A5:DB:A7:6E:BC:D2:42:A9:AC:ED:69:04:92:C6:CD:3B"
+      ]
+    }
+  }
+]

@@ -22,6 +22,8 @@
 
     <application
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -70,7 +72,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep link for Password Reset -->
+            <!-- Deep link for Password Reset: custom-scheme fallback.
+                 Kept for devices/mail clients that don't route the https
+                 App Link below into the app (verification not yet
+                 propagated, App Links disabled by the user, etc) and for
+                 local/debug testing where the backend can't host a
+                 verifiable assetlinks.json at all. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -82,7 +89,29 @@
                     android:scheme="${deepLinkScheme}"
                     android:host="reset-password" />
             </intent-filter>
-            
+
+            <!-- Deep link for Password Reset: verified Android App Link.
+                 android:autoVerify="true" makes Android check, at install
+                 time, that ${appLinkHost}/.well-known/assetlinks.json (see
+                 api/.well-known/assetlinks.json) lists this app's package +
+                 signing certificate for this exact host. Once verified, a
+                 tap on this URL opens this app directly, with no browser hop,
+                 no chooser, and critically, no other app can claim it: the
+                 custom scheme above could be registered by any app on the
+                 device, but this cannot be forged without the real signing
+                 key. The path is per-flavor (see api/.htaccess's
+                 go slash SCHEME slash reset-password rewrite) so the three
+                 flavors don't collide into a chooser between themselves either. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="${appLinkHost}"
+                    android:pathPrefix="/go/${deepLinkScheme}/reset-password" />
+            </intent-filter>
+
         </activity>
 
         <!-- ============= PUSH NOTIFICATIONS ============= -->

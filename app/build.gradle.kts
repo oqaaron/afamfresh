@@ -175,12 +175,22 @@ android {
             //
             // Note the path: afamfresh is a subdirectory of htdocs with no
             // Apache vhost, so /api/ alone returns 404.
-            buildConfigField("String", "BASE_URL", "\"${secret("base.url.debug", "http://10.0.2.2/afamfresh/api/")}\"")
+            val debugBaseUrl = secret("base.url.debug", "http://10.0.2.2/afamfresh/api/")
+            buildConfigField("String", "BASE_URL", "\"$debugBaseUrl\"")
 
             // Public Nominatim by default. The previous default pointed at a
             // self-hosted instance on port 8080 that is not running.
             buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.debug", "https://nominatim.openstreetmap.org/")}\"")
             buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
+
+            // Android App Links host for the password-reset intent-filter (see
+            // AndroidManifest.xml). Derived from BASE_URL rather than a second
+            // local.properties key, so the two can't drift apart. Debug's
+            // default (10.0.2.2, plain http) will never pass Digital Asset
+            // Links verification -- that's fine, the custom-scheme intent
+            // filter still covers debug/local testing; only a real https host
+            // (as release should always be) can host assetlinks.json at all.
+            manifestPlaceholders["appLinkHost"] = runCatching { java.net.URI(debugBaseUrl).host }.getOrNull() ?: "localhost"
         }
 
         release {
@@ -191,7 +201,8 @@ android {
             // the path needs the /afamfresh/ segment as well — check with
             // `curl -s -o /dev/null -w "%{http_code}" https://afam.techaus.online/api/products.php?action=list`
             // before shipping a release build.
-            buildConfigField("String", "BASE_URL", "\"${secret("base.url.release", "https://afam.techaus.online/api/")}\"")
+            val releaseBaseUrl = secret("base.url.release", "https://afam.techaus.online/api/")
+            buildConfigField("String", "BASE_URL", "\"$releaseBaseUrl\"")
 
             // Was https://afam.techaus.online:8080/ — a guessed self-hosted
             // Nominatim. No such instance was found running anywhere, so this
@@ -199,6 +210,15 @@ android {
             // nominatim.url.release in local.properties.
             buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.release", "https://nominatim.openstreetmap.org/")}\"")
             buildConfigField("String", "OSRM_BASE_URL", "\"https://router.project-osrm.org/\"")
+
+            // See the matching debug comment: this MUST be the real host
+            // release builds ship with (whatever base.url.release resolves
+            // to), or the App Link will never verify and every reset link
+            // falls back to the custom-scheme handoff instead. If
+            // base.url.release in local.properties differs from what's
+            // actually live, assetlinks.json (api/.well-known/assetlinks.json)
+            // needs to be hosted on THAT host, not this build's guess.
+            manifestPlaceholders["appLinkHost"] = runCatching { java.net.URI(releaseBaseUrl).host }.getOrNull() ?: "afam.techaus.online"
 
             isMinifyEnabled = true
             isShrinkResources = true
