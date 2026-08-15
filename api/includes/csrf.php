@@ -39,3 +39,18 @@ function verifyCsrf(): void {
         exit;
     }
 }
+
+/**
+ * Same check as verifyCsrf(), for a JSON fetch() POST instead of a <form>.
+ * $_POST is empty for an application/json body, so the token travels as a
+ * header instead — the caller embeds csrfToken() in the page once and sends
+ * it back as X-CSRF-Token on every mutating request.
+ */
+function verifyCsrfHeader(): void {
+    $submitted = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'] ?? '', $submitted)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Your session expired. Please refresh the page and try again.']);
+        exit;
+    }
+}

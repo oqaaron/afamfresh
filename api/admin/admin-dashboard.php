@@ -14,6 +14,7 @@ requireAdminLoginWeb();
 
 // $dbh, for the sidebar's pending-requests badge.
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -106,6 +107,51 @@ require_once __DIR__ . '/includes/config.php';
                     </tbody>
                 </table>
             </div>
+
+            <!-- Vendor-requested cancellations: a vendor asked to cancel a
+                 PAID order; nothing has actually happened yet until approved
+                 or denied here. See includes/Bulk_payment.php's
+                 requestBulkOrderCancellation()/cancelBulkOrder(). -->
+            <h3 class="text-md font-semibold text-gray-700 mt-8 mb-3 border-t pt-6">🚫 Cancellation Requests Awaiting Approval</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cancellationsTableBody" class="divide-y divide-gray-200">
+                        <tr><td colspan="6" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Refunds Pesapal has been asked for but not yet confirmed
+                 complete -- confirming here is what finally moves status to
+                 'refunded', once the admin has checked Pesapal's dashboard. -->
+            <h3 class="text-md font-semibold text-gray-700 mt-8 mb-3 border-t pt-6">💸 Refunds Awaiting Confirmation</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount (UGX)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="refundsTableBody" class="divide-y divide-gray-200">
+                        <tr><td colspan="6" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- ====== VENDOR REGISTRY ====== -->
@@ -133,6 +179,10 @@ require_once __DIR__ . '/includes/config.php';
     </div>
 
     <script>
+        // Sent as X-CSRF-Token on every mutating request below — verifyCsrfHeader()
+        // on the PHP side checks it against this same session's token.
+        const CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
+
         // Helper: show notification
         function showNotification(text, type = 'success') {
             const msg = document.getElementById('message');
@@ -147,7 +197,7 @@ require_once __DIR__ . '/includes/config.php';
             try {
                 const response = await fetch(url, {
                     ...options,
-                    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN, ...(options.headers || {}) }
                 });
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -237,6 +287,110 @@ require_once __DIR__ . '/includes/config.php';
             }
         }
 
+        // ---- Bulk ORDER CANCELLATION REQUESTS ----
+        async function loadPendingCancellations() {
+            const tbody = document.getElementById('cancellationsTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=pending_cancellations');
+            if (res.success && res.cancellations) {
+                if (res.cancellations.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-center text-gray-500">✅ Nothing awaiting approval.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = res.cancellations.map(item => `
+                    <tr>
+                        <td class="px-4 py-3 text-sm">#${item.id}</td>
+                        <td class="px-4 py-3 text-sm font-medium">${escapeHtml(item.product_name)}</td>
+                        <td class="px-4 py-3 text-sm">${escapeHtml(item.business_name)}</td>
+                        <td class="px-4 py-3 text-sm">${escapeHtml(item.cancellation_reason || '—')}</td>
+                        <td class="px-4 py-3 text-sm">${escapeHtml(item.cancellation_requested_at)}</td>
+                        <td class="px-4 py-3 text-sm space-x-2">
+                            <button onclick="approveCancellation(${item.id})" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Approve</button>
+                            <button onclick="denyCancellation(${item.id})" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-xs font-semibold btn">Deny</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-600">Error: ${res.error || 'Failed to load'}</td></tr>`;
+            }
+        }
+
+        async function approveCancellation(id) {
+            if (!confirm('Approve this cancellation? Stock returns to the listing and a refund will be requested if it was paid.')) return;
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=approve_cancellation', {
+                method: 'POST',
+                body: JSON.stringify({ id })
+            });
+            if (res.success) {
+                showNotification(res.refund_requested
+                    ? 'Approved. Cancelled and a refund was requested from Pesapal.'
+                    : 'Approved and cancelled.');
+                loadPendingCancellations();
+            } else {
+                showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
+            }
+        }
+
+        async function denyCancellation(id) {
+            const reason = prompt('Reason for denying this cancellation (the vendor sees it):');
+            if (reason === null) return;
+            if (!reason.trim()) {
+                showNotification('A reason is required to deny.', 'error');
+                return;
+            }
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=deny_cancellation', {
+                method: 'POST',
+                body: JSON.stringify({ id, reason: reason.trim() })
+            });
+            if (res.success) {
+                showNotification('Denied. The order continues as normal.');
+                loadPendingCancellations();
+            } else {
+                showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
+            }
+        }
+
+        // ---- Bulk REFUNDS AWAITING CONFIRMATION ----
+        async function loadPendingRefunds() {
+            const tbody = document.getElementById('refundsTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=pending_refunds');
+            if (res.success && res.refunds) {
+                if (res.refunds.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-center text-gray-500">✅ Nothing awaiting confirmation.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = res.refunds.map(item => `
+                    <tr>
+                        <td class="px-4 py-3 text-sm">#${item.id}</td>
+                        <td class="px-4 py-3 text-sm font-medium">${escapeHtml(item.product_name)}</td>
+                        <td class="px-4 py-3 text-sm">${escapeHtml(item.business_name)}</td>
+                        <td class="px-4 py-3 text-sm">${Number(Number(item.total_price) + Number(item.delivery_fee)).toLocaleString()}</td>
+                        <td class="px-4 py-3 text-sm">${escapeHtml(item.updated_at)}</td>
+                        <td class="px-4 py-3 text-sm">
+                            <button onclick="confirmRefund(${item.id})" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs font-semibold btn">Confirm refund complete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-600">Error: ${res.error || 'Failed to load'}</td></tr>`;
+            }
+        }
+
+        async function confirmRefund(id) {
+            if (!confirm('Confirm the refund has actually completed in Pesapal?')) return;
+            const res = await apiRequest('../api/admin/Bulk-approval.php?action=confirm_refund', {
+                method: 'POST',
+                body: JSON.stringify({ id })
+            });
+            if (res.success) {
+                showNotification('Refund confirmed and the customer told.');
+                loadPendingRefunds();
+            } else {
+                showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
+            }
+        }
+
         // ---- VENDORS ----
         async function loadVendors() {
             const tbody = document.getElementById('vendorsTableBody');
@@ -297,6 +451,8 @@ require_once __DIR__ . '/includes/config.php';
         document.addEventListener('DOMContentLoaded', function() {
             loadConfig();
             loadPendingBulk();
+            loadPendingCancellations();
+            loadPendingRefunds();
             loadVendors();
         });
     </script>
