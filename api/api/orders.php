@@ -513,6 +513,21 @@ switch ($action) {
                 error_log("Order $orderId placed but the order-placed SMS failed: " . $e->getMessage());
             }
 
+            // Push alongside the SMS. Bulk orders have had this since they
+            // were built; shop orders only ever got the text.
+            try {
+                require_once __DIR__ . '/../includes/notifications.php';
+                addNotification(
+                    (int)$user_id,
+                    'Order placed',
+                    "Your order #{$orderId} was received. We'll text you when it's out for delivery.",
+                    'order', null, ['push'],
+                    ['order_id' => (string)$orderId, 'source' => 'order']
+                );
+            } catch (Throwable $e) {
+                error_log("Order $orderId placed but the push notification failed: " . $e->getMessage());
+            }
+
             echo json_encode([
                 'success' => true,
                 'order_id' => $orderId,

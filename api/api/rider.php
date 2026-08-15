@@ -549,6 +549,29 @@ if ($action === 'update_status') {
         }
     }
 
+    // Push alongside the text above, for shop orders. loadDeliverable()'s
+    // 'order' branch doesn't carry user_id (it never needed to before this),
+    // so this looks it up directly rather than widening that function for
+    // one caller.
+    if ($next === 'picked_up' && $source === 'order') {
+        try {
+            require_once __DIR__ . '/../includes/notifications.php';
+            $ownerId = $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?");
+            $ownerId->execute([$orderId]);
+            if ($userId = $ownerId->fetchColumn()) {
+                addNotification(
+                    (int)$userId,
+                    'Out for delivery',
+                    "Your order #{$orderId} is out for delivery and on its way to you.",
+                    'order', null, ['push'],
+                    ['order_id' => (string)$orderId, 'source' => 'order']
+                );
+            }
+        } catch (Throwable $e) {
+            error_log("Order $orderId marked out for delivery but the push notification failed: " . $e->getMessage());
+        }
+    }
+
     // A rider completing a Bulk delivery writes Bulk_orders.status
     // straight to 'delivered', which means the vendor never marks it and
     // api/Bulk-orders.php's own notification never fires. Without this, the
@@ -579,6 +602,28 @@ if ($action === 'update_status') {
             }
         } catch (Throwable $e) {
             error_log("Bulk order $orderId delivered but the customer was not notified: " . $e->getMessage());
+        }
+    }
+
+    // Same gap, shop side: nothing told a shop-order customer their delivery
+    // arrived. The "out for delivery" SMS above was the last thing they ever
+    // heard about the order.
+    if ($next === 'delivered' && $source === 'order') {
+        try {
+            require_once __DIR__ . '/../includes/notifications.php';
+            $ownerId = $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?");
+            $ownerId->execute([$orderId]);
+            if ($userId = $ownerId->fetchColumn()) {
+                addNotification(
+                    (int)$userId,
+                    'Order delivered',
+                    "Your order #{$orderId} has been delivered. Let us know how it went!",
+                    'order', null, ['push'],
+                    ['order_id' => (string)$orderId, 'source' => 'order']
+                );
+            }
+        } catch (Throwable $e) {
+            error_log("Order $orderId delivered but the push notification failed: " . $e->getMessage());
         }
     }
 
