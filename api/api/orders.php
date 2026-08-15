@@ -361,10 +361,13 @@ switch ($action) {
             }
             $productIds = array_values(array_unique($productIds));
 
+            // FOR UPDATE holds a row lock through the transaction so a
+            // concurrent order on the same product can't read a stale
+            // stock_qty between this SELECT and the guarded UPDATE below.
             $placeholders = implode(',', array_fill(0, count($productIds), '?'));
             $itemLookup = $dbh->prepare(
                 "SELECT id, name, price, discount, stock_qty, status, vendor_id
-                 FROM items WHERE id IN ($placeholders)"
+                 FROM items WHERE id IN ($placeholders) FOR UPDATE"
             );
             $itemLookup->execute($productIds);
             $rowsById = [];
@@ -384,13 +387,23 @@ switch ($action) {
                     echo json_encode(['success' => false, 'error' => 'One of these products is no longer available.']);
                     exit;
                 }
-                if ($row['stock_qty'] !== null && (int)$row['stock_qty'] === 0) {
+                $quantity = $quantityByProduct[$productId];
+
+                // Atomic reservation: the WHERE guard means this only
+                // succeeds if enough stock is still there at the moment of
+                // the write, regardless of what the SELECT above saw. Zero
+                // rows affected means either out of stock or someone else's
+                // concurrent order just took the remaining units.
+                $decrement = $dbh->prepare(
+                    "UPDATE items SET stock_qty = stock_qty - ? WHERE id = ? AND stock_qty >= ?"
+                );
+                $decrement->execute([$quantity, $productId, $quantity]);
+                if ($decrement->rowCount() === 0) {
                     $dbh->rollBack();
-                    echo json_encode(['success' => false, 'error' => $row['name'] . ' is out of stock.']);
+                    echo json_encode(['success' => false, 'error' => $row['name'] . ' does not have enough stock.']);
                     exit;
                 }
 
-                $quantity = $quantityByProduct[$productId];
                 // Mirrors Product.kt's effectivePrice exactly, so what is
                 // charged matches what the listing displayed.
                 $discount = (float)($row['discount'] ?? 0.0);
@@ -447,23 +460,18 @@ switch ($action) {
             $redeemQuote = quoteLoyaltyRedemption($dbh, (int)$user_id, $pointsToRedeem, $subtotal);
             $total = $subtotal + $deliveryCost - $redeemQuote['discount'];
 
-            // Generate unique order ID
-            do {
-                $orderId = 500000 + rand(100, 999);
-                $check = $dbh->prepare("SELECT orderid FROM orders WHERE orderid = ?");
-                $check->execute([$orderId]);
-            } while ($check->fetch());
-
-            // Insert order – adjust columns as needed
+            // orderid is AUTO_INCREMENT — let the database assign it and
+            // read it back, instead of guessing a random value and retrying
+            // on collision.
             $sql = "INSERT INTO orders (
-                orderid, user_id, fname, lname, mobile, area, address,
+                user_id, fname, lname, mobile, area, address,
                 ordertime, total_amount, payment_status, status,
                 delivery_lat, delivery_lng, delivery_address,
                 dest_lat, dest_lng,
                 delivery_fee, mileage_fee, service_fee, insurance_fee, processing_fee, small_order_surcharge,
                 points_redeemed
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
                 NOW(), ?, ?, ?,
                 ?, ?, ?,
                 ?, ?,
@@ -473,7 +481,6 @@ switch ($action) {
 
             $stmt = $dbh->prepare($sql);
             $result = $stmt->execute([
-                $orderId,
                 $user_id,
                 $fname,
                 $lname,
@@ -498,6 +505,8 @@ switch ($action) {
                 $errorInfo = $stmt->errorInfo();
                 throw new Exception("Insert failed: " . $errorInfo[2]);
             }
+
+            $orderId = (int)$dbh->lastInsertId();
 
             // Insert order items — from $orderLines (the DB-validated
             // name/price computed above), not the client's $items.

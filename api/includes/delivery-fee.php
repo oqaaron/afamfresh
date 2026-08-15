@@ -199,8 +199,10 @@ function calculateDeliveryFee($orderValue, $distance) {
         
         if ($totalFee < $minFee) {
             $totalFee = $minFee;
-            $isFree = true;
-            $reason = 'Free delivery (minimum fee applied)';
+            // Only actually free when the minimum itself is 0 — charging a
+            // positive minFee while claiming is_free=true is contradictory.
+            $isFree = ($minFee <= 0);
+            $reason = $isFree ? 'Free delivery (minimum fee applied)' : 'Minimum delivery fee applied.';
         } else {
             $reason = 'Standard rate: ' . number_format($shortRate) . ' UGX/km, plus ' . number_format($serviceFee) . ' UGX service fee, plus ' . $insurancePercent . '% insurance';
         }
