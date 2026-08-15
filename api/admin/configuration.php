@@ -253,8 +253,11 @@ function field($arr, $key, $default = '') {
                 <h2 class="text-lg font-bold text-gray-800 mb-1">Order number display</h2>
                 <p class="text-gray-400 text-xs mb-4">
                     Cosmetic prefix shown on order numbers (SMS, push notifications, admin
-                    pages) — e.g. "AF-" turns #500943 into AF-500943. The real underlying
-                    order id is unchanged everywhere internally.
+                    pages). Always includes the order's placement date, plus a count that
+                    starts fresh at 1 each day — e.g. prefix "AF" turns the 1st shop order
+                    placed on 15 Aug 2026 into AF-150826-001. The real internal order id
+                    (used for payments, rider assignment, tracking — everything
+                    operational) is completely unaffected; this is a display label only.
                 </p>
                 <form method="POST">
                     <?= csrfField() ?>
@@ -263,8 +266,8 @@ function field($arr, $key, $default = '') {
                         <label class="block text-gray-700 font-bold mb-2">Prefix (optional)</label>
                         <input type="text" maxlength="12" name="order_number_prefix"
                                value="<?= htmlspecialchars($orderNumberPrefix) ?>"
-                               placeholder="e.g. AF-" class="w-full px-4 py-2 border rounded">
-                        <p class="text-gray-400 text-xs mt-1">Letters, numbers and hyphens only. Leave blank for no prefix.</p>
+                               placeholder="e.g. AF" class="w-full px-4 py-2 border rounded">
+                        <p class="text-gray-400 text-xs mt-1">Letters, numbers and hyphens only. Leave blank to show just the date and id.</p>
                     </div>
                     <button type="submit" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Save order number display</button>
                 </form>
