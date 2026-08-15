@@ -364,7 +364,12 @@ function calculateDeliveryFeeFromAddress($address, $area, $orderValue, $userLat 
             'distance_fee' => $feeDetails['distance_fee'],
             'service_fee' => $feeDetails['service_fee'],
             'insurance_fee' => $feeDetails['insurance_fee'],
-            'processing_fee' => $feeDetails['processing_fee']
+            'processing_fee' => $feeDetails['processing_fee'],
+            // Present in calculateDeliveryFee()'s own breakdown but dropped
+            // here until now — the profit margin charged on small orders
+            // (Rule 3) was folded into `fee` with nowhere for a caller to
+            // see it separately. 0 for any order not under that rule.
+            'profit_margin' => $feeDetails['profit_margin']
         ]
     ];
 }

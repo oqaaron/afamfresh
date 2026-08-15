@@ -419,6 +419,13 @@ switch ($action) {
             $serviceFee = (float)$feeResult['breakdown']['service_fee'];
             $insuranceFee = (float)$feeResult['breakdown']['insurance_fee'];
             $processingFee = (float)$feeResult['breakdown']['processing_fee'];
+            // Already included in $deliveryCost (calculateDeliveryFee() folds
+            // it into total_fee) — stored separately too so admin/order-detail.php
+            // can show it as its own line instead of it being invisible inside
+            // the combined delivery fee. Never touches rider pay: riders are
+            // credited from orders.mileage_fee alone (creditRiderEarnings() /
+            // mileageFeeFor()), which this is not part of.
+            $smallOrderSurcharge = (float)$feeResult['breakdown']['profit_margin'];
 
             // Loyalty redemption, if requested. $subtotal is already
             // goods-only, so it's exactly the value points are quoted
@@ -476,7 +483,7 @@ switch ($action) {
                 $dropoffLng,
                 $deliveryCost,
                 $mileageFee,
-                $serviceFee, $insuranceFee, $processingFee, 0.0,
+                $serviceFee, $insuranceFee, $processingFee, $smallOrderSurcharge,
                 $redeemQuote['points_applied']
             ]);
 
