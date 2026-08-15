@@ -10,8 +10,12 @@
  *
  * Three callers: api/payment.php (initiate/verify with order_type=Bulk),
  * pesapal-ipn.php (Pesapal's server-to-server notification), and
- * api/Bulk-orders.php (releasing abandoned reservations).
+ * api/Bulk-orders.php (releasing abandoned reservations, and now
+ * cancellation/refund handling below).
  */
+
+require_once __DIR__ . '/pesapal.php';
+require_once __DIR__ . '/payment_ledger.php';
 
 /**
  * The payable total of a Bulk order.
@@ -174,4 +178,181 @@ function releaseStaleBulkReservations(PDO $dbh, int $minutes = 30): int {
         error_log("Bulk: released $released abandoned reservation(s)");
     }
     return $released;
+}
+
+/**
+ * Actually cancels a Bulk order: marks it cancelled, returns stock to the
+ * listing, drops any rider assignment, and — only if it was actually paid
+ * via mobile money — requests a real refund from Pesapal.
+ *
+ * Only ever call this once cancellation is authorised: directly for an
+ * admin's own action, or as the execution step of an admin-approved
+ * cancellation request (requestBulkOrderCancellation() below). A refund
+ * failure never blocks the cancellation itself — the order is cancelled
+ * either way, with the refund outcome reported back for the caller to
+ * surface rather than silently swallowed.
+ *
+ * @return array{
+ *   ok: bool, error?: string, order?: array,
+ *   refund_attempted?: bool, refund_requested?: bool, refund_error?: string
+ * }
+ */
+function cancelBulkOrder(
+    PDO $dbh, int $orderId, string $reason, string $actorType, ?int $actorId,
+    string $refundUsername = 'afamfresh-admin'
+): array {
+    $stmt = $dbh->prepare("SELECT * FROM Bulk_orders WHERE id = ?");
+    $stmt->execute([$orderId]);
+    $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$order) {
+        return ['ok' => false, 'error' => 'No such order.'];
+    }
+    if (in_array($order['status'], ['delivered', 'cancelled', 'refunded'], true)) {
+        return ['ok' => false, 'error' => 'That order is already ' . $order['status'] . '.'];
+    }
+
+    try {
+        $dbh->beginTransaction();
+
+        $upd = $dbh->prepare(
+            "UPDATE Bulk_orders
+                SET status = 'cancelled', status_before_cancellation = NULL,
+                    cancellation_reason = NULL, updated_at = NOW()
+              WHERE id = ? AND status NOT IN ('delivered','cancelled','refunded')"
+        );
+        $upd->execute([$orderId]);
+        if ($upd->rowCount() === 0) {
+            // Changed underneath us between the SELECT above and here.
+            $dbh->rollBack();
+            return ['ok' => false, 'error' => 'That order changed while this was being processed. Please retry.'];
+        }
+
+        // Capped at the original quantity, same guard releaseStaleBulkReservations()
+        // and the admin cancel flow already use — a double cancellation cannot
+        // inflate the listing beyond what the vendor actually put up.
+        $dbh->prepare(
+            "UPDATE Bulk_listings
+                SET remaining_quantity = LEAST(remaining_quantity + ?, Bulk_quantity)
+              WHERE id = ?"
+        )->execute([$order['quantity'], $order['listing_id']]);
+
+        $dbh->prepare(
+            "DELETE FROM rider_assignments WHERE order_id = ? AND source = 'Bulk'"
+        )->execute([$orderId]);
+
+        $dbh->commit();
+    } catch (Throwable $e) {
+        if ($dbh->inTransaction()) $dbh->rollBack();
+        error_log("cancelBulkOrder failed for order $orderId: " . $e->getMessage());
+        return ['ok' => false, 'error' => 'Could not cancel that order.'];
+    }
+
+    recordPaymentEvent($dbh, 'Bulk', $orderId, 'cancelled', [
+        'from_status' => $order['status'],
+        'to_status'   => 'cancelled',
+        'actor_type'  => $actorType,
+        'actor_id'    => $actorId,
+    ]);
+
+    $result = ['ok' => true, 'order' => $order, 'refund_attempted' => false, 'refund_requested' => false];
+
+    // Cash was never captured electronically — there is nothing for Pesapal
+    // to reverse, and returning it (if any changed hands) is an operational
+    // matter outside this system, same as how a rider's cash float already
+    // reconciles physically rather than through this ledger.
+    $wasElectronicallyPaid = strcasecmp((string)$order['payment_status'], 'paid') === 0
+        && (string)($order['payment_method'] ?? '') !== 'cash'
+        && trim((string)($order['pesapal_tracking_id'] ?? '')) !== '';
+
+    if ($wasElectronicallyPaid) {
+        $result['refund_attempted'] = true;
+        try {
+            $pesapal = new PesapalClient();
+
+            // Never trust the locally-stored payment_status for this —
+            // same discipline applyBulkPaymentStatus() already enforces.
+            $liveStatus = $pesapal->getTransactionStatus($order['pesapal_tracking_id']);
+            if ($pesapal->mapStatus($liveStatus) !== 'paid') {
+                throw new PesapalException('Pesapal no longer shows this payment as completed.');
+            }
+
+            $confirmationCode = trim((string)($liveStatus['confirmation_code'] ?? ''));
+            if ($confirmationCode === '') {
+                throw new PesapalException('No confirmation code on this transaction.');
+            }
+
+            $amount = BulkPayableTotal($order);
+            $pesapal->submitRefundRequest($confirmationCode, $amount, $reason, $refundUsername);
+
+            $dbh->prepare(
+                "UPDATE Bulk_orders SET payment_status = 'refund_requested', updated_at = NOW() WHERE id = ?"
+            )->execute([$orderId]);
+
+            recordPaymentEvent($dbh, 'Bulk', $orderId, 'refund_requested', [
+                'from_status' => 'paid',
+                'to_status'   => 'refund_requested',
+                'method'      => 'mobile_money',
+                'amount'      => $amount,
+                'tracking_id' => $order['pesapal_tracking_id'],
+                'actor_type'  => $actorType,
+                'actor_id'    => $actorId,
+            ]);
+
+            $result['refund_requested'] = true;
+        } catch (PesapalException $e) {
+            error_log("cancelBulkOrder: refund request failed for order $orderId: " . $e->getMessage());
+            recordPaymentEvent($dbh, 'Bulk', $orderId, 'refund_failed', [
+                'from_status' => 'paid',
+                'to_status'   => 'paid',
+                'tracking_id' => $order['pesapal_tracking_id'],
+                'actor_type'  => $actorType,
+                'actor_id'    => $actorId,
+                'raw'         => $e->getMessage(),
+            ]);
+            // payment_status is left as 'paid' on purpose: the mismatch
+            // between "order cancelled" and "payment still shows paid"
+            // stays visible and actionable rather than silently swallowed.
+            $result['refund_error'] = $e->getMessage();
+        }
+    }
+
+    return $result;
+}
+
+/**
+ * A vendor asking to cancel their own PAID order. Does nothing but record
+ * the request and make it visible to admin — no stock change, no Pesapal
+ * call. cancelBulkOrder() only ever runs once an admin approves it via
+ * admin/Bulk-orders.php's approve_cancellation action.
+ *
+ * @return array{ok: bool, error?: string}
+ */
+function requestBulkOrderCancellation(
+    PDO $dbh, int $orderId, string $reason, int $vendorUserId
+): array {
+    $stmt = $dbh->prepare(
+        "UPDATE Bulk_orders
+            SET status_before_cancellation = status,
+                status = 'cancellation_requested',
+                cancellation_reason = ?,
+                cancellation_requested_by = ?,
+                cancellation_requested_at = NOW(),
+                updated_at = NOW()
+          WHERE id = ?
+            AND status NOT IN ('delivered','cancelled','refunded','cancellation_requested')"
+    );
+    $stmt->execute([$reason, $vendorUserId, $orderId]);
+
+    if ($stmt->rowCount() === 0) {
+        return ['ok' => false, 'error' => 'That order cannot be cancelled right now.'];
+    }
+
+    recordPaymentEvent($dbh, 'Bulk', $orderId, 'cancellation_requested', [
+        'to_status'  => 'cancellation_requested',
+        'actor_type' => 'vendor',
+        'actor_id'   => $vendorUserId,
+    ]);
+
+    return ['ok' => true];
 }

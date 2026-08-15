@@ -92,6 +92,20 @@ try {
     error_log('admin nav: needs-rider count failed: ' . $e->getMessage());
 }
 
+// Vendor-requested cancellations awaiting a decision. Folded into the same
+// Bulk Orders badge as needs-rider: both represent an action someone has to
+// take on that page, and a request sitting unreviewed is money in limbo.
+$navPendingCancellations = 0;
+try {
+    if (isset($dbh)) {
+        $navPendingCancellations = (int)$dbh->query(
+            "SELECT COUNT(*) FROM Bulk_orders WHERE status = 'cancellation_requested'"
+        )->fetchColumn();
+    }
+} catch (Throwable $e) {
+    error_log('admin nav: pending cancellation count failed: ' . $e->getMessage());
+}
+
 $navItems = [
     ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
     ['configuration.php',    'Configuration',      'fa-cog'],
@@ -126,8 +140,8 @@ $navItems = [
                 <?php if ($href === 'Bulk-listings.php' && $navPendingBulk > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingBulk ?></span>
                 <?php endif; ?>
-                <?php if ($href === 'Bulk-orders.php' && $navNeedsRider > 0): ?>
-                    <span class="bg-red-400 text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $navNeedsRider ?></span>
+                <?php if ($href === 'Bulk-orders.php' && ($navNeedsRider + $navPendingCancellations) > 0): ?>
+                    <span class="bg-red-400 text-white text-xs font-bold px-2 py-0.5 rounded-full"><?= $navNeedsRider + $navPendingCancellations ?></span>
                 <?php endif; ?>
                 <?php if ($href === 'vendor-payouts.php' && $navPendingPayouts > 0): ?>
                     <span class="bg-yellow-400 text-green-900 text-xs font-bold px-2 py-0.5 rounded-full"><?= $navPendingPayouts ?></span>

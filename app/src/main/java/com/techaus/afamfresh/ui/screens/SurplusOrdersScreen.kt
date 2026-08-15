@@ -240,6 +240,7 @@ private fun orderStatusLabel(status: String): String = when (status) {
     "delivered" -> "Delivered"
     "cancelled" -> "Cancelled"
     "refunded" -> "Refunded"
+    "cancellation_requested" -> "Cancellation requested"
     else -> status.replaceFirstChar { it.uppercase() }
 }
 

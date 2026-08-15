@@ -53,7 +53,7 @@ function recordPaymentEvent(PDO $dbh, string $source, int $orderId,
             $method = 'unknown';
         }
         $actorType = $fields['actor_type'] ?? 'system';
-        if (!in_array($actorType, ['customer', 'rider', 'admin', 'system', 'pesapal'], true)) {
+        if (!in_array($actorType, ['customer', 'rider', 'vendor', 'admin', 'system', 'pesapal'], true)) {
             $actorType = 'system';
         }
 

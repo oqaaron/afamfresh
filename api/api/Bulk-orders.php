@@ -511,9 +511,11 @@ try {
         //
         // Admins are exempt: they need to be able to fix a payment that
         // succeeded at Pesapal but never reconciled here.
-        $payment = $dbh->prepare("SELECT payment_status FROM Bulk_orders WHERE id = ?");
+        $payment = $dbh->prepare("SELECT payment_status, payment_method FROM Bulk_orders WHERE id = ?");
         $payment->execute([$order_id]);
-        $paymentStatus = (string)$payment->fetchColumn();
+        $paymentRow = $payment->fetch(PDO::FETCH_ASSOC) ?: [];
+        $paymentStatus = (string)($paymentRow['payment_status'] ?? '');
+        $paymentMethod = (string)($paymentRow['payment_method'] ?? '');
         $isPaidOrCash = in_array($paymentStatus, ['paid', 'pending_cash'], true);
 
         if (!$isAdminSession && !$isPaidOrCash
@@ -522,6 +524,88 @@ try {
             echo json_encode([
                 'success' => false,
                 'error'   => 'This order has not been paid for yet.'
+            ]);
+            exit;
+        }
+
+        // 'refunded' is only ever reached through admin/Bulk-orders.php's own
+        // confirm_refund action — never declared directly by a plain status
+        // write, from either the vendor or admin app. ('cancellation_requested'
+        // needs no check here — it isn't in $valid_statuses above, so a plain
+        // status write can never reach it either; it's only ever set by
+        // requestBulkOrderCancellation() below.)
+        if ($status === 'refunded') {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'error'   => 'Use the admin panel to confirm a refund.'
+            ]);
+            exit;
+        }
+
+        if ($status === 'cancelled') {
+            require_once __DIR__ . '/../includes/Bulk_payment.php';
+            $reason = trim((string)($input['reason'] ?? '')) ?: 'Order cancelled.';
+
+            // A vendor cancelling their own order that actually collected
+            // money electronically only REQUESTS it — nothing changes until
+            // an admin approves, exactly like vendor_payout_requests. Cash
+            // (never captured electronically) and an admin's own
+            // cancellation both execute immediately: there is nothing to
+            // protect in the first case, and the admin clicking this IS the
+            // approval in the second.
+            $needsApproval = !$isAdminSession
+                && $paymentStatus === 'paid'
+                && $paymentMethod !== 'cash';
+
+            if ($needsApproval) {
+                $result = requestBulkOrderCancellation($dbh, $order_id, $reason, $sessionUserId);
+                echo json_encode($result['ok']
+                    ? ['success' => true, 'status' => 'cancellation_requested',
+                       'message' => 'Cancellation requested. An admin will review it shortly.']
+                    : ['success' => false, 'error' => $result['error']]);
+                exit;
+            }
+
+            $actorType = $isAdminSession ? 'admin' : 'vendor';
+            $actorId   = $isAdminSession ? (int)($_SESSION['admin_id'] ?? 0) : $sessionUserId;
+            $username  = $isAdminSession ? (string)($_SESSION['admin_name'] ?? 'afamfresh-admin') : 'afamfresh-vendor-app';
+            $result = cancelBulkOrder($dbh, $order_id, $reason, $actorType, $actorId ?: null, $username);
+
+            if (!$result['ok']) {
+                echo json_encode(['success' => false, 'error' => $result['error']]);
+                exit;
+            }
+
+            try {
+                $who = $dbh->prepare(
+                    "SELECT so.user_id, i.name AS product_name, v.business_name
+                       FROM Bulk_orders so
+                       JOIN Bulk_listings sl ON sl.id = so.listing_id
+                       JOIN items i ON i.id = sl.product_id
+                       JOIN vendors v ON v.id = sl.vendor_id
+                      WHERE so.id = ?"
+                );
+                $who->execute([$order_id]);
+                $row = $who->fetch(PDO::FETCH_ASSOC);
+                if ($row) {
+                    addNotification(
+                        (int)$row['user_id'],
+                        'Order cancelled',
+                        $row['business_name'] . ' has cancelled your order'
+                            . ' (order #' . $order_id . ', ' . $row['product_name'] . ').'
+                            . ($result['refund_attempted'] ? ' Any payment made will be refunded.' : ''),
+                        'order', null, ['push', 'email']
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log("Bulk order $order_id cancelled but notification failed: " . $e->getMessage());
+            }
+
+            echo json_encode([
+                'success' => true,
+                'status'  => 'cancelled',
+                'refund_requested' => $result['refund_requested'] ?? false,
             ]);
             exit;
         }
@@ -578,12 +662,12 @@ try {
         // Only the states a customer can act on get a message. 'processing' is
         // deliberately silent: it means the vendor has started picking, which
         // changes nothing the customer can do and would just be noise.
+        // 'cancelled' and 'refunded' never reach here — both return earlier
+        // above, with their own notification handling.
         $notify = [
             'confirmed' => ['Order confirmed', 'has accepted your order and is preparing it.'],
             'ready'     => ['Order ready', 'has your order ready.'],
             'delivered' => ['Order delivered', 'has marked your order delivered.'],
-            'cancelled' => ['Order cancelled', 'has cancelled your order.'],
-            'refunded'  => ['Order refunded', 'has refunded your order.'],
         ];
 
         if (isset($notify[$status])) {
@@ -617,9 +701,10 @@ try {
                         $body,
                         'order',
                         null,
-                        // Email on the two that decide whether someone needs to
-                        // be somewhere; push alone for the rest.
-                        in_array($status, ['ready', 'cancelled'], true)
+                        // Email on 'ready', which decides whether someone needs
+                        // to be somewhere; push alone for the rest. 'cancelled'
+                        // used to be in this set, but it never reaches here now.
+                        $status === 'ready'
                             ? ['push', 'email']
                             : ['push']
                     );

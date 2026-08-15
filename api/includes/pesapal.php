@@ -319,6 +319,52 @@ class PesapalClient
     }
 
     // ------------------------------------------------------------------
+    // Refunds
+    // ------------------------------------------------------------------
+
+    /**
+     * Requests a refund against an already-COMPLETED payment.
+     *
+     * $confirmationCode comes from GetTransactionStatus, not from anything
+     * stored locally -- this codebase never stores it, so callers fetch it
+     * fresh immediately before calling this.
+     *
+     * Pesapal rules (confirmed against their v3 docs): only a COMPLETED
+     * payment can be refunded, a mobile-money payment can only be refunded
+     * IN FULL (this app has no card channel), and only one refund request is
+     * allowed per payment -- a second attempt is rejected by Pesapal, not by
+     * this method.
+     *
+     * The response carries the real result in its body even on HTTP 200
+     * ("status": "200" success / "500" rejected) -- the same
+     * body-carries-the-error shape every other Pesapal endpoint in this file
+     * already has to handle.
+     */
+    public function submitRefundRequest(
+        string $confirmationCode, float $amount, string $remarks, string $username
+    ): array {
+        if ($confirmationCode === '') {
+            throw new PesapalException('No confirmation code to refund against.');
+        }
+        if ($amount <= 0) {
+            throw new PesapalException('Refusing to refund a non-positive amount.');
+        }
+
+        $response = $this->post(PESAPAL_URL_REFUND, [
+            'confirmation_code' => $confirmationCode,
+            'amount'            => round($amount, 2),
+            'username'          => $this->truncate($username, 100),
+            'remarks'           => $this->truncate($remarks, 250),
+        ]);
+
+        if ((string)($response['status'] ?? '') !== '200') {
+            throw new PesapalException('Pesapal rejected the refund: ' . $this->describeError($response));
+        }
+
+        return $response;
+    }
+
+    // ------------------------------------------------------------------
     // HTTP
     // ------------------------------------------------------------------
 

@@ -33,6 +33,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/rider_dispatch.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/Bulk_payment.php';
 
 $flash = '';
 $flashError = '';
@@ -180,56 +181,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'That delivery has already been collected — reassign instead of removing it.';
         }
     } elseif ($action === 'cancel_order') {
+        // Admin cancelling directly (no vendor request involved): the admin
+        // clicking this IS the approval, so it executes for real immediately
+        // — same rule as approve_cancellation below.
         $reason = trim($_POST['reason'] ?? '');
         if ($reason === '') {
             $flashError = 'Give a reason — the customer sees it.';
-        } elseif (in_array($order['status'], ['delivered', 'cancelled', 'refunded'], true)) {
-            $flashError = 'That order is already ' . $order['status'] . '.';
         } else {
-            try {
-                $dbh->beginTransaction();
-
-                $dbh->prepare(
-                    "UPDATE Bulk_orders
-                        SET status = 'cancelled', updated_at = NOW()
-                      WHERE id = ? AND status NOT IN ('delivered','cancelled','refunded')"
-                )->execute([$orderId]);
-
-                // The goods go back on sale. Capped at the original quantity so
-                // a double cancellation cannot inflate the listing.
-                //
-                // The status is deliberately untouched: sold-out is expressed
-                // by remaining_quantity, not by a status value, so restoring
-                // the quantity is what makes the listing visible again.
-                $dbh->prepare(
-                    "UPDATE Bulk_listings
-                        SET remaining_quantity = LEAST(remaining_quantity + ?, Bulk_quantity)
-                      WHERE id = ?"
-                )->execute([$order['quantity'], $order['listing_id']]);
-
-                $dbh->prepare(
-                    "DELETE FROM rider_assignments WHERE order_id = ? AND source = 'Bulk'"
-                )->execute([$orderId]);
-
-                $dbh->commit();
-
+            $result = cancelBulkOrder($dbh, $orderId, $reason, 'admin', (int)$_SESSION['admin_id'], (string)($_SESSION['admin_name'] ?? 'afamfresh-admin'));
+            if (!$result['ok']) {
+                $flashError = $result['error'];
+            } else {
                 addNotification(
                     (int)$order['user_id'],
                     'Order cancelled',
                     'Your Bulk order #' . $orderId . ' was cancelled. Reason: ' . $reason
-                        . ($order['payment_status'] === 'paid'
+                        . ($result['refund_attempted']
                             ? ' Any payment made will be refunded.' : ''),
-                    'order',
-                    null,
-                    ['push', 'email']
+                    'order', null, ['push', 'email']
                 );
 
-                $flash = 'Cancelled, stock returned to the listing, and the customer told why.';
-            } catch (Throwable $e) {
-                if ($dbh->inTransaction()) $dbh->rollBack();
-                error_log('Bulk cancel_order failed: ' . $e->getMessage());
-                $flashError = 'Could not cancel that order.';
+                if (!$result['refund_attempted']) {
+                    $flash = 'Cancelled and stock returned to the listing.';
+                } elseif ($result['refund_requested']) {
+                    $flash = 'Cancelled, stock returned, and a refund was requested from Pesapal.';
+                } else {
+                    $flash = 'Cancelled and stock returned, but the Pesapal refund could not be '
+                        . 'requested automatically (' . $result['refund_error'] . '). '
+                        . 'Refund this manually in the Pesapal dashboard.';
+                }
             }
+        }
+    } elseif ($action === 'approve_cancellation') {
+        // Executes a vendor's cancellation REQUEST for real: this is the
+        // approval, same underlying function as an admin's own direct cancel.
+        if ($order['status'] !== 'cancellation_requested') {
+            $flashError = 'That order has no pending cancellation request.';
+        } else {
+            $reason = trim((string)($order['cancellation_reason'] ?? '')) ?: 'Cancellation requested by vendor.';
+            $result = cancelBulkOrder($dbh, $orderId, $reason, 'admin', (int)$_SESSION['admin_id'], (string)($_SESSION['admin_name'] ?? 'afamfresh-admin'));
+            if (!$result['ok']) {
+                $flashError = $result['error'];
+            } else {
+                addNotification(
+                    (int)$order['user_id'],
+                    'Order cancelled',
+                    'Your Bulk order #' . $orderId . ' was cancelled. Reason: ' . $reason
+                        . ($result['refund_attempted']
+                            ? ' Any payment made will be refunded.' : ''),
+                    'order', null, ['push', 'email']
+                );
+                $flash = $result['refund_attempted'] && $result['refund_requested']
+                    ? 'Approved. Cancelled, stock returned, and a refund was requested from Pesapal.'
+                    : 'Approved and cancelled.';
+            }
+        }
+    } elseif ($action === 'deny_cancellation') {
+        $reason = trim($_POST['reason'] ?? '');
+        if ($order['status'] !== 'cancellation_requested') {
+            $flashError = 'That order has no pending cancellation request.';
+        } elseif ($reason === '') {
+            $flashError = 'Give a reason — the vendor sees it.';
+        } else {
+            $dbh->prepare(
+                "UPDATE Bulk_orders
+                    SET status = COALESCE(status_before_cancellation, 'confirmed'),
+                        status_before_cancellation = NULL, cancellation_reason = NULL,
+                        updated_at = NOW()
+                  WHERE id = ? AND status = 'cancellation_requested'"
+            )->execute([$orderId]);
+
+            if (!empty($order['cancellation_requested_by'])) {
+                addNotification(
+                    (int)$order['cancellation_requested_by'],
+                    'Cancellation request denied',
+                    'Your request to cancel Bulk order #' . $orderId . ' was not approved. Reason: ' . $reason,
+                    'system', null, ['push', 'email']
+                );
+            }
+            $flash = 'Denied. The order continues as normal and the vendor has been told why.';
+        }
+    } elseif ($action === 'confirm_refund') {
+        // The only place status ever reaches 'refunded' — always a deliberate
+        // admin confirmation after checking Pesapal's dashboard, never automatic.
+        if ($order['payment_status'] !== 'refund_requested') {
+            $flashError = 'That order has no refund awaiting confirmation.';
+        } else {
+            $dbh->prepare(
+                "UPDATE Bulk_orders SET status = 'refunded', payment_status = 'refunded', updated_at = NOW() WHERE id = ?"
+            )->execute([$orderId]);
+
+            recordPaymentEvent($dbh, 'Bulk', $orderId, 'refund_confirmed', [
+                'from_status' => 'refund_requested',
+                'to_status'   => 'refunded',
+                'actor_type'  => 'admin',
+                'actor_id'    => (int)$_SESSION['admin_id'],
+            ]);
+
+            addNotification(
+                (int)$order['user_id'],
+                'Refund complete',
+                'Your refund for Bulk order #' . $orderId . ' has been completed.',
+                'order', null, ['push', 'email']
+            );
+            $flash = 'Refund confirmed and the customer told.';
         }
     }
 }
@@ -238,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Listing
 // -------------------------------------------------------------
 $filter = $_GET['filter'] ?? 'needs_rider';
-$allowedFilters = ['needs_rider', 'dispatched', 'unpaid', 'active', 'all'];
+$allowedFilters = ['needs_rider', 'dispatched', 'unpaid', 'active', 'cancellation_requests', 'refunds_pending', 'all'];
 if (!in_array($filter, $allowedFilters, true)) {
     $filter = 'needs_rider';
 }
@@ -262,6 +317,16 @@ switch ($filter) {
         break;
     case 'active':
         $where[] = "so.status NOT IN ('delivered','cancelled','refunded')";
+        break;
+    case 'cancellation_requests':
+        // A vendor asked to cancel a paid order. Nothing has happened yet —
+        // this is the queue for the one action that actually moves it.
+        $where[] = "so.status = 'cancellation_requested'";
+        break;
+    case 'refunds_pending':
+        // Pesapal accepted the refund request; waiting on an admin to
+        // confirm the money actually moved, per Pesapal's own dashboard.
+        $where[] = "so.payment_status = 'refund_requested'";
         break;
 }
 
@@ -299,6 +364,13 @@ $needsRider = (int)$dbh->query(
         AND so.status NOT IN ('delivered','cancelled','refunded')
         AND ra.id IS NULL"
 )->fetchColumn();
+
+$cancellationRequestCount = (int)$dbh->query(
+    "SELECT COUNT(*) FROM Bulk_orders WHERE status = 'cancellation_requested'"
+)->fetchColumn();
+$refundsPendingCount = (int)$dbh->query(
+    "SELECT COUNT(*) FROM Bulk_orders WHERE payment_status = 'refund_requested'"
+)->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -330,16 +402,23 @@ $needsRider = (int)$dbh->query(
         <div class="mb-5 space-x-2">
             <?php
             $labels = [
-                'needs_rider' => 'Needs a rider',
-                'dispatched'  => 'Dispatched',
-                'unpaid'      => 'Unpaid',
-                'active'      => 'Active',
-                'all'         => 'All',
+                'needs_rider'           => 'Needs a rider',
+                'dispatched'            => 'Dispatched',
+                'unpaid'                => 'Unpaid',
+                'active'                => 'Active',
+                'cancellation_requests' => 'Cancellation requests',
+                'refunds_pending'       => 'Refunds pending',
+                'all'                   => 'All',
+            ];
+            $badgeCounts = [
+                'needs_rider'           => $needsRider,
+                'cancellation_requests' => $cancellationRequestCount,
+                'refunds_pending'       => $refundsPendingCount,
             ];
             foreach ($labels as $key => $label): ?>
                 <a href="?filter=<?= $key ?>"
                    class="px-3 py-1 rounded-full text-sm <?= $filter === $key ? 'bg-green-700 text-white' : 'bg-gray-200 text-gray-700' ?>">
-                    <?= $label ?><?= $key === 'needs_rider' && $needsRider > 0 ? " ($needsRider)" : '' ?>
+                    <?= $label ?><?= !empty($badgeCounts[$key]) ? " ({$badgeCounts[$key]})" : '' ?>
                 </a>
             <?php endforeach; ?>
         </div>
@@ -408,7 +487,59 @@ $needsRider = (int)$dbh->query(
                         </div>
                     <?php endif; ?>
 
-                    <?php if ($pickupOnly): ?>
+                    <?php if ($o['payment_status'] === 'refund_requested'): ?>
+                        <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-900 mb-3 flex items-center justify-between gap-3">
+                            <span>
+                                <i class="fas fa-hourglass-half mr-1"></i>
+                                A refund was requested from Pesapal. Confirm here once its dashboard
+                                shows the money actually moved.
+                            </span>
+                            <form method="post" class="shrink-0">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
+                                <input type="hidden" name="action" value="confirm_refund">
+                                <button onclick="return confirm('Confirm the refund has actually completed in Pesapal?')"
+                                        class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                    Confirm refund complete
+                                </button>
+                            </form>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($o['status'] === 'cancellation_requested'): ?>
+                        <div class="bg-red-50 border border-red-200 rounded-lg px-3 py-3 text-sm text-red-900 mb-3">
+                            <div class="mb-2">
+                                <i class="fas fa-circle-exclamation mr-1"></i>
+                                The vendor asked to cancel this order.
+                                <?php if (!empty($o['cancellation_reason'])): ?>
+                                    Reason: <?= htmlspecialchars($o['cancellation_reason']) ?>
+                                <?php endif; ?>
+                                Nothing has changed yet — approving will cancel it for real, return the
+                                stock, and request a refund if it was paid electronically.
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <form method="post">
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
+                                    <input type="hidden" name="action" value="approve_cancellation">
+                                    <button onclick="return confirm('Approve this cancellation? Stock returns to the listing and a refund will be requested if it was paid.')"
+                                            class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        Approve cancellation
+                                    </button>
+                                </form>
+                                <form method="post" class="flex items-center gap-2">
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
+                                    <input type="hidden" name="action" value="deny_cancellation">
+                                    <input type="text" name="reason" placeholder="Reason (required)"
+                                           class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-48">
+                                    <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        Deny
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php elseif ($pickupOnly): ?>
                         <div class="text-sm text-gray-500">
                             Collection-only listing — the customer picks this up from the vendor.
                             <?php if (!empty($o['pickup_code'])): ?>

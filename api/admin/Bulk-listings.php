@@ -71,9 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $status = $listing['status'];
             if ($decision === 'approve') $status = 'approved';
             if ($decision === 'reject')  $status = 'rejected';
+            if ($decision === 'cancel')  $status = 'cancelled';
 
-            if ($decision === 'reject' && $notes === '') {
-                $flashError = 'Give a reason when rejecting — the vendor sees it, and a rejection with no explanation just gets resubmitted.';
+            if ($decision === 'cancel' && $listing['status'] !== 'approved') {
+                $flashError = 'Only an approved listing can be pulled from sale.';
+            } elseif (($decision === 'reject' || $decision === 'cancel') && $notes === '') {
+                $flashError = 'Give a reason — the vendor sees it.';
             } else {
                 $upd = $dbh->prepare(
                     "UPDATE Bulk_listings
@@ -111,6 +114,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'system', null, ['push', 'email']
                     );
                     $flash = 'Rejected. The vendor has been told why.';
+                } elseif ($decision === 'cancel') {
+                    // Pulled from sale, not deleted: sl.status = 'approved' is
+                    // the marketplace's only visible status (api/Bulk-listings.php
+                    // defaults to it), so this alone removes the listing from
+                    // sale immediately. Orders already placed against it are
+                    // untouched — those go through Bulk-orders.php's own
+                    // cancel_order action, separately, per order.
+                    addNotification(
+                        (int)$listing['user_id'],
+                        'Listing pulled from sale: ' . $productName,
+                        'Your Bulk listing for "' . $productName . '" was pulled from sale. Reason: ' . $notes,
+                        'system', null, ['push', 'email']
+                    );
+                    $flash = 'Pulled from sale. The vendor has been told why.';
                 } else {
                     $flash = 'Changes saved. The listing stays ' . $status . '.';
                 }
@@ -240,7 +257,7 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
                             <label class="block text-xs font-medium text-gray-600">Note to vendor</label>
                             <input type="text" name="admin_notes"
                                    value="<?= htmlspecialchars($l['admin_notes'] ?? '') ?>"
-                                   placeholder="Required when rejecting"
+                                   placeholder="Required when rejecting or pulling"
                                    class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         </div>
                     </div>
@@ -258,6 +275,13 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
                                 class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">
                             Reject
                         </button>
+                        <?php if ($l['status'] === 'approved'): ?>
+                            <button name="decision" value="cancel"
+                                    onclick="return confirm('Pull this listing from sale? It will stop showing to customers immediately. Already-placed orders are not affected.')"
+                                    class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                                Pull from sale
+                            </button>
+                        <?php endif; ?>
                     </div>
                 </form>
             <?php endforeach; ?>

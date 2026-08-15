@@ -107,6 +107,16 @@ fun VendorOrdersScreen(
 }
 
 /**
+ * Only special-cases the one status a vendor wouldn't recognise as raw enum
+ * text — everything else already reads fine capitalised (Pending, Confirmed,
+ * Ready...).
+ */
+private fun vendorOrderStatusLabel(status: String): String = when (status) {
+    "cancellation_requested" -> "Cancellation requested — awaiting admin"
+    else -> status.replaceFirstChar { it.uppercase() }
+}
+
+/**
  * Renders a [BulkOrder], not an Order — Bulk-orders.php is the only
  * per-vendor order endpoint this backend exposes.
  */
@@ -128,7 +138,7 @@ private fun VendorOrderRow(
                 Text(order.displayTitle, fontSize = 13.sp, color = Ink)
                 Text(
                     buildString {
-                        append(order.status.replaceFirstChar { it.uppercase() })
+                        append(vendorOrderStatusLabel(order.status))
                         // quantityLabel, not quantity: bulk orders are decimal
                         // kilograms, so the raw value renders as "20.0 unit(s)".
                         append("  •  ${order.quantityLabel} unit(s)")
