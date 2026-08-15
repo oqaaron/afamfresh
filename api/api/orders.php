@@ -532,11 +532,14 @@ switch ($action) {
             // Failure is logged, not surfaced. The order exists and is paid
             // for; telling the customer it failed because a text message did
             // would be a lie with consequences.
+            require_once __DIR__ . '/../includes/order_number.php';
+            $orderNumber = formatOrderNumber($dbh, $orderId);
+
             try {
                 require_once __DIR__ . '/../includes/brevo-sms.php';
                 sendSmsWithBrevo(
                     $mobile,
-                    "AfamFresh: order #{$orderId} received. We'll text you again when it's out for delivery."
+                    "AfamFresh: order #{$orderNumber} received. We'll text you again when it's out for delivery."
                 );
             } catch (Throwable $e) {
                 error_log("Order $orderId placed but the order-placed SMS failed: " . $e->getMessage());
@@ -549,7 +552,7 @@ switch ($action) {
                 addNotification(
                     (int)$user_id,
                     'Order placed',
-                    "Your order #{$orderId} was received. We'll text you when it's out for delivery.",
+                    "Your order #{$orderNumber} was received. We'll text you when it's out for delivery.",
                     'order', null, ['push'],
                     ['order_id' => (string)$orderId, 'source' => 'order']
                 );

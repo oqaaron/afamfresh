@@ -145,6 +145,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Could not save Bulk delivery settings.';
             }
         }
+    } elseif ($section === 'order_display') {
+        // Cosmetic only: prepended when an order number is SHOWN (SMS, push
+        // notifications, admin pages) — never touches orders.orderid /
+        // Bulk_orders.id themselves, which stay plain integers everywhere
+        // internally (foreign keys, rider_assignments, payment_events, ...).
+        // See includes/order_number.php's formatOrderNumber().
+        $prefix = trim((string)($_POST['order_number_prefix'] ?? ''));
+        if (strlen($prefix) > 12) {
+            $error = 'Order number prefix: keep it short — 12 characters or fewer.';
+        } elseif ($prefix !== '' && !preg_match('/^[A-Za-z0-9\-]*$/', $prefix)) {
+            $error = 'Order number prefix: letters, numbers and hyphens only.';
+        } else {
+            try {
+                $dbh->prepare(
+                    "INSERT INTO app_config (config_key, config_value) VALUES ('order_number_prefix', ?)
+                     ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)"
+                )->execute([$prefix]);
+                $success = 'Order number display updated.';
+            } catch (PDOException $e) {
+                error_log('configuration.php order_display save failed: ' . $e->getMessage());
+                $error = 'Could not save the order number prefix.';
+            }
+        }
     } elseif ($section === 'loyalty') {
         $earnRate = $_POST['earn_rate_ugx_per_point'] ?? '';
         $redeemValue = $_POST['redeem_value_ugx_per_point'] ?? '';
@@ -190,6 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $deliveryPricing = $dbh->query("SELECT * FROM delivery_pricing ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
 $BulkSettings = $dbh->query("SELECT * FROM Bulk_delivery_settings ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
 $loyaltySettings = $dbh->query("SELECT * FROM loyalty_settings ORDER BY id LIMIT 1")->fetch(PDO::FETCH_ASSOC) ?: [];
+$orderNumberPrefixStmt = $dbh->prepare("SELECT config_value FROM app_config WHERE config_key = 'order_number_prefix'");
+$orderNumberPrefixStmt->execute();
+$orderNumberPrefix = (string)($orderNumberPrefixStmt->fetchColumn() ?: '');
 
 function field($arr, $key, $default = '') {
     return htmlspecialchars((string)($arr[$key] ?? $default));
@@ -221,6 +247,28 @@ function field($arr, $key, $default = '') {
             <?php if ($success): ?>
                 <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4"><?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
+
+            <!-- ===== Order number display ===== -->
+            <div class="bg-white p-8 rounded-xl shadow mb-6">
+                <h2 class="text-lg font-bold text-gray-800 mb-1">Order number display</h2>
+                <p class="text-gray-400 text-xs mb-4">
+                    Cosmetic prefix shown on order numbers (SMS, push notifications, admin
+                    pages) — e.g. "AF-" turns #500943 into AF-500943. The real underlying
+                    order id is unchanged everywhere internally.
+                </p>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="section" value="order_display">
+                    <div class="max-w-xs">
+                        <label class="block text-gray-700 font-bold mb-2">Prefix (optional)</label>
+                        <input type="text" maxlength="12" name="order_number_prefix"
+                               value="<?= htmlspecialchars($orderNumberPrefix) ?>"
+                               placeholder="e.g. AF-" class="w-full px-4 py-2 border rounded">
+                        <p class="text-gray-400 text-xs mt-1">Letters, numbers and hyphens only. Leave blank for no prefix.</p>
+                    </div>
+                    <button type="submit" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Save order number display</button>
+                </form>
+            </div>
 
             <!-- ===== Delivery pricing ===== -->
             <div class="bg-white p-8 rounded-xl shadow mb-6">
