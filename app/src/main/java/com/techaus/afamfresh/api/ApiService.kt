@@ -682,24 +682,10 @@ interface ApiService {
     // FCM TOKEN REGISTRATION
     // ------------------------------------------------------------
     //
-    // ⚠️ NOT IMPLEMENTED SERVER-SIDE. There is no endpoint anywhere in api/
-    // that writes `users.fcm_token`. The push pipeline reads that column
-    // (includes/classes/NotificationManager.php) but nothing ever fills it, so
-    // push notifications cannot reach this app until the endpoint below exists.
-    //
-    // Required contract — add to notifications.php alongside the other actions:
-    //
-    //   POST notifications.php?action=register-token
-    //     fields:  fcm_token (required), device_id (optional)
-    //     session: required; the token is stored against $_SESSION user id
-    //     returns  { "success": true }
-    //
-    //     UPDATE users SET fcm_token = :token WHERE id = :user_id
-    //
-    //     Must overwrite, not append: a token is per-install and Firebase
-    //     rotates it, so the previous value is stale the moment this is called.
-    //     Should also clear the column on logout, otherwise pushes keep going
-    //     to a device that has signed out.
+    // Verified against api/notifications.php's register-token action:
+    // session-scoped, overwrites (never appends) users.fcm_token. Invoked
+    // from FirebaseTokenManager.registerTokenWithBackend(), called after
+    // login (MainActivity) and on FCM token refresh (AfamFreshMessagingService).
     @POST("notifications.php")
     @FormUrlEncoded
     fun registerFCMToken(

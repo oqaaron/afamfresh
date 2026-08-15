@@ -417,6 +417,17 @@ function googleAccessToken($scope) {
 
 /**
  * Send an FCM v1 Push Notification using Google Service Account Credentials.
+ *
+ * Sent entirely as `data` — no top-level `notification` block. FCM hands a
+ * `notification` payload straight to the OS when the app is backgrounded or
+ * killed, which skips AfamFreshMessagingService.onMessageReceived() entirely
+ * (that class's own doc comment already says as much). That is the common
+ * case for a phone, not the exception, so every push effectively went
+ * through an untested code path: no custom channel, no deep-link intent, no
+ * DeliveryPushBus update for an open tracking screen — whatever the OS's
+ * bare-minimum default rendering did. A pure data payload always reaches
+ * onMessageReceived(), foreground or not, which is what this app was built
+ * against from the client side.
  */
 function sendPushNotification($deviceToken, $title, $body, $customData = []) {
     $accessToken = googleAccessToken('https://www.googleapis.com/auth/firebase.messaging');
@@ -425,8 +436,12 @@ function sendPushNotification($deviceToken, $title, $body, $customData = []) {
     }
 
     $fcmUrl = 'https://fcm.googleapis.com/v1/projects/' . FIREBASE_PROJECT_ID . '/messages:send';
-    
-    $stringData = [];
+
+    // title/body join the rest of the custom fields (order_id, source, type,
+    // ...) in one flat, all-string data map — FCM data payloads only carry
+    // strings, and AfamFreshMessagingService reads title/body from data[]
+    // first, exactly like every other field.
+    $stringData = ['title' => (string)$title, 'body' => (string)$body];
     foreach ($customData as $key => $val) {
         $stringData[(string)$key] = (string)$val;
     }
@@ -434,16 +449,9 @@ function sendPushNotification($deviceToken, $title, $body, $customData = []) {
     $messagePayload = [
         'message' => [
             'token' => $deviceToken,
-            'notification' => [
-                'title' => $title,
-                'body' => $body
-            ]
+            'data' => $stringData,
         ]
     ];
-
-    if (!empty($stringData)) {
-        $messagePayload['message']['data'] = $stringData;
-    }
 
     $headers = [
         'Authorization: Bearer ' . $accessToken,
@@ -459,13 +467,23 @@ function sendPushNotification($deviceToken, $title, $body, $customData = []) {
 
     $fcmResponse = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
+
     if (curl_errno($ch)) {
         error_log("[FCM Error] Push dispatcher failed network transmission: " . curl_error($ch));
         curl_close($ch);
         return false;
     }
     curl_close($ch);
+
+    // A non-200 (invalid/unregistered token, bad credentials, wrong project)
+    // used to be silently swallowed here — the only thing ever logged was a
+    // network-level curl error, so a push consistently rejected by FCM left
+    // no trace anywhere. cron/process_notifications.php already records
+    // whatever this function returns into user_notifications.push_error;
+    // this is what actually populates that column with something useful.
+    if ($httpCode !== 200) {
+        error_log("[FCM Error] Push rejected, HTTP $httpCode: " . substr((string)$fcmResponse, 0, 300));
+    }
 
     return ($httpCode === 200);
 }
