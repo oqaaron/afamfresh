@@ -335,6 +335,14 @@ fun AddBulkScreen(
                                 }
                             }
                         }
+
+                        // Was only reachable when vendorProducts was empty,
+                        // so it vanished the moment a vendor had one approved
+                        // product -- there was then no way back to
+                        // NewProductScreen from this screen at all.
+                        TextButton(onClick = onAddInventory) {
+                            Text("+ Add a product", fontWeight = FontWeight.SemiBold, color = Forest)
+                        }
                     }
                 }
 
