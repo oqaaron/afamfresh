@@ -21,6 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $quantity = intval($_POST['quantity'] ?? 0);
     $quantitytype = trim($_POST['quantitytype'] ?? 'Kg');
     $discount = floatval($_POST['discount'] ?? 0);
+    // Drive the app's Promos/Flash Sales rows on HomeScreen. Stored as the
+    // 'YES'/'NO' strings items.offer/weekly_deal already use — Product.kt's
+    // isOffer/isWeeklyDeal do a case-insensitive match against exactly that.
+    $offer = isset($_POST['offer']) ? 'YES' : 'NO';
+    $weeklyDeal = isset($_POST['weekly_deal']) ? 'YES' : 'NO';
 
     // Handle image upload
     $image = '';
@@ -40,8 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // An image error above is fatal for the whole save — fall through and
         // re-render with the message rather than inserting a broken row.
     } elseif ($name && $category && $price > 0) {
-        $stmt = $dbh->prepare("INSERT INTO items (name, category, description, price, quantity, quantitytype, discount, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        if ($stmt->execute([$name, $category, $description, $price, $quantity, $quantitytype, $discount, $image])) {
+        $stmt = $dbh->prepare("INSERT INTO items (name, category, description, price, quantity, quantitytype, discount, offer, weekly_deal, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if ($stmt->execute([$name, $category, $description, $price, $quantity, $quantitytype, $discount, $offer, $weeklyDeal, $image])) {
             $success = 'Product added successfully!';
         } else {
             $error = 'Failed to add product.';
@@ -101,6 +106,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Discount (%)</label>
                     <input type="number" name="discount" step="0.01" value="0" class="w-full px-4 py-2 border rounded">
+                    <p class="text-gray-400 text-xs mt-1">A discount above 0% puts this product under Hot Sale in the app.</p>
+                </div>
+                <div class="flex items-center gap-6 md:col-span-2">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" name="offer" value="1" class="h-4 w-4">
+                        <span class="text-gray-700 font-bold">Show under Promos</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" name="weekly_deal" value="1" class="h-4 w-4">
+                        <span class="text-gray-700 font-bold">Show under Flash Sales</span>
+                    </label>
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-gray-700 font-bold mb-2">Description</label>
