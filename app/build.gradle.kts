@@ -1,4 +1,5 @@
 import java.io.FileInputStream
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -190,7 +191,7 @@ android {
             // Links verification -- that's fine, the custom-scheme intent
             // filter still covers debug/local testing; only a real https host
             // (as release should always be) can host assetlinks.json at all.
-            manifestPlaceholders["appLinkHost"] = runCatching { java.net.URI(debugBaseUrl).host }.getOrNull() ?: "localhost"
+            manifestPlaceholders["appLinkHost"] = runCatching { URI(debugBaseUrl).host }.getOrNull() ?: "localhost"
         }
 
         release {
@@ -218,7 +219,7 @@ android {
             // base.url.release in local.properties differs from what's
             // actually live, assetlinks.json (api/.well-known/assetlinks.json)
             // needs to be hosted on THAT host, not this build's guess.
-            manifestPlaceholders["appLinkHost"] = runCatching { java.net.URI(releaseBaseUrl).host }.getOrNull() ?: "afam.techaus.online"
+            manifestPlaceholders["appLinkHost"] = runCatching { URI(releaseBaseUrl).host }.getOrNull() ?: "afam.techaus.online"
 
             isMinifyEnabled = true
             isShrinkResources = true
