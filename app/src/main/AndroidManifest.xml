@@ -5,15 +5,21 @@
     <!-- ============= PERMISSIONS ============= -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION moved to
+         src/rider/AndroidManifest.xml: only the rider flavor calls a device
+         location API (RiderLocationUpdates.kt etc). Customer and vendor map
+         screens are tap-to-pick-a-point only, so declaring location here
+         requested a permission those two flavors never use — a Play Data
+         Safety mismatch. -->
     <!-- ACCESS_BACKGROUND_LOCATION removed: it was declared but never
          requested, and a Play policy flag on all three apps for it. The rider
          flavor's foreground tracking service gives continuous location while
          a delivery is active without needing it. -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- WRITE_EXTERNAL_STORAGE/READ_EXTERNAL_STORAGE removed: image pickers
+         (NewProductScreen, ConfirmReceiptScreen, ProfileScreen,
+         RiderDeliveryDetailScreen) all use the modern Photo Picker
+         (PickVisualMedia), which needs neither permission. Nothing in the
+         codebase references either constant. -->
     <!-- Required on API 33+ for any posted notification, including FCM's.
          MainActivity and AfamFreshMessagingService already request/handle
          this at runtime; without the manifest declaration that request was

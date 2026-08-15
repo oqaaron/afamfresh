@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Only the rider app runs a foreground location service, so these stay
-         out of src/main. FOREGROUND_SERVICE_LOCATION is mandatory at
-         targetSdk 34 for any service declaring foregroundServiceType="location". -->
+    <!-- Only the rider app calls a device location API (RiderLocationUpdates.kt,
+         RiderNavigationScreen.kt, RiderTrackingService.kt) or runs a foreground
+         location service, so these stay out of src/main. FOREGROUND_SERVICE_LOCATION
+         is mandatory at targetSdk 34 for any service declaring
+         foregroundServiceType="location". -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
