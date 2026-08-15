@@ -29,7 +29,10 @@ $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 
 // Build query
-$sql = "SELECT * FROM items WHERE 1=1";
+$sql = "SELECT items.*, vendors.business_name AS vendor_business_name
+        FROM items
+        LEFT JOIN vendors ON vendors.id = items.vendor_id
+        WHERE 1=1";
 $params = [];
 
 if (!empty($search)) {
@@ -107,6 +110,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                         <tr>
                             <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Image</th>
                             <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Name</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Source</th>
                             <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Category</th>
                             <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Price</th>
                             <th class="px-6 py-4 text-left text-sm font-semibold text-gray-600">Qty</th>
@@ -117,7 +121,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                     <tbody class="divide-y">
                         <?php if (count($products) === 0): ?>
                             <tr>
-                                <td colspan="7" class="px-6 py-8 text-center text-gray-500">No products found.</td>
+                                <td colspan="8" class="px-6 py-8 text-center text-gray-500">No products found.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($products as $row): ?>
@@ -133,6 +137,17 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                                     <?php endif; ?>
                                 </td>
                                 <td class="px-6 py-4 font-medium"><?= htmlspecialchars($row['name']) ?></td>
+                                <td class="px-6 py-4">
+                                    <?php if ($row['vendor_id'] !== null): ?>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-teal-100 text-teal-700" title="Vendor-owned — manage on the Vendor Catalogue page">
+                                            <i class="fas fa-store mr-1"></i><?= htmlspecialchars($row['vendor_business_name'] ?? 'Vendor') ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                                            <i class="fas fa-warehouse mr-1"></i>Shop
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="px-6 py-4"><?= htmlspecialchars($row['category']) ?></td>
                                 <td class="px-6 py-4 font-semibold">UGX <?= number_format($row['price']) ?></td>
                                 <td class="px-6 py-4"><?= htmlspecialchars($row['quantity']) . ' ' . htmlspecialchars($row['quantitytype']) ?></td>
