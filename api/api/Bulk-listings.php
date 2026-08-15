@@ -151,17 +151,58 @@ try {
         }
         
     } elseif ($method === 'PUT') {
-        // Update Bulk listing (status, quantity, admin notes) – admin only in practice
+        // Update Bulk listing (status, quantity, admin notes).
+        //
+        // Had no auth check at all: listing_id, status, remaining_quantity
+        // and admin_notes came straight from the body and were written
+        // through unconditionally, so anyone could approve their own
+        // rejected listing, inflate stock, or edit another vendor's
+        // listing by guessing an id. The vendor app only ever sends
+        // remaining_quantity (see VendorRepository.updateListingQuantity);
+        // status/admin_notes are admin-only, since status='approved' is
+        // the entire point of the review workflow admin/Bulk-listings.php
+        // enforces.
+        $isAdminSession = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+        $sessionUserId  = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
         $input = json_decode(file_get_contents('php://input'), true);
         $listing_id = intval($input['listing_id'] ?? 0);
         $status = isset($input['status']) ? trim($input['status']) : null;
         $remaining_quantity = isset($input['remaining_quantity']) ? floatval($input['remaining_quantity']) : null;
         $admin_notes = isset($input['admin_notes']) ? trim($input['admin_notes']) : null;
-        
+
         if ($listing_id === 0) {
             echo json_encode(['error' => 'listing_id is required']);
             exit;
         }
+
+        $owner = $dbh->prepare(
+            "SELECT v.user_id FROM Bulk_listings sl JOIN vendors v ON v.id = sl.vendor_id WHERE sl.id = ?"
+        );
+        $owner->execute([$listing_id]);
+        $ownerUserId = $owner->fetchColumn();
+        if ($ownerUserId === false) {
+            echo json_encode(['error' => 'No such listing']);
+            exit;
+        }
+        if (!$isAdminSession) {
+            if ($sessionUserId === 0) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Please sign in again.']);
+                exit;
+            }
+            if ((int)$ownerUserId !== $sessionUserId) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'error' => 'That listing is not yours.']);
+                exit;
+            }
+            if ($status !== null || $admin_notes !== null) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'error' => 'Only an admin can change status or notes.']);
+                exit;
+            }
+        }
+
         $updateFields = [];
         $params = [];
         if ($status !== null) {
@@ -188,20 +229,50 @@ try {
         echo json_encode(['success' => true, 'message' => 'Listing updated successfully']);
         
     } elseif ($method === 'DELETE') {
-        // Cancel Bulk listing (soft delete = set status to 'cancelled')
+        // Cancel Bulk listing (soft delete = set status to 'cancelled').
+        //
+        // Had no auth check either: any listing_id cancelled any vendor's
+        // live listing.
+        $isAdminSession = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+        $sessionUserId  = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
         $listing_id = intval($_GET['listing_id'] ?? 0);
         if ($listing_id === 0) {
             echo json_encode(['error' => 'listing_id is required']);
             exit;
         }
+
+        $owner = $dbh->prepare(
+            "SELECT v.user_id FROM Bulk_listings sl JOIN vendors v ON v.id = sl.vendor_id WHERE sl.id = ?"
+        );
+        $owner->execute([$listing_id]);
+        $ownerUserId = $owner->fetchColumn();
+        if ($ownerUserId === false) {
+            echo json_encode(['error' => 'No such listing']);
+            exit;
+        }
+        if (!$isAdminSession) {
+            if ($sessionUserId === 0) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'error' => 'Please sign in again.']);
+                exit;
+            }
+            if ((int)$ownerUserId !== $sessionUserId) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'error' => 'That listing is not yours.']);
+                exit;
+            }
+        }
+
         $stmt = $dbh->prepare("UPDATE Bulk_listings SET status = 'cancelled', updated_at = NOW() WHERE id = ?");
         $stmt->execute([$listing_id]);
         echo json_encode(['success' => true, 'message' => 'Listing cancelled successfully']);
-        
+
     } else {
         echo json_encode(['error' => 'Invalid request method']);
     }
 } catch (PDOException $e) {
-    echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    error_log('Bulk-listings.php error: ' . $e->getMessage());
+    echo json_encode(['error' => 'A database error occurred. Please try again.']);
 }
 ?>

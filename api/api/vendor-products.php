@@ -107,6 +107,7 @@ try {
     }
     
 } catch (PDOException $e) {
-    echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    error_log('vendor-products.php error: ' . $e->getMessage());
+    echo json_encode(['error' => 'A database error occurred. Please try again.']);
 }
 ?>

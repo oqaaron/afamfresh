@@ -9,15 +9,21 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 // ------------------------------------------------------------------
-// 1. READ AND LOG INCOMING DATA
+// 1. READ INCOMING DATA
 // ------------------------------------------------------------------
+// This used to unconditionally error_log() the full GET/POST/raw body on
+// every call -- customer name, mobile number and address included -- which
+// put PII into the server log at volume for no debugging benefit in normal
+// operation. Left available behind APP_ENV for local troubleshooting only.
 $rawInput = file_get_contents('php://input');
 $jsonData = json_decode($rawInput, true);
-error_log("=== ORDERS REQUEST ===");
-error_log("METHOD: " . $_SERVER['REQUEST_METHOD']);
-error_log("GET: " . print_r($_GET, true));
-error_log("POST: " . print_r($_POST, true));
-error_log("RAW: " . $rawInput);
+if (defined('APP_ENV') && APP_ENV !== 'production') {
+    error_log("=== ORDERS REQUEST ===");
+    error_log("METHOD: " . $_SERVER['REQUEST_METHOD']);
+    error_log("GET: " . print_r($_GET, true));
+    error_log("POST: " . print_r($_POST, true));
+    error_log("RAW: " . $rawInput);
+}
 
 // ------------------------------------------------------------------
 // 2. DETECT ACTION (from GET, POST, or JSON)
@@ -564,7 +570,7 @@ switch ($action) {
             error_log("Create order error: " . $e->getMessage());
             echo json_encode([
                 'success' => false,
-                'error' => 'Order creation failed: ' . $e->getMessage()
+                'error' => 'Order creation failed. Please try again.'
             ]);
         }
         exit;

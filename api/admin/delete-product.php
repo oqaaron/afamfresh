@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 // === true, not a bare isset(): isset() is satisfied by a value of
 // literal false, which would let a logged-out session through.
@@ -17,6 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: products.php');
     exit;
 }
+
+// POST alone isn't enough -- a hidden auto-submitting form on any site an
+// admin's browser visits can also POST here using their session cookie.
+// This file is unreferenced now (products.php handles delete inline with
+// its own verifyCsrf() call) but stays reachable by direct URL, so it needs
+// the same token check every other state-changing admin page has.
+verifyCsrf();
 
 $id = intval($_POST['id'] ?? 0);
 if ($id) {

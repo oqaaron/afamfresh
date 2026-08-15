@@ -99,7 +99,16 @@ if ($action == 'register') {
     $nameParts = explode(' ', $name, 2);
     $fname = $nameParts[0] ?? '';
     $lname = $nameParts[1] ?? '';
-    
+
+    // Same bucketing as login: by IP and by the submitted email, so this
+    // can't be scripted into unlimited account creation, and the "Email
+    // already registered" response can't be used as an unthrottled
+    // enumeration oracle.
+    if (rateLimited($dbh, 'register:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || ($email !== '' && rateLimited($dbh, 'register:id:' . strtolower($email), 5, 300))) {
+        failRateLimited();
+    }
+
     try {
         // Check if email already exists
         $checkStmt = $dbh->prepare("SELECT id FROM users WHERE email = ?");

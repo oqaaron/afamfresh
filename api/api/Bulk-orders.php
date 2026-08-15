@@ -729,6 +729,6 @@ try {
         $dbh->rollBack();
     }
     error_log('Bulk-orders: ' . $e->getMessage());
-    echo json_encode(['error' => 'Database error: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'A database error occurred. Please try again.']);
 }
 ?>
