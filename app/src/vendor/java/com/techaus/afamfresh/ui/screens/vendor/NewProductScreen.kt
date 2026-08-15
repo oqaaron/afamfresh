@@ -75,7 +75,7 @@ fun NewProductScreen(
     // alongside the catalogue rather than inventing a category of one.
     val categories = listOf(
         "Vegetables", "Fruits", "Grains", "Tubers", "Legumes",
-        "Herbs", "Dairy", "Meat", "Fish Products", "Other"
+        "Herbs", "Dairy", "Meat", "Fish Products", "Others"
     )
     val units = listOf("kg", "piece", "bunch", "tray", "basket", "crate", "sack")
 
