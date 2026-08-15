@@ -639,11 +639,14 @@ class AuthRepository(
                     loginResponse.token?.let { saveToken(it) }
                     saveUser(loginResponse.user)
                     updateLastActivity()
-                    loginResponse
-                } else {
-                    null
                 }
+                // Returned even on success=false, not collapsed to null: the
+                // caller (AuthViewModel) reads loginResponse.error to show the
+                // real reason (e.g. "This is a Customer account...") instead
+                // of a generic fallback that hid it.
+                loginResponse
             } else {
+                Log.e("AuthRepo", "googleLogin HTTP ${response.code()}: ${response.errorBody()?.string()}")
                 null
             }
         } catch (e: Exception) {
