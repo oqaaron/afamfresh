@@ -131,16 +131,24 @@ function getRecentUserNotifications($userId, $limit = 10) {
 }
 
 /**
- * Mark a notification as read
+ * Mark a notification as read.
+ *
+ * $userId scopes the UPDATE so one account can't mark (or probe the
+ * existence of) another account's notification by guessing/incrementing an
+ * id — ids here are a plain AUTO_INCREMENT, not the 900-wide random space
+ * orders.php uses specifically because it's guessable.
+ *
  * @param int $notificationId - Notification ID
+ * @param int $userId - The signed-in caller's own id
  * @return bool - Success status
  */
-function markNotificationAsRead($notificationId) {
+function markNotificationAsRead($notificationId, $userId) {
     global $dbh;
     try {
-        $sql = "UPDATE user_notifications SET is_read = 1 WHERE id = :id";
+        $sql = "UPDATE user_notifications SET is_read = 1 WHERE id = :id AND user_id = :user_id";
         $query = $dbh->prepare($sql);
         $query->bindParam(':id', $notificationId, PDO::PARAM_INT);
+        $query->bindParam(':user_id', $userId, PDO::PARAM_INT);
         return $query->execute();
     } catch (PDOException $e) {
         error_log("Mark as read error: " . $e->getMessage());

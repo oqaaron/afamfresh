@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -9,6 +10,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
 // Handle actions: change role, suspend, delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $userId = intval($_POST['user_id'] ?? 0);
     $action = $_POST['action'] ?? '';
 
@@ -141,6 +143,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </td>
                             <td class="px-4 py-3">
                                 <form method="POST" class="flex items-center gap-2">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
                                     <input type="hidden" name="action" value="change_role">
                                     <select name="role" class="border rounded px-2 py-1 text-sm">
@@ -155,6 +158,7 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <td class="px-4 py-3">
                                 <a href="edit-user.php?id=<?= $user['id'] ?>" class="text-blue-600 hover:text-blue-800 text-sm mr-3"><i class="fas fa-pen"></i> Edit</a>
                                 <form method="POST" class="inline-block" onsubmit="return confirm('Delete this user and all associated data?')">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
                                     <input type="hidden" name="action" value="delete">
                                     <button type="submit" class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>

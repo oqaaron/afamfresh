@@ -281,6 +281,35 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // =============================================================
+// SERVER-SIDE IDLE EXPIRY
+// =============================================================
+// Deliberately outside the PHP_SESSION_NONE guard above: most callers start
+// their own session before ever requiring this file (see the .htaccess
+// cookie-flags comment for why), so this has to run unconditionally to see
+// every request rather than only the rare one where this file's own
+// session_start() actually fires.
+//
+// Two windows, not one: an admin session left open in a browser tab is a
+// much higher-value target sitting in a much less controlled environment
+// than a phone that's already behind a lock screen, so it gets a much
+// shorter leash. 90 days matches how a mobile app is normally expected to
+// just stay signed in.
+$idleLimitSeconds = (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
+    ? 7200            // 2 hours, admin
+    : 60 * 60 * 24 * 90; // 90 days, customer/rider/vendor app
+
+if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $idleLimitSeconds) {
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+    }
+    session_destroy();
+    session_start();
+}
+$_SESSION['last_activity'] = time();
+
+// =============================================================
 // CORS HEADERS (for API access from mobile app)
 // =============================================================
 header('Access-Control-Allow-Origin: *');

@@ -330,6 +330,13 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'Invalid items data']);
             exit;
         }
+        // No real cart is anywhere near this size — a guard against a
+        // request built to make the item-pricing loop below do
+        // unreasonable amounts of work.
+        if (count($items) > 100) {
+            echo json_encode(['success' => false, 'error' => 'Too many items in one order']);
+            exit;
+        }
 
         try {
             $dbh->beginTransaction();

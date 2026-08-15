@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -9,6 +10,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
 // Handle order status update or rider assignment
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $orderId = intval($_POST['order_id'] ?? 0);
     $action = $_POST['action'] ?? '';
 
@@ -191,6 +193,7 @@ $riders = $dbh->query("SELECT id, name FROM riders")->fetchAll(PDO::FETCH_ASSOC)
                             <td class="px-4 py-3">UGX <?= number_format($order['total_amount']) ?></td>
                             <td class="px-4 py-3">
                                 <form method="POST" class="flex items-center gap-2">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="order_id" value="<?= $order['orderid'] ?>">
                                     <input type="hidden" name="action" value="update_status">
                                     <select name="status" class="border rounded px-2 py-1 text-sm">
@@ -205,6 +208,7 @@ $riders = $dbh->query("SELECT id, name FROM riders")->fetchAll(PDO::FETCH_ASSOC)
                             </td>
                             <td class="px-4 py-3">
                                 <form method="POST" class="flex items-center gap-2">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="order_id" value="<?= $order['orderid'] ?>">
                                     <input type="hidden" name="action" value="assign_rider">
                                     <select name="rider_id" class="border rounded px-2 py-1 text-sm">

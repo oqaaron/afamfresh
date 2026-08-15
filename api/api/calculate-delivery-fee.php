@@ -16,6 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once dirname(__DIR__) . '/admin/includes/config.php';
 require_once dirname(__DIR__) . '/includes/delivery-fee.php';
+require_once dirname(__DIR__) . '/includes/rate_limit.php';
+
+// Public and unauthenticated by design (checkout needs a quote before
+// login), but that also means unlimited requests can hit Google Routes/
+// Nominatim through this. Loose limit — a customer legitimately re-quotes
+// on every map drag.
+if (rateLimited($dbh, 'quote:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 30, 60)) {
+    failRateLimited();
+}
 
 // Get input
 $input = json_decode(file_get_contents('php://input'), true);

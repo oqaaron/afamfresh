@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -17,6 +18,7 @@ $formError = '';
 // collided and threw an uncaught PDOException. Full editing now lives in
 // edit-rider.php, which handles all fields and NULLs blank emails.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add') {
@@ -121,6 +123,7 @@ $riders = $dbh->query("SELECT * FROM riders ORDER BY id DESC")->fetchAll(PDO::FE
         <div class="bg-white p-6 rounded-xl shadow mb-8">
             <h2 class="text-lg font-bold mb-4">Add New Rider</h2>
             <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <?= csrfField() ?>
                 <input type="hidden" name="action" value="add">
                 <input type="text" name="name" placeholder="Full Name" required class="px-4 py-2 border rounded">
                 <input type="text" name="phone" placeholder="Phone" required class="px-4 py-2 border rounded">
@@ -169,6 +172,7 @@ $riders = $dbh->query("SELECT * FROM riders ORDER BY id DESC")->fetchAll(PDO::FE
                                 <!-- Quick on/off duty toggle, same shape as the role dropdown
                                      in users.php. Full editing is on edit-rider.php. -->
                                 <form method="POST" class="flex items-center gap-1">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="action" value="set_status">
                                     <input type="hidden" name="id" value="<?= $rider['id'] ?>">
                                     <select name="status" class="border rounded px-2 py-1 text-sm <?= $rider['status'] === 'online' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-700' ?>">
@@ -181,6 +185,7 @@ $riders = $dbh->query("SELECT * FROM riders ORDER BY id DESC")->fetchAll(PDO::FE
                             <td class="px-4 py-3">
                                 <a href="edit-rider.php?id=<?= $rider['id'] ?>" class="text-blue-600 hover:text-blue-800 text-sm mr-3"><i class="fas fa-pen"></i> Edit</a>
                                 <form method="POST" class="inline-block" onsubmit="return confirm('Delete this rider?')">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= $rider['id'] ?>">
                                     <button type="submit" class="text-red-600 hover:text-red-800 text-sm ml-2"><i class="fas fa-trash"></i></button>

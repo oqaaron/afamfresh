@@ -17,6 +17,7 @@
 
 session_start();
 require_once 'includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -36,6 +37,7 @@ function validNumber($value, bool $isPercent = false): bool {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $section = $_POST['section'] ?? '';
 
     if ($section === 'delivery_pricing') {
@@ -225,6 +227,7 @@ function field($arr, $key, $default = '') {
                 <h2 class="text-lg font-bold text-gray-800 mb-1">Delivery pricing</h2>
                 <p class="text-gray-400 text-xs mb-4">Shop-order delivery fee: service fee, insurance, distance rate tiers.</p>
                 <form method="POST">
+                    <?= csrfField() ?>
                     <input type="hidden" name="section" value="delivery_pricing">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -273,6 +276,7 @@ function field($arr, $key, $default = '') {
                 <h2 class="text-lg font-bold text-gray-800 mb-1">Bulk delivery settings</h2>
                 <p class="text-gray-400 text-xs mb-4">Weight-based delivery fee for bulk Bulk orders.</p>
                 <form method="POST">
+                    <?= csrfField() ?>
                     <input type="hidden" name="section" value="Bulk_delivery">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -301,6 +305,7 @@ function field($arr, $key, $default = '') {
                 <h2 class="text-lg font-bold text-gray-800 mb-1">Loyalty settings</h2>
                 <p class="text-gray-400 text-xs mb-4">How fast customers earn points, and what those points are worth at checkout.</p>
                 <form method="POST">
+                    <?= csrfField() ?>
                     <input type="hidden" name="section" value="loyalty">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>

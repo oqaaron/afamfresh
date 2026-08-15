@@ -22,7 +22,7 @@ if ($action == 'list') {
     
 } elseif ($action == 'mark-read') {
     $notification_id = intval($_POST['id'] ?? 0);
-    $result = markNotificationAsRead($notification_id);
+    $result = markNotificationAsRead($notification_id, $user_id);
     echo json_encode(['success' => $result]);
     
 } elseif ($action == 'mark-all-read') {

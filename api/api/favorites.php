@@ -10,6 +10,7 @@
 
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/account_type.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -18,6 +19,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = (int)$_SESSION['user_id'];
+// Favoriting a product is a customer-app-only concept (HomeScreen/
+// ProductDetailScreen are both customer-flavor screens) — no legitimate
+// rider or vendor flow reaches this endpoint.
+requireAccountType($dbh, $user_id, 'customer');
 $action = $_GET['action'] ?? '';
 
 if ($action === 'list') {

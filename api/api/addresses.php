@@ -13,6 +13,7 @@
 
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/account_type.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -21,6 +22,11 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $user_id = (int)$_SESSION['user_id'];
+// Saved addresses are a customer-checkout concept — no legitimate rider or
+// vendor flow reaches this endpoint (unlike notifications.php, which the
+// rider/vendor apps genuinely share with the customer app for their own
+// notification feed).
+requireAccountType($dbh, $user_id, 'customer');
 $action = $_GET['action'] ?? '';
 
 /** Row -> the exact shape Address.kt's @SerializedName fields expect. */
@@ -121,13 +127,24 @@ if ($action === 'list') {
     try {
         $dbh->beginTransaction();
 
+        // Verified BEFORE anything else touches this user's rows. Clearing
+        // every default first and only then attempting a targeted update
+        // meant a foreign or stale id left the caller with zero defaults —
+        // the clear always ran, the set never did.
+        $owns = $dbh->prepare("SELECT 1 FROM customer_addresses WHERE id = ? AND user_id = ?");
+        $owns->execute([$id, $user_id]);
+        if (!$owns->fetchColumn()) {
+            $dbh->rollBack();
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Address not found']);
+            exit;
+        }
+
         if ($isDefault) {
             $dbh->prepare("UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?")
                 ->execute([$user_id]);
         }
 
-        // WHERE user_id = ? is the ownership check — an id belonging to
-        // another customer simply matches no row and updates nothing.
         $stmt = $dbh->prepare(
             "UPDATE customer_addresses
                 SET label = ?, recipient_name = ?, phone = ?, area = ?, address_line = ?,
@@ -191,6 +208,19 @@ if ($action === 'list') {
 
     try {
         $dbh->beginTransaction();
+
+        // Same fix as 'update': verify ownership before clearing anything,
+        // so a foreign/nonexistent id can't wipe the caller's real default
+        // and then fail to set a new one.
+        $owns = $dbh->prepare("SELECT 1 FROM customer_addresses WHERE id = ? AND user_id = ?");
+        $owns->execute([$id, $user_id]);
+        if (!$owns->fetchColumn()) {
+            $dbh->rollBack();
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Address not found']);
+            exit;
+        }
+
         $dbh->prepare("UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?")
             ->execute([$user_id]);
         $dbh->prepare("UPDATE customer_addresses SET is_default = 1 WHERE id = ? AND user_id = ?")

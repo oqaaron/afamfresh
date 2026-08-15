@@ -13,6 +13,7 @@
 
 session_start();
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 // === true, not a bare isset(): isset() is satisfied by a value of
 // literal false, which would let a logged-out session through.
@@ -25,6 +26,7 @@ $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $requestId = intval($_POST['request_id'] ?? 0);
     $action    = $_POST['action'] ?? '';
 
@@ -174,11 +176,13 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM rider_payout_requests WHE
                             <td class="px-4 py-3">
                                 <?php if ($p['status'] === 'pending'): ?>
                                     <form method="POST" class="inline-block" onsubmit="return confirm('Confirm you have paid this rider outside the app?')">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="request_id" value="<?= (int)$p['id'] ?>">
                                         <input type="hidden" name="action" value="mark_paid">
                                         <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">Mark Paid</button>
                                     </form>
                                     <form method="POST" class="inline-block ml-1" onsubmit="return confirm('Reject this payout request?')">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="request_id" value="<?= (int)$p['id'] ?>">
                                         <input type="hidden" name="action" value="reject">
                                         <input type="text" name="notes" placeholder="Reason (optional)" class="border rounded px-2 py-1 text-sm w-36">

@@ -41,7 +41,7 @@ if ($notification['user_id'] != $_SESSION['user_id']) {
 }
 
 // Mark as read
-$result = markNotificationAsRead($notification_id);
+$result = markNotificationAsRead($notification_id, $_SESSION['user_id']);
 
 echo json_encode(['success' => $result]);
 ?>

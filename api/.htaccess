@@ -43,3 +43,29 @@
 
 # Never list a directory that has no index file.
 Options -Indexes
+
+# =============================================================
+# SESSION COOKIE HARDENING
+# =============================================================
+# Every one of the ~30 files across api/ and admin/ that starts a session
+# calls session_start() itself, most before ever requiring
+# admin/includes/config.php -- so a session_set_cookie_params() call placed
+# in that shared config file, as would be the natural place, runs too late
+# for nearly every request; the cookie has often already been issued by
+# then. Apache config is applied before any PHP script runs at all
+# (confirmed mod_php: the Dockerfile's base image is php:8.2-apache), so
+# this is the one place that reliably applies before every session_start()
+# regardless of which file calls it first.
+#
+# HttpOnly/Secure: irrelevant to the Android app's own HTTP client (it
+# doesn't run JS and only ever calls the https:// URL) and irrelevant to a
+# same-origin admin page's own requests -- this only ever removes
+# capability from an attacker (JS cookie theft, cookie sent over plain
+# HTTP), never from a legitimate caller.
+# SameSite=Lax: still allows normal top-level navigation/link-following,
+# blocks the cross-site POST shape CSRF relies on. Native HTTP clients
+# (the Android app) don't apply SameSite restrictions at all, so this is
+# free for the app and a real backstop for the browser-based admin panel.
+php_flag session.cookie_httponly On
+php_flag session.cookie_secure On
+php_value session.cookie_samesite Lax

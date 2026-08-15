@@ -1,35 +1,54 @@
 <?php
 session_start();
 require_once 'includes/config.php';
+require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/rate_limit.php';
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
+    // 5 attempts / 5 minutes per IP. Login has no per-account limiting on
+    // top of this (unlike api/auth.php, which also buckets by the
+    // submitted identifier) -- there is exactly one admin account in
+    // practice, so an IP-only limit already covers it.
+    if (rateLimited($dbh, 'admin_login:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)) {
+        failRateLimited();
+    }
+
     $username = trim($_POST['username'] ?? '');
     $password = trim($_POST['password'] ?? '');
-    
+
     $stmt = $dbh->prepare("SELECT * FROM admin WHERE UserName = ?");
     $stmt->execute([$username]);
     $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if ($admin) {
         // Check both MD5 and password_hash formats
         $valid = false;
-        
+
         // 1. Check if it's password_hash format
         if (password_get_info($admin['Password'])['algo'] !== 0) {
             $valid = password_verify($password, $admin['Password']);
         }
-        
+
         // 2. If not, check MD5 (legacy)
         if (!$valid && md5($password) === $admin['Password']) {
             $valid = true;
-            // Optional: upgrade to password_hash on successful login
-            // $hashed = password_hash($password, PASSWORD_DEFAULT);
-            // $dbh->prepare("UPDATE admin SET Password = ? WHERE id = ?")->execute([$hashed, $admin['id']]);
+            // Upgraded on the next successful login, not removed outright:
+            // this only fires for a row still in the old format, so every
+            // legacy admin silently moves to password_hash() the first time
+            // they sign in after this shipped, with nothing else to do.
+            $hashed = password_hash($password, PASSWORD_DEFAULT);
+            $dbh->prepare("UPDATE admin SET Password = ? WHERE id = ?")->execute([$hashed, $admin['id']]);
         }
-        
+
         if ($valid) {
+            // New session id on every privilege change -- an id an attacker
+            // fixed before login (session fixation) stops being useful the
+            // moment login actually succeeds.
+            session_regenerate_id(true);
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_id'] = $admin['id'];
             $_SESSION['admin_name'] = $admin['UserName'];
@@ -60,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="POST">
+            <?= csrfField() ?>
             <div class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
                 <input type="text" name="username" value="admin" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600" required>

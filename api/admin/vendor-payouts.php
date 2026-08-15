@@ -20,11 +20,13 @@ require_once __DIR__ . '/auth_check.php';
 requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/vendor-notification-helper.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $requestId = (int)($_POST['request_id'] ?? 0);
     $action    = $_POST['action'] ?? '';
     $note      = trim($_POST['notes'] ?? '');
@@ -206,6 +208,7 @@ $pendingCount = (int)$dbh->query(
                           'rejected' => 'bg-red-100 text-red-800'][$r['status']] ?? 'bg-gray-100';
                 ?>
                 <form method="post" class="bg-white rounded-xl shadow p-5">
+                    <?= csrfField() ?>
                     <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
                     <div class="flex justify-between items-start mb-3">
                         <div>

@@ -16,11 +16,13 @@ requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/vendor-notification-helper.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $productId = (int)($_POST['product_id'] ?? 0);
     $decision  = $_POST['decision'] ?? '';
     $reason    = trim($_POST['rejection_reason'] ?? '');
@@ -176,6 +178,7 @@ $pendingCount = (int)$dbh->query(
                             <td class="px-4 py-3">
                                 <?php if ($p['status'] !== 'approved'): ?>
                                     <form method="post" class="inline">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                                         <input type="hidden" name="decision" value="approve">
                                         <button class="bg-green-700 hover:bg-green-800 text-white px-3 py-1 rounded text-xs font-semibold">Approve</button>
@@ -183,6 +186,7 @@ $pendingCount = (int)$dbh->query(
                                 <?php endif; ?>
                                 <?php if ($p['status'] !== 'rejected'): ?>
                                     <form method="post" class="inline-flex items-center space-x-1 mt-1">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="product_id" value="<?= (int)$p['id'] ?>">
                                         <input type="hidden" name="decision" value="reject">
                                         <input type="text" name="rejection_reason" placeholder="Reason"

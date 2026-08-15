@@ -21,11 +21,13 @@ require_once __DIR__ . '/auth_check.php';
 requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/vendor-notification-helper.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $id       = (int)($_POST['listing_id'] ?? 0);
     $decision = $_POST['decision'] ?? '';
     $notes    = trim($_POST['admin_notes'] ?? '');
@@ -188,6 +190,7 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
                           'cancelled' => 'bg-gray-200 text-gray-700'][$l['status']] ?? 'bg-gray-100';
                 ?>
                 <form method="post" class="bg-white rounded-xl shadow p-5">
+                    <?= csrfField() ?>
                     <input type="hidden" name="listing_id" value="<?= (int)$l['id'] ?>">
 
                     <div class="flex justify-between items-start mb-4">

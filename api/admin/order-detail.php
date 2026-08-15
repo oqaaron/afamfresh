@@ -16,6 +16,7 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/storage.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     header('Location: login.php');
@@ -29,6 +30,7 @@ if (!$orderId) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $action = $_POST['action'] ?? '';
 
     if ($action === 'update_status') {
@@ -347,6 +349,7 @@ function money($v) { return 'UGX ' . number_format((float)$v, 0); }
                 <div class="bg-white rounded-xl shadow p-5">
                     <h2 class="font-bold text-gray-800 mb-3">Update status</h2>
                     <form method="POST" class="flex flex-col gap-2">
+                        <?= csrfField() ?>
                         <input type="hidden" name="action" value="update_status">
                         <select name="status" class="border rounded px-2 py-2 text-sm">
                             <?php foreach (['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'] as $s): ?>
@@ -360,6 +363,7 @@ function money($v) { return 'UGX ' . number_format((float)$v, 0); }
                 <div class="bg-white rounded-xl shadow p-5">
                     <h2 class="font-bold text-gray-800 mb-3">Assign rider</h2>
                     <form method="POST" class="flex flex-col gap-2">
+                        <?= csrfField() ?>
                         <input type="hidden" name="action" value="assign_rider">
                         <select name="rider_id" class="border rounded px-2 py-2 text-sm">
                             <option value="">Unassigned</option>

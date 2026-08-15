@@ -32,11 +32,13 @@ requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/rider_dispatch.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $orderId = (int)($_POST['order_id'] ?? 0);
     $action  = $_POST['action'] ?? '';
 
@@ -424,6 +426,7 @@ $needsRider = (int)$dbh->query(
                         <div class="flex flex-wrap items-center gap-2">
                             <?php if ($assignable): ?>
                                 <form method="post" class="flex items-center gap-2">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
                                     <input type="hidden" name="action" value="assign_rider">
                                     <select name="rider_id" class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
@@ -446,6 +449,7 @@ $needsRider = (int)$dbh->query(
 
                             <?php if ($o['assignment_id'] && $o['assignment_status'] === 'assigned'): ?>
                                 <form method="post">
+                                    <?= csrfField() ?>
                                     <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
                                     <input type="hidden" name="action" value="unassign">
                                     <button class="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5">Remove rider</button>
@@ -453,6 +457,7 @@ $needsRider = (int)$dbh->query(
                             <?php endif; ?>
 
                             <form method="post" class="flex items-center gap-2 ml-auto">
+                                <?= csrfField() ?>
                                 <input type="hidden" name="order_id" value="<?= (int)$o['id'] ?>">
                                 <input type="hidden" name="action" value="cancel_order">
                                 <input type="text" name="reason" placeholder="Reason (required)"

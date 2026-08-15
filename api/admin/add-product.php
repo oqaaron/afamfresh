@@ -2,6 +2,7 @@
 session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/product_image.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 // === true, not a bare isset(): isset() is satisfied by a value of
 // literal false, which would let a logged-out session through.
@@ -14,6 +15,7 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $name = trim($_POST['name'] ?? '');
     $category = trim($_POST['category'] ?? '');
     $price = floatval($_POST['price'] ?? 0);
@@ -76,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="POST" enctype="multipart/form-data">
+            <?= csrfField() ?>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Product Name</label>

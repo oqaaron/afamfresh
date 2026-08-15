@@ -13,6 +13,7 @@ require_once __DIR__ . '/../includes/user_payload.php';
 // One account, one purpose: see the header of this file for why the implicit
 // customer baseline had to go.
 require_once __DIR__ . '/../includes/account_type.php';
+require_once __DIR__ . '/../includes/rate_limit.php';
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
@@ -32,6 +33,13 @@ if ($action == 'login') {
     // Which app is asking. Absent for installs that predate the split, which
     // are all Customer installs — hence the default.
     $appType = accountTypeForAppRole($input['app_role'] ?? 'customer') ?? 'customer';
+
+    // Bucketed by IP AND by the submitted email, so both "one IP hammering
+    // many accounts" and "many IPs hammering one account" are caught.
+    if (rateLimited($dbh, 'login:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || ($email !== '' && rateLimited($dbh, 'login:id:' . strtolower($email), 5, 300))) {
+        failRateLimited();
+    }
 
     try {
         $stmt = $dbh->prepare("SELECT id, fname, lname, email, mobile, password, account_type FROM users WHERE email = ?");
@@ -56,6 +64,7 @@ if ($action == 'login') {
             }
 
             $token = generateToken();
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['fname'] . ' ' . $user['lname'];
             $_SESSION['user_email'] = $user['email'];
@@ -135,6 +144,7 @@ if ($action == 'register') {
             notifyWelcome($userId, $fname, $accountType);
 
             $token = generateToken();
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $userId;
             $_SESSION['user_name'] = $name;
             $_SESSION['user_email'] = $email;
@@ -287,11 +297,17 @@ if ($action == 'google_login') {
     $appType = accountTypeForAppRole($appRoleRaw) ?? 'customer';
 
     // Verify the ID token with Google
+    //
+    // TLS verification was off here — the exact connection that decides
+    // whether a Google ID token is genuine was unauthenticated, so a MITM
+    // could forge the "yes this token is valid" response and impersonate
+    // any Google account.
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, "https://oauth2.googleapis.com/tokeninfo?id_token=$idToken");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // remove in production
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -372,6 +388,7 @@ if ($action == 'google_login') {
             }
             // Login the user
             $token = generateToken();
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['fname'] . ' ' . $user['lname'];
             $_SESSION['user_email'] = $user['email'];
@@ -415,6 +432,7 @@ if ($action == 'google_login') {
                 notifyWelcome($userId, $fname, $appType);
 
                 $token = generateToken();
+                session_regenerate_id(true);
                 $_SESSION['user_id'] = $userId;
                 $_SESSION['user_name'] = $name;
                 $_SESSION['user_email'] = $email;
@@ -452,6 +470,11 @@ if ($action == 'forgot_password') {
     if (!$email) {
         echo json_encode(['success' => false, 'message' => 'Email address required']);
         exit;
+    }
+
+    if (rateLimited($dbh, 'forgot_password:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || rateLimited($dbh, 'forgot_password:id:' . strtolower($email), 5, 300)) {
+        failRateLimited();
     }
 
     // Always report success regardless of whether the email is registered —
@@ -575,7 +598,13 @@ if ($action == 'reset_password') {
         echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters']);
         exit;
     }
-    
+
+    // No email in this request (a reset token, not a login, identifies the
+    // account) — IP-only bucket, same as the others.
+    if (rateLimited($dbh, 'reset_password:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)) {
+        failRateLimited();
+    }
+
     try {
         $hashedToken = hash('sha256', $token);
         $stmt = $dbh->prepare("SELECT id FROM users WHERE reset_token = ? AND reset_token_expiry > NOW()");

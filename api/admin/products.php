@@ -3,6 +3,7 @@ session_start();
 require_once '../admin/includes/config.php'; // adjust path if needed
 
 require_once __DIR__ . '/../includes/product_image.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
@@ -12,6 +13,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
 // Handle DELETE request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    verifyCsrf();
     $deleteId = intval($_POST['delete_id']);
     if ($deleteId > 0) {
         $stmt = $dbh->prepare("DELETE FROM items WHERE id = ?");
@@ -152,6 +154,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                                         <i class="fas fa-edit"></i>
                                     </a>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this product?');">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="delete_id" value="<?= $row['id'] ?>">
                                         <button type="submit" class="text-red-600 hover:text-red-800 bg-transparent border-0 cursor-pointer">
                                             <i class="fas fa-trash"></i>

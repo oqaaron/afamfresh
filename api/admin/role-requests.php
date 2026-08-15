@@ -16,6 +16,7 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/roles.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 // === true, not a bare isset(): isset() is satisfied by a value of
 // literal false, which would let a logged-out session through.
@@ -28,6 +29,7 @@ $flash = '';
 $flashError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
     $requestId = intval($_POST['request_id'] ?? 0);
     $action    = $_POST['action'] ?? '';
 
@@ -154,11 +156,13 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM role_requests WHERE statu
                             <td class="px-4 py-3">
                                 <?php if ($r['status'] === 'pending'): ?>
                                     <form method="POST" class="inline-block">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
                                         <input type="hidden" name="action" value="approve">
                                         <button type="submit" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">Approve</button>
                                     </form>
                                     <form method="POST" class="inline-block ml-1" onsubmit="return confirm('Reject this request?')">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="request_id" value="<?= (int)$r['id'] ?>">
                                         <input type="hidden" name="action" value="reject">
                                         <input type="text" name="admin_notes" placeholder="Reason (optional)" class="border rounded px-2 py-1 text-sm w-36">
