@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,14 +47,67 @@ fun AddressesScreen(
     val pickedArea by locationViewModel.pickedArea.collectAsState()
     val pickedAddress by locationViewModel.pickedAddress.collectAsState()
 
-    var editing by remember { mutableStateOf<Address?>(null) }
-    var showForm by remember { mutableStateOf(false) }
+    // The form's state lives here, not inside AddressFormDialog, and every
+    // piece of it is rememberSaveable.
+    //
+    // Opening the map picker navigates to another destination, which takes this
+    // whole screen out of composition. With plain `remember`, showForm reverted
+    // to false and every typed field was discarded: the customer came back from
+    // pinning their location to a CLOSED dialog, retyped the label and
+    // recipient name, and only then saw the picked area appear. NavHost wraps
+    // each destination in a SaveableStateHolder keyed by its back stack entry,
+    // so rememberSaveable values here are restored on the way back — the dialog
+    // is still open, still holding everything that was typed.
+    //
+    // editingId rather than the Address itself: a String survives saving
+    // without needing a custom Saver, and the row is looked up from `addresses`
+    // when it is actually needed.
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showForm by rememberSaveable { mutableStateOf(false) }
+    var formLabel by rememberSaveable { mutableStateOf("") }
+    var formName by rememberSaveable { mutableStateOf("") }
+    var formPhone by rememberSaveable { mutableStateOf("") }
+    var formArea by rememberSaveable { mutableStateOf("") }
+    var formLine by rememberSaveable { mutableStateOf("") }
+    var formIsDefault by rememberSaveable { mutableStateOf(false) }
+
     var pendingDelete by remember { mutableStateOf<Address?>(null) }
     // A save used to close the dialog immediately and discard the result, so a
     // rejected create looked exactly like a successful one: dialog gone, list
     // refreshed and unchanged, address silently missing.
     var isSaving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
+
+    /** Blank slate for "add", prefilled for "edit". */
+    fun openForm(existing: Address?) {
+        editingId = existing?.id
+        formLabel = existing?.label ?: ""
+        formName = existing?.recipientName ?: ""
+        formPhone = existing?.phone ?: ""
+        formArea = existing?.area ?: ""
+        formLine = existing?.addressLine ?: ""
+        // The first address is always the default — there is nothing else it
+        // could be.
+        formIsDefault = existing?.isDefault ?: addresses.isEmpty()
+        saveError = null
+        showForm = true
+    }
+
+    fun closeForm() {
+        showForm = false
+        editingId = null
+        saveError = null
+        locationViewModel.clearPickedLocation()
+    }
+
+    // Writes the picked location into the open form. Keyed on the picked values
+    // so it fires exactly once per pin, rather than on every recomposition —
+    // otherwise it would fight the customer for the cursor if they then edited
+    // the area by hand.
+    LaunchedEffect(pickedArea, pickedAddress) {
+        pickedArea?.takeIf { it.isNotBlank() }?.let { formArea = it }
+        pickedAddress?.takeIf { it.isNotBlank() }?.let { formLine = it }
+    }
 
     Scaffold(
         containerColor = Cream,
@@ -70,10 +124,7 @@ fun AddressesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    editing = null
-                    showForm = true
-                },
+                onClick = { openForm(null) },
                 containerColor = Forest
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add address", tint = Color.White)
@@ -102,10 +153,7 @@ fun AddressesScreen(
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Button(
-                        onClick = {
-                            editing = null
-                            showForm = true
-                        },
+                        onClick = { openForm(null) },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Forest)
                     ) {
@@ -121,10 +169,7 @@ fun AddressesScreen(
                 items(addresses, key = { it.id }) { address ->
                     AddressCard(
                         address = address,
-                        onEdit = {
-                            editing = address
-                            showForm = true
-                        },
+                        onEdit = { openForm(address) },
                         onDelete = { pendingDelete = address },
                         onMakeDefault = { addressViewModel.setDefault(address.id) }
                     )
@@ -136,36 +181,41 @@ fun AddressesScreen(
 
     if (showForm) {
         AddressFormDialog(
-            initial = editing,
+            isEditing = editingId != null,
             isFirstAddress = addresses.isEmpty(),
-            pickedArea = pickedArea,
-            pickedAddressLine = pickedAddress,
+            label = formLabel,
+            onLabelChange = { formLabel = it },
+            recipientName = formName,
+            onRecipientNameChange = { formName = it },
+            phone = formPhone,
+            onPhoneChange = { formPhone = it },
+            area = formArea,
+            onAreaChange = { formArea = it },
+            addressLine = formLine,
+            onAddressLineChange = { formLine = it },
+            isDefault = formIsDefault,
+            onIsDefaultChange = { formIsDefault = it },
             isSaving = isSaving,
             saveError = saveError,
-            onDismiss = {
-                showForm = false
-                saveError = null
-                locationViewModel.clearPickedLocation()
-            },
+            onDismiss = { closeForm() },
             onPickLocation = onSelectLocation,
-            onSave = { label, name, phone, area, line, isDefault ->
+            onSave = {
                 isSaving = true
                 saveError = null
                 addressViewModel.save(
-                    existingId = editing?.id,
-                    label = label,
-                    recipientName = name,
-                    phone = phone,
-                    area = area,
-                    addressLine = line,
-                    isDefault = isDefault
+                    existingId = editingId,
+                    label = formLabel,
+                    recipientName = formName,
+                    phone = formPhone,
+                    area = formArea,
+                    addressLine = formLine,
+                    isDefault = formIsDefault
                 ) { ok ->
                     // The dialog stays open on failure, holding everything the
                     // customer typed, instead of discarding it silently.
                     isSaving = false
                     if (ok) {
-                        showForm = false
-                        locationViewModel.clearPickedLocation()
+                        closeForm()
                     } else {
                         saveError = "Couldn't save that address. Check your connection and try again."
                     }
@@ -257,65 +307,53 @@ private fun AddressCard(
     }
 }
 
+/**
+ * Stateless: every field is hoisted into [AddressesScreen], which holds them in
+ * rememberSaveable so they survive the navigation to the map picker. Keeping
+ * them in here as plain `remember` was what emptied the form on the way back.
+ */
 @Composable
 private fun AddressFormDialog(
-    initial: Address?,
+    isEditing: Boolean,
     isFirstAddress: Boolean,
-    pickedArea: String? = null,
-    pickedAddressLine: String? = null,
+    label: String,
+    onLabelChange: (String) -> Unit,
+    recipientName: String,
+    onRecipientNameChange: (String) -> Unit,
+    phone: String,
+    onPhoneChange: (String) -> Unit,
+    area: String,
+    onAreaChange: (String) -> Unit,
+    addressLine: String,
+    onAddressLineChange: (String) -> Unit,
+    isDefault: Boolean,
+    onIsDefaultChange: (Boolean) -> Unit,
     isSaving: Boolean = false,
     saveError: String? = null,
     onDismiss: () -> Unit,
     onPickLocation: () -> Unit,
-    onLocationPicked: (area: String, address: String) -> Unit = { _, _ -> },
-    onSave: (
-        label: String,
-        recipientName: String,
-        phone: String,
-        area: String,
-        addressLine: String,
-        isDefault: Boolean
-    ) -> Unit
+    onSave: () -> Unit
 ) {
-    var label by remember { mutableStateOf(initial?.label ?: "") }
-    var name by remember { mutableStateOf(initial?.recipientName ?: "") }
-    var phone by remember { mutableStateOf(initial?.phone ?: "") }
-    var area by remember { mutableStateOf(initial?.area ?: "") }
-    var line by remember { mutableStateOf(initial?.addressLine ?: "") }
-    // The very first address is always the default — there is nothing else it
-    // could be — so the switch is forced on and disabled in that case.
-    var isDefault by remember { mutableStateOf(initial?.isDefault ?: isFirstAddress) }
-
-    // Auto-fill area and address line when user picks location from map
-    LaunchedEffect(pickedArea, pickedAddressLine) {
-        if (!pickedArea.isNullOrEmpty()) {
-            area = pickedArea
-        }
-        if (!pickedAddressLine.isNullOrEmpty()) {
-            line = pickedAddressLine
-        }
-    }
-
     // `area` is in this list because api/addresses.php rejects a create or
     // update outright when it is empty ("area and address_line are required").
     // Leaving it out let the button enable, fire a request the server was
     // always going to refuse, and drop the address on the floor.
-    val canSave = label.isNotBlank() && name.isNotBlank() &&
-        line.isNotBlank() && area.isNotBlank()
+    val canSave = label.isNotBlank() && recipientName.isNotBlank() &&
+        addressLine.isNotBlank() && area.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "Add address" else "Edit address") },
+        title = { Text(if (!isEditing) "Add address" else "Edit address") },
         text = {
             Column {
                 // Required fields are marked, because Save stays disabled until
                 // all four are filled and there was previously nothing on screen
                 // explaining why the button would not respond.
-                AddressField(label, { label = it }, "Label (Home, Work…) *")
-                AddressField(name, { name = it }, "Recipient name *")
-                AddressField(phone, { phone = it }, "Phone number")
-                AddressField(area, { area = it }, "Area / neighbourhood *")
-                AddressField(line, { line = it }, "Street address / directions *")
+                AddressField(label, onLabelChange, "Label (Home, Work…) *")
+                AddressField(recipientName, onRecipientNameChange, "Recipient name *")
+                AddressField(phone, onPhoneChange, "Phone number")
+                AddressField(area, onAreaChange, "Area / neighbourhood *")
+                AddressField(addressLine, onAddressLineChange, "Street address / directions *")
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -337,7 +375,7 @@ private fun AddressFormDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = isDefault,
-                        onCheckedChange = { isDefault = it },
+                        onCheckedChange = onIsDefaultChange,
                         enabled = !isFirstAddress,
                         colors = SwitchDefaults.colors(checkedTrackColor = Forest)
                     )
@@ -353,7 +391,7 @@ private fun AddressFormDialog(
         confirmButton = {
             TextButton(
                 enabled = canSave && !isSaving,
-                onClick = { onSave(label, name, phone, area, line, isDefault) }
+                onClick = onSave
             ) {
                 Text(
                     if (isSaving) "Saving…" else "Save",
