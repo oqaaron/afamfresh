@@ -54,24 +54,39 @@ import com.techaus.afamfresh.viewmodel.ProductViewModel
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
 
-/** Must match the `category` value the backend sends for grocery products. */
+/**
+ * Row 18 of the `category` table — the dry-goods aisle (sugar, tea, bottled
+ * water), not the catalogue as a whole. Verified against api/schema.sql rather
+ * than assumed.
+ */
 private const val GROCERIES_CATEGORY = "Groceries"
 
 /**
  * Categories the "Fresh Food" bubble collapses into one view.
  *
- * Product categories are free text — api/admin/add-product.php takes them from
- * a plain text input, so nothing stops two admins entering "Fruit" and
- * "Fruits". Both spellings are listed here, and matching is lowercase and
- * trimmed, so a casing or plural slip does not silently drop a product out of
- * the bubble. Add to this set rather than renaming rows in the database.
+ * The canonical names come from the `category` table in api/schema.sql, which
+ * is the list the catalogue is actually filed under:
+ *
+ *     Fruits, Juice, Vegetables, Oils, Meats, Dairy Products,
+ *     Chicken Products, Dry Ratio, Groceries, Grains, Fish Products,
+ *     Meal Plans, Condiments, Beverages
+ *
+ * Note "Chicken Products" and "Fish Products" — NOT "chicken" and "fish". An
+ * earlier guess at those two names matched nothing, so poultry and fish were
+ * silently missing from this bubble.
+ *
+ * The singular/bare variants are kept as a safety net because nothing enforces
+ * that list: api/admin/add-product.php:89 is a plain
+ * `<input type="text" name="category" required>`, so an admin can file a
+ * product under "Fruit" or "Chicken" and it will still appear here. Matching is
+ * trimmed and lowercased for the same reason.
  */
 private val FRESH_FOOD_CATEGORIES = setOf(
-    "vegetable", "vegetables",
-    "fruit", "fruits",
-    "meat", "meats",
-    "fish",
-    "chicken", "poultry"
+    "vegetables", "vegetable",
+    "fruits", "fruit",
+    "meats", "meat",
+    "fish products", "fish",
+    "chicken products", "chicken", "poultry"
 )
 
 private sealed class HomeFilter {
