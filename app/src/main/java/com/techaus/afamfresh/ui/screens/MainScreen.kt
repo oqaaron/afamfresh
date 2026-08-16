@@ -236,6 +236,7 @@ fun MainScreen(
                     onProfileClick = { navController.navigate("profile") },
                     onBulkClick = { navController.navigate("Bulk") },
                     onCartClick = { navController.navigate("cart") },
+                    onBrowseClick = { navController.navigate("home") },
                     productViewModel = productViewModel,
                     cartViewModel = cartViewModel,
                     favoritesViewModel = favoritesViewModel,
