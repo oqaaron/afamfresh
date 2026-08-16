@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 require_once __DIR__ . '/../includes/admin_audit.php';
+require_once __DIR__ . '/../includes/categories.php';
 // New products need a price to exist at all, so creating one is
 // products.manage_pricing-gated, not the operational permission that lets a
 // dispatcher edit an existing product's non-price fields.
@@ -40,6 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = $result['error'];
         }
+    }
+
+    // Checked server-side, not just by the <select>: the dropdown is only a
+    // convenience, and a raw POST bypasses it entirely. A category outside the
+    // table means the product disappears from the app's home-screen bubbles
+    // with no error anywhere, so it is refused here instead.
+    if (!$error && $category !== '' && !isKnownCategory($dbh, $category)) {
+        $error = 'Unknown category "' . $category . '". Pick one from the list.';
+    } else {
+        $category = canonicalCategory($dbh, $category);
     }
 
     if ($error) {
@@ -86,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Category</label>
-                    <input type="text" name="category" class="w-full px-4 py-2 border rounded" required>
+                    <?php renderCategorySelect($dbh, $_POST['category'] ?? ''); ?>
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Price (UGX)</label>

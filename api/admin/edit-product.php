@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 require_once __DIR__ . '/../includes/admin_audit.php';
+require_once __DIR__ . '/../includes/categories.php';
 // Reachable with EITHER permission — a future pricing-only role should not
 // be locked out just because it lacks the operational one. Whether
 // price/discount can actually be CHANGED is checked separately below, per
@@ -66,6 +67,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = $result['error'];
         }
+    }
+
+    // Same server-side check as add-product.php. An existing product whose
+    // category predates the list keeps it: renderCategorySelect() offers the
+    // current value back as an "unlisted" option, and re-saving it unchanged
+    // must not be rejected, so only a value that differs from what is already
+    // stored has to be a known one.
+    if (!$error
+        && $category !== ''
+        && strcasecmp($category, (string)$product['category']) !== 0
+        && !isKnownCategory($dbh, $category)) {
+        $error = 'Unknown category "' . $category . '". Pick one from the list.';
+    } else {
+        $category = canonicalCategory($dbh, $category);
     }
 
     if ($error) {
@@ -132,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Category</label>
-                    <input type="text" name="category" value="<?= htmlspecialchars($product['category']) ?>" class="w-full px-4 py-2 border rounded" required>
+                    <?php renderCategorySelect($dbh, (string)$product['category']); ?>
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Price (UGX)</label>
