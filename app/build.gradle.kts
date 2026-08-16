@@ -122,6 +122,15 @@ android {
             buildConfigField("String", "APP_ROLE", "\"rider\"")
             manifestPlaceholders["deepLinkScheme"] = "afamfresh-rider"
             buildConfigField("String", "DEEP_LINK_SCHEME", "\"afamfresh-rider\"")
+
+            // Independent Maps key so rider's Android-app restrictions
+            // (package+SHA-1) live on their own key, not tangled up with
+            // customer/vendor's. Falls back to the shared defaultConfig key
+            // if google.maps.api.key.rider isn't set in local.properties yet,
+            // so nothing breaks before that key is created.
+            val riderMapsApiKey = secret("google.maps.api.key.rider", secret("google.maps.api.key"))
+            manifestPlaceholders["mapsApiKey"] = riderMapsApiKey
+            buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"$riderMapsApiKey\"")
         }
         create("vendor") {
             dimension = "role"
@@ -350,7 +359,8 @@ dependencies {
     // If a stray reference to either ever appears in src/main, the build
     // breaks for the flavors that no longer have the dependency — which is the
     // point: the isolation is enforced by the compiler, not by convention.
-    "riderImplementation"("com.google.android.gms:play-services-location:21.3.0")
+    // Location services for GPS detection (customer + rider)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     "riderImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 
     // Maps, in all three apps.

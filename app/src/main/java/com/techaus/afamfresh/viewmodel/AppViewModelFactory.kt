@@ -129,6 +129,9 @@ class AppViewModelFactory(context: Context) : ViewModelProvider.Factory {
             modelClass.isAssignableFrom(RoleGateViewModel::class.java) ->
                 RoleGateViewModel(apiService)
 
+            modelClass.isAssignableFrom(LocationViewModel::class.java) ->
+                LocationViewModel(appContext)
+
             else -> throw IllegalArgumentException(
                 "AppViewModelFactory cannot build ${modelClass.name}. " +
                     "Add a branch for it here."
