@@ -91,6 +91,11 @@ class MainActivity : ComponentActivity() {
                 requestNotificationPermission()
             }
 
+            // Request location permissions for customer app (used for GPS-based address selection)
+            if (BuildConfig.APP_ROLE == "user") {
+                requestLocationPermission()
+            }
+
             handleIntent(intent)
 
             setContent {
@@ -411,6 +416,21 @@ class MainActivity : ComponentActivity() {
                     1002
                 )
             }
+        }
+    }
+
+    private fun requestLocationPermission() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                1003
+            )
         }
     }
 }
