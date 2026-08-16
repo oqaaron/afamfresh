@@ -76,6 +76,7 @@ fun HomeScreen(
     onLogout: () -> Unit,
     onProductClick: (Product) -> Unit,
     onOrdersClick: () -> Unit,
+    onLocationClick: () -> Unit,
     onProfileClick: () -> Unit,
     onBulkClick: () -> Unit,
     onCartClick: () -> Unit,
@@ -137,7 +138,7 @@ fun HomeScreen(
                             shadowElevation = 1.dp,
                             modifier = Modifier
                                 .weight(1f, fill = false)
-                                .clickable { onProfileClick() }
+                                .clickable { onLocationClick() }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),

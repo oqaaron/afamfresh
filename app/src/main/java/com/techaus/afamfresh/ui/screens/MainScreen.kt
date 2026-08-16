@@ -233,6 +233,7 @@ fun MainScreen(
                         navController.navigate("product_detail/${product.id}") // ✅ FIX: this route existed but was never reachable
                     },
                     onOrdersClick = { navController.navigate("orders") },
+                    onLocationClick = { navController.navigate("addresses") },
                     onProfileClick = { navController.navigate("profile") },
                     onBulkClick = { navController.navigate("Bulk") },
                     onCartClick = { navController.navigate("cart") },
