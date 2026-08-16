@@ -18,11 +18,9 @@
 session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('configuration.manage');
 
 $error = '';
 $success = '';
@@ -98,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
                 $success = 'Delivery pricing updated.';
+                logAdminAction($dbh, 'configuration.updated', 'config', 'delivery_pricing', 'Delivery pricing updated');
             } catch (PDOException $e) {
                 error_log('configuration.php delivery_pricing save failed: ' . $e->getMessage());
                 $error = 'Could not save delivery pricing.';
@@ -140,6 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
                 $success = 'Bulk delivery settings updated.';
+                logAdminAction($dbh, 'configuration.updated', 'config', 'Bulk_delivery', 'Bulk delivery settings updated');
             } catch (PDOException $e) {
                 error_log('configuration.php Bulk_delivery save failed: ' . $e->getMessage());
                 $error = 'Could not save Bulk delivery settings.';
@@ -163,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)"
                 )->execute([$prefix]);
                 $success = 'Order number display updated.';
+                logAdminAction($dbh, 'configuration.updated', 'config', 'order_number_prefix', "Prefix set to \"$prefix\"");
             } catch (PDOException $e) {
                 error_log('configuration.php order_display save failed: ' . $e->getMessage());
                 $error = 'Could not save the order number prefix.';
@@ -202,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     )->execute([(float)$earnRate, (float)$redeemValue, (int)$minPoints, (float)$maxPercent]);
                 }
                 $success = 'Loyalty settings updated.';
+                logAdminAction($dbh, 'configuration.updated', 'config', 'loyalty', 'Loyalty settings updated');
             } catch (PDOException $e) {
                 error_log('configuration.php loyalty save failed: ' . $e->getMessage());
                 $error = 'Could not save loyalty settings.';

@@ -17,10 +17,12 @@
 // =============================================================
 
 require_once __DIR__ . '/auth_check.php';
-requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/vendor-notification-helper.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('payouts.manage');
 
 $flash = '';
 $flashError = '';
@@ -58,6 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     . ($note !== '' ? ' Note: ' . $note : ''),
                 'payment', null, ['push', 'email']
             );
+            logAdminAction($dbh, 'vendor_payout.approved', 'vendor_payout_request', (string)$requestId,
+                'Approved UGX ' . number_format((float)$payout['amount'], 2));
             $flash = 'Approved. The vendor has been told it is on the way.';
         }
     } elseif ($action === 'mark_paid') {
@@ -104,6 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     . ($note !== '' ? ' Note: ' . $note : ''),
                 'payment', null, ['push', 'email']
             );
+            logAdminAction($dbh, 'vendor_payout.marked_paid', 'vendor_payout_request', (string)$requestId,
+                'Marked paid, UGX ' . number_format((float)$payout['amount'], 2));
             $flash = 'Marked as paid and the vendor notified.';
         } catch (Exception $e) {
             if ($dbh->inTransaction()) $dbh->rollBack();
@@ -129,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     . ' Your earnings remain available to request again.',
                 'payment', null, ['push', 'email']
             );
+            logAdminAction($dbh, 'vendor_payout.rejected', 'vendor_payout_request', (string)$requestId, $note);
             $flash = 'Rejected. The vendor has been told why.';
         }
     }

@@ -3,13 +3,12 @@ session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// === true, not a bare isset(): isset() is satisfied by a value of
-// literal false, which would let a logged-out session through.
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+// New products need a price to exist at all, so creating one is
+// products.manage_pricing-gated, not the operational permission that lets a
+// dispatcher edit an existing product's non-price fields.
+requireAdminPermission('products.manage_pricing');
 
 $error = '';
 $success = '';
@@ -50,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $dbh->prepare("INSERT INTO items (name, category, description, price, quantity, quantitytype, discount, offer, weekly_deal, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         if ($stmt->execute([$name, $category, $description, $price, $quantity, $quantitytype, $discount, $offer, $weeklyDeal, $image])) {
             $success = 'Product added successfully!';
+            logAdminAction($dbh, 'product.created', 'product', (string)$dbh->lastInsertId(), "Created \"$name\" at UGX $price");
         } else {
             $error = 'Failed to add product.';
         }

@@ -106,28 +106,50 @@ try {
     error_log('admin nav: pending cancellation count failed: ' . $e->getMessage());
 }
 
-$navItems = [
-    ['dashboard.php',        'Dashboard',          'fa-chart-pie'],
-    ['configuration.php',    'Configuration',      'fa-cog'],
-    ['products.php',         'Products',           'fa-box'],
-    ['orders.php',           'Orders',             'fa-shopping-cart'],
-    ['users.php',            'Users',              'fa-users'],
-    ['riders.php',           'Riders',             'fa-motorcycle'],
-    ['rider-payouts.php',    'Rider Payouts',      'fa-money-bill-wave'],
-    ['role-requests.php',    'Role Requests',      'fa-user-check'],
-    ['admin-dashboard.php',  'Vendor Verification','fa-store'],
-    ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling'],
-    ['Bulk-listings.php', 'Bulk Listings',   'fa-tags'],
-    ['Bulk-orders.php',   'Bulk Orders',     'fa-truck-fast'],
-    ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet'],
-    ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced'],
-    ['routing-check.php',    'Routing check',      'fa-route'],
+// Each row's 4th element is the permission required to see it — see
+// includes/admin_permissions.php. A row with no matching permission for the
+// current session's role is filtered out below, not just visually hidden:
+// the pages themselves separately enforce the same permission, so hiding
+// the link here is a convenience, not the actual access control.
+require_once __DIR__ . '/../../includes/admin_permissions.php';
+
+$navItemsAll = [
+    ['dashboard.php',        'Dashboard',          'fa-chart-pie',        'reports.view'],
+    ['configuration.php',    'Configuration',      'fa-cog',              'configuration.manage'],
+    ['products.php',         'Products',           'fa-box',              'products.manage_operational'],
+    ['orders.php',           'Orders',             'fa-shopping-cart',    'orders.manage'],
+    ['users.php',            'Users',              'fa-users',            'users.manage'],
+    ['riders.php',           'Riders',             'fa-motorcycle',       'users.manage'],
+    ['rider-payouts.php',    'Rider Payouts',      'fa-money-bill-wave',  'payouts.manage'],
+    ['role-requests.php',    'Role Requests',      'fa-user-check',       'users.manage'],
+    ['admin-dashboard.php',  'Vendor Verification','fa-store',            'vendors.manage'],
+    ['vendor-catalogue.php', 'Vendor Products',    'fa-seedling',         'vendors.manage'],
+    ['Bulk-listings.php',    'Bulk Listings',      'fa-tags',             'Bulk.manage_listings'],
+    ['Bulk-orders.php',      'Bulk Orders',        'fa-truck-fast',       'Bulk.dispatch'],
+    ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet',           'payouts.manage'],
+    ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced',   'reports.view'],
+    ['routing-check.php',    'Routing check',      'fa-route',            'reports.view'],
+    ['manage-admins.php',    'Manage Admins',      'fa-user-shield',      'admins.manage'],
+    ['audit-log.php',        'Audit Log',          'fa-clipboard-list',   'admins.manage'],
 ];
+
+// products.php is listed under products.manage_operational (browsing/editing
+// non-price fields is fine for a dispatcher) even though add/delete are
+// products.manage_pricing-gated pages reached from within it — those two
+// links simply won't do anything useful for a dispatcher, since
+// add-product.php/delete-product.php each enforce their own permission
+// independently. Bulk-orders.php is listed under Bulk.dispatch for the same
+// reason: reaching the page is fine, its refund-adjacent actions are gated
+// per-action inside the page itself.
+$navItems = array_values(array_filter(
+    $navItemsAll,
+    fn($item) => adminHasPermission($item[3])
+));
 ?>
 <div class="w-64 bg-green-800 text-white flex flex-col">
     <div class="p-6 text-xl font-bold border-b border-green-700">AfamFresh</div>
     <nav class="flex-1 p-4 space-y-2">
-        <?php foreach ($navItems as [$href, $label, $icon]): ?>
+        <?php foreach ($navItems as [$href, $label, $icon, $permission]): ?>
             <a href="<?= $href ?>"
                class="flex items-center justify-between py-2 px-4 rounded <?= $navCurrent === $href ? 'bg-green-700' : 'hover:bg-green-700' ?>">
                 <span><i class="fas <?= $icon ?> mr-2"></i> <?= $label ?></span>

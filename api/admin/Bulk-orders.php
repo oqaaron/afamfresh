@@ -28,12 +28,18 @@
 // =============================================================
 
 require_once __DIR__ . '/auth_check.php';
-requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/rider_dispatch.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/Bulk_payment.php';
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+// Reachable with either permission -- assign_rider/unassign only need
+// Bulk.dispatch; the four refund-adjacent actions below each additionally
+// require Bulk.manage_refunds at the point they run, checked per-action,
+// not just once here.
+requireAnyAdminPermission(['Bulk.dispatch', 'Bulk.manage_refunds']);
 
 $flash = '';
 $flashError = '';
@@ -58,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$order) {
         $flashError = 'No such Bulk order.';
     } elseif ($action === 'assign_rider') {
+        requireAdminPermission('Bulk.dispatch');
         $riderId = (int)($_POST['rider_id'] ?? 0);
 
         // Every one of these is a real way to waste a rider's trip, so each is
@@ -156,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log("Bulk order $orderId assigned but notifications failed: " . $e->getMessage());
                 }
 
+                logAdminAction($dbh, 'Bulk_order.rider_assigned', 'Bulk_order', (string)$orderId, "Assigned rider #$riderId");
                 $flash = 'Dispatched. The rider has been notified.';
             } catch (Throwable $e) {
                 if ($dbh->inTransaction()) $dbh->rollBack();
@@ -164,6 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'unassign') {
+        requireAdminPermission('Bulk.dispatch');
         // Only before the rider has collected. Pulling an assignment out from
         // under a rider already carrying the goods would leave the load with
         // someone the system no longer believes is delivering it.
@@ -176,11 +185,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($del->rowCount() > 0) {
             $dbh->prepare("UPDATE Bulk_orders SET rider_assigned_at = NULL WHERE id = ?")
                 ->execute([$orderId]);
+            logAdminAction($dbh, 'Bulk_order.rider_unassigned', 'Bulk_order', (string)$orderId, 'Rider removed');
             $flash = 'Rider removed from that order.';
         } else {
             $flashError = 'That delivery has already been collected — reassign instead of removing it.';
         }
     } elseif ($action === 'cancel_order') {
+        requireAdminPermission('Bulk.manage_refunds');
         // Admin cancelling directly (no vendor request involved): the admin
         // clicking this IS the approval, so it executes for real immediately
         // — same rule as approve_cancellation below.
@@ -210,9 +221,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         . 'requested automatically (' . $result['refund_error'] . '). '
                         . 'Refund this manually in the Pesapal dashboard.';
                 }
+                logAdminAction($dbh, 'Bulk_order.cancelled', 'Bulk_order', (string)$orderId, "Cancelled: $reason");
             }
         }
     } elseif ($action === 'approve_cancellation') {
+        requireAdminPermission('Bulk.manage_refunds');
         // Executes a vendor's cancellation REQUEST for real: this is the
         // approval, same underlying function as an admin's own direct cancel.
         if ($order['status'] !== 'cancellation_requested') {
@@ -234,9 +247,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = $result['refund_attempted'] && $result['refund_requested']
                     ? 'Approved. Cancelled, stock returned, and a refund was requested from Pesapal.'
                     : 'Approved and cancelled.';
+                logAdminAction($dbh, 'Bulk_order.cancellation_approved', 'Bulk_order', (string)$orderId, "Approved cancellation: $reason");
             }
         }
     } elseif ($action === 'deny_cancellation') {
+        requireAdminPermission('Bulk.manage_refunds');
         $reason = trim($_POST['reason'] ?? '');
         if ($order['status'] !== 'cancellation_requested') {
             $flashError = 'That order has no pending cancellation request.';
@@ -259,9 +274,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'system', null, ['push', 'email']
                 );
             }
+            logAdminAction($dbh, 'Bulk_order.cancellation_denied', 'Bulk_order', (string)$orderId, "Denied: $reason");
             $flash = 'Denied. The order continues as normal and the vendor has been told why.';
         }
     } elseif ($action === 'confirm_refund') {
+        requireAdminPermission('Bulk.manage_refunds');
         // The only place status ever reaches 'refunded' — always a deliberate
         // admin confirmation after checking Pesapal's dashboard, never automatic.
         if ($order['payment_status'] !== 'refund_requested') {
@@ -284,6 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'Your refund for Bulk order #' . $orderId . ' has been completed.',
                 'order', null, ['push', 'email']
             );
+            logAdminAction($dbh, 'Bulk_order.refund_confirmed', 'Bulk_order', (string)$orderId, 'Refund confirmed complete');
             $flash = 'Refund confirmed and the customer told.';
         }
     }

@@ -12,11 +12,13 @@
 // =============================================================
 
 require_once __DIR__ . '/auth_check.php';
-requireAdminLoginWeb();
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/vendor-notification-helper.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('vendors.manage');
 
 $flash = '';
 $flashError = '';

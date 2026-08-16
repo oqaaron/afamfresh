@@ -20,7 +20,13 @@ require_once '../../admin/includes/config.php';
 require_once __DIR__ . '/../../includes/csrf.php';
 require_once __DIR__ . '/../../includes/Bulk_payment.php';
 require_once __DIR__ . '/../../includes/notifications.php';
+require_once __DIR__ . '/../../includes/admin_permissions.php';
+require_once __DIR__ . '/../../includes/admin_audit.php';
 
+// Base check only -- this file mixes Bulk.manage_listings actions (the
+// listings queue) with Bulk.manage_refunds actions (cancellations/refunds),
+// so each action below checks its own specific permission, not one blanket
+// permission here.
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
@@ -34,6 +40,7 @@ $action = $_GET['action'] ?? '';
 // -------------------------------------------------------------
 
 if ($action === 'pending') {
+    requireAdminPermissionApi('Bulk.manage_listings');
     $stmt = $dbh->query(
         "SELECT sl.*, v.business_name, v.user_id AS vendor_user_id, i.name as product_name
            FROM Bulk_listings sl
@@ -48,6 +55,7 @@ if ($action === 'pending') {
 }
 
 if (in_array($action, ['approve', 'reject'], true) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireAdminPermissionApi('Bulk.manage_listings');
     verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);
     $id = intval($input['id'] ?? 0);
@@ -97,6 +105,9 @@ if (in_array($action, ['approve', 'reject'], true) && $_SERVER['REQUEST_METHOD']
         }
     }
 
+    logAdminAction($dbh, 'Bulk_listing.' . $newStatus, 'Bulk_listing', (string)$id,
+        ($action === 'approve' ? 'Approved' : 'Rejected') . ' "' . ($listing['product_name'] ?? '') . '"');
+
     echo json_encode(['success' => true]);
     exit;
 }
@@ -106,6 +117,7 @@ if (in_array($action, ['approve', 'reject'], true) && $_SERVER['REQUEST_METHOD']
 // -------------------------------------------------------------
 
 if ($action === 'pending_cancellations') {
+    requireAdminPermissionApi('Bulk.manage_refunds');
     $stmt = $dbh->query(
         "SELECT so.id, so.cancellation_reason, so.cancellation_requested_at,
                 so.total_price, so.delivery_fee, so.payment_status,
@@ -122,6 +134,7 @@ if ($action === 'pending_cancellations') {
 }
 
 if ($action === 'approve_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireAdminPermissionApi('Bulk.manage_refunds');
     verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);
     $id = intval($input['id'] ?? 0);
@@ -155,6 +168,7 @@ if ($action === 'approve_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST')
             . ($result['refund_attempted'] ? ' Any payment made will be refunded.' : ''),
         'order', null, ['push', 'email']
     );
+    logAdminAction($dbh, 'Bulk_order.cancellation_approved', 'Bulk_order', (string)$id, "Approved cancellation: $reason");
 
     echo json_encode([
         'success' => true,
@@ -164,6 +178,7 @@ if ($action === 'approve_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST')
 }
 
 if ($action === 'deny_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireAdminPermissionApi('Bulk.manage_refunds');
     verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);
     $id = intval($input['id'] ?? 0);
@@ -201,6 +216,7 @@ if ($action === 'deny_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             'system', null, ['push', 'email']
         );
     }
+    logAdminAction($dbh, 'Bulk_order.cancellation_denied', 'Bulk_order', (string)$id, "Denied: $reason");
 
     echo json_encode(['success' => true]);
     exit;
@@ -211,6 +227,7 @@ if ($action === 'deny_cancellation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // -------------------------------------------------------------
 
 if ($action === 'pending_refunds') {
+    requireAdminPermissionApi('Bulk.manage_refunds');
     $stmt = $dbh->query(
         "SELECT so.id, so.total_price, so.delivery_fee, so.updated_at,
                 i.name AS product_name, v.business_name
@@ -226,6 +243,7 @@ if ($action === 'pending_refunds') {
 }
 
 if ($action === 'confirm_refund' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    requireAdminPermissionApi('Bulk.manage_refunds');
     verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);
     $id = intval($input['id'] ?? 0);
@@ -261,6 +279,7 @@ if ($action === 'confirm_refund' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'Your refund for Bulk order #' . $id . ' has been completed.',
         'order', null, ['push', 'email']
     );
+    logAdminAction($dbh, 'Bulk_order.refund_confirmed', 'Bulk_order', (string)$id, 'Refund confirmed complete');
 
     echo json_encode(['success' => true]);
     exit;

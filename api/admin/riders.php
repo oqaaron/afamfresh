@@ -2,11 +2,8 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+requireAdminPermission('users.manage');
 
 $formError = '';
 

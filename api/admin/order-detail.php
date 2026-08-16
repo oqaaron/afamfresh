@@ -17,11 +17,9 @@ session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/storage.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('orders.manage');
 
 $orderId = intval($_GET['id'] ?? 0);
 if (!$orderId) {
@@ -37,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = trim($_POST['status'] ?? '');
         $stmt = $dbh->prepare("UPDATE orders SET status = ? WHERE orderid = ?");
         $stmt->execute([$status, $orderId]);
+        logAdminAction($dbh, 'order.status_changed', 'order', (string)$orderId, "Status set to \"$status\"");
         header("Location: order-detail.php?id=$orderId&updated=1");
         exit;
     }
@@ -83,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([$riderId, $orderId]);
 
                 $dbh->commit();
+                logAdminAction($dbh, 'order.rider_assigned', 'order', (string)$orderId, "Assigned rider #$riderId");
 
                 // Same notification as admin/orders.php's assign_rider — this
                 // file duplicates that action, so it duplicates this too.

@@ -1,11 +1,8 @@
 <?php
 session_start();
 require_once '../admin/includes/config.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+requireAdminPermission('reports.view');
 
 require_once __DIR__ . '/../includes/revenue.php';
 

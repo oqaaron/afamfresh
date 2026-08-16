@@ -11,8 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 5 attempts / 5 minutes per IP. Login has no per-account limiting on
     // top of this (unlike api/auth.php, which also buckets by the
-    // submitted identifier) -- there is exactly one admin account in
-    // practice, so an IP-only limit already covers it.
+    // submitted identifier) -- admin accounts are few and staff-only, so an
+    // IP-only limit already covers it even now that more than one exists.
     if (rateLimited($dbh, 'admin_login:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)) {
         failRateLimited();
     }
@@ -44,7 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dbh->prepare("UPDATE admin SET Password = ? WHERE id = ?")->execute([$hashed, $admin['id']]);
         }
 
-        if ($valid) {
+        if ($valid && (int)($admin['is_active'] ?? 1) !== 1) {
+            $error = 'This account has been deactivated. Contact your super admin.';
+        } elseif ($valid) {
             // New session id on every privilege change -- an id an attacker
             // fixed before login (session fixation) stops being useful the
             // moment login actually succeeds.
@@ -52,11 +54,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_id'] = $admin['id'];
             $_SESSION['admin_name'] = $admin['UserName'];
+            $_SESSION['admin_role'] = $admin['role'] ?? 'super_admin';
             header('Location: dashboard.php');
             exit;
         }
     }
-    $error = 'Invalid username or password';
+    if ($error === '') {
+        $error = 'Invalid username or password';
+    }
 }
 ?>
 <!DOCTYPE html>

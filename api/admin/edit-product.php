@@ -3,13 +3,14 @@ session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// === true, not a bare isset(): isset() is satisfied by a value of
-// literal false, which would let a logged-out session through.
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+// Reachable with EITHER permission — a future pricing-only role should not
+// be locked out just because it lacks the operational one. Whether
+// price/discount can actually be CHANGED is checked separately below, per
+// field, not per page — see $canEditPricing.
+requireAnyAdminPermission(['products.manage_operational', 'products.manage_pricing']);
+$canEditPricing = adminHasPermission('products.manage_pricing');
 
 $id = intval($_GET['id'] ?? 0);
 if (!$id) {
@@ -32,11 +33,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $name = trim($_POST['name'] ?? '');
     $category = trim($_POST['category'] ?? '');
-    $price = floatval($_POST['price'] ?? 0);
     $description = trim($_POST['description'] ?? '');
     $quantity = intval($_POST['quantity'] ?? 0);
     $quantitytype = trim($_POST['quantitytype'] ?? 'Kg');
-    $discount = floatval($_POST['discount'] ?? 0);
+
+    // Without products.manage_pricing, price/discount cannot move — the
+    // existing values are used regardless of what was actually posted
+    // (including a tampered raw request), never just hidden client-side.
+    if ($canEditPricing) {
+        $price = floatval($_POST['price'] ?? 0);
+        $discount = floatval($_POST['discount'] ?? 0);
+    } else {
+        $price = (float)$product['price'];
+        $discount = (float)$product['discount'];
+    }
     // Drive the app's Promos/Flash Sales rows on HomeScreen. Stored as the
     // 'YES'/'NO' strings items.offer/weekly_deal already use — Product.kt's
     // isOffer/isWeeklyDeal do a case-insensitive match against exactly that.
@@ -62,9 +72,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // An image error above is fatal for the whole save — fall through and
         // re-render with the message, leaving the row untouched.
     } elseif ($name && $category && $price > 0) {
+        $priceAttempted = $canEditPricing && (
+            abs((float)$product['price'] - $price) > 0.001 || abs((float)$product['discount'] - $discount) > 0.001
+        );
         $stmt = $dbh->prepare("UPDATE items SET name=?, category=?, description=?, price=?, quantity=?, quantitytype=?, discount=?, offer=?, weekly_deal=?, image=? WHERE id=?");
         if ($stmt->execute([$name, $category, $description, $price, $quantity, $quantitytype, $discount, $offer, $weeklyDeal, $image, $id])) {
             $success = 'Product updated successfully!';
+            logAdminAction(
+                $dbh,
+                $priceAttempted ? 'product.price_updated' : 'product.updated',
+                'product', (string)$id,
+                'Updated "' . $name . '"' . ($priceAttempted ? " (price/discount changed)" : '')
+                    . (!$canEditPricing ? ' (price/discount left unchanged — no pricing permission)' : '')
+            );
             // Refresh product data
             $stmt = $dbh->prepare("SELECT * FROM items WHERE id = ?");
             $stmt->execute([$id]);
@@ -116,7 +136,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Price (UGX)</label>
-                    <input type="number" name="price" step="0.01" value="<?= $product['price'] ?>" class="w-full px-4 py-2 border rounded" required>
+                    <input type="number" name="price" step="0.01" value="<?= $product['price'] ?>"
+                           class="w-full px-4 py-2 border rounded <?= $canEditPricing ? '' : 'bg-gray-100 text-gray-500' ?>"
+                           <?= $canEditPricing ? 'required' : 'readonly' ?>>
+                    <?php if (!$canEditPricing): ?>
+                        <p class="text-gray-400 text-xs mt-1">Your account cannot change pricing.</p>
+                    <?php endif; ?>
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Quantity</label>
@@ -132,8 +157,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div>
                     <label class="block text-gray-700 font-bold mb-2">Discount (%)</label>
-                    <input type="number" name="discount" step="0.01" value="<?= $product['discount'] ?>" class="w-full px-4 py-2 border rounded">
-                    <p class="text-gray-400 text-xs mt-1">A discount above 0% puts this product under Hot Sale in the app.</p>
+                    <input type="number" name="discount" step="0.01" value="<?= $product['discount'] ?>"
+                           class="w-full px-4 py-2 border rounded <?= $canEditPricing ? '' : 'bg-gray-100 text-gray-500' ?>"
+                           <?= $canEditPricing ? '' : 'readonly' ?>>
+                    <p class="text-gray-400 text-xs mt-1"><?= $canEditPricing
+                        ? 'A discount above 0% puts this product under Hot Sale in the app.'
+                        : 'Your account cannot change pricing.' ?></p>
                 </div>
                 <div class="flex items-center gap-6 md:col-span-2">
                     <label class="flex items-center gap-2">

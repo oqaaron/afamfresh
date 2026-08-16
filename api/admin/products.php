@@ -4,20 +4,22 @@ require_once '../admin/includes/config.php'; // adjust path if needed
 
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// Check if admin is logged in
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+// Browsing/editing non-price fields needs only the operational permission;
+// deleting a product is pricing/catalog-critical and checked separately
+// below, matching add-product.php/delete-product.php's own gating.
+requireAdminPermission('products.manage_operational');
 
 // Handle DELETE request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     verifyCsrf();
+    requireAdminPermission('products.manage_pricing');
     $deleteId = intval($_POST['delete_id']);
     if ($deleteId > 0) {
         $stmt = $dbh->prepare("DELETE FROM items WHERE id = ?");
         $stmt->execute([$deleteId]);
+        logAdminAction($dbh, 'product.deleted', 'product', (string)$deleteId, 'Deleted product');
         // Redirect to avoid resubmission
         header('Location: products.php?deleted=1');
         exit;
@@ -77,9 +79,11 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
         <div class="p-6">
             <div class="flex justify-between items-center mb-6">
                 <h1 class="text-2xl font-bold text-green-800">Manage Products</h1>
-                <a href="add-product.php" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2">
-                    <i class="fas fa-plus"></i> Add New Product
-                </a>
+                <?php if (adminHasPermission('products.manage_pricing')): ?>
+                    <a href="add-product.php" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Add New Product
+                    </a>
+                <?php endif; ?>
             </div>
 
             <?php if (isset($_GET['deleted'])): ?>
@@ -168,6 +172,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                                     <a href="edit-product.php?id=<?= $row['id'] ?>" class="text-blue-600 hover:text-blue-800">
                                         <i class="fas fa-edit"></i>
                                     </a>
+                                    <?php if (adminHasPermission('products.manage_pricing')): ?>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this product?');">
                                         <?= csrfField() ?>
                                         <input type="hidden" name="delete_id" value="<?= $row['id'] ?>">
@@ -175,6 +180,7 @@ $categories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>

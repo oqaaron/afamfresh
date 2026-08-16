@@ -20,13 +20,8 @@
 session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// === true, not a bare isset(): isset() is satisfied by a value of
-// literal false, which would let a logged-out session through.
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+requireAdminPermission('users.manage');
 
 $id = intval($_GET['id'] ?? 0);
 if (!$id) {

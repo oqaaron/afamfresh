@@ -3,17 +3,16 @@ header('Content-Type: application/json');
 // config.php already starts the session. Calling it again raised a notice that
 // was printed ahead of this file's JSON.
 require_once '../../admin/includes/config.php';
+require_once __DIR__ . '/../../includes/csrf.php';
+require_once __DIR__ . '/../../includes/admin_permissions.php';
+require_once __DIR__ . '/../../includes/admin_audit.php';
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-    exit;
-}
+requireAdminPermissionApi('vendors.manage');
 
 $action = $_GET['action'] ?? '';
 
 if ($action === 'list') {
-    $stmt = $dbh->query("SELECT v.*, 
+    $stmt = $dbh->query("SELECT v.*,
                          (SELECT COUNT(*) FROM vendor_products WHERE vendor_id = v.id) as total_listings
                          FROM vendors v");
     $vendors = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -22,6 +21,7 @@ if ($action === 'list') {
 }
 
 if ($action === 'toggle_verification' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);
     $id = intval($input['id'] ?? 0);
     $verified = intval($input['verified'] ?? 0);
@@ -67,6 +67,11 @@ if ($action === 'toggle_verification' && $_SERVER['REQUEST_METHOD'] === 'POST') 
             }
         }
     }
+
+    logAdminAction(
+        $dbh, $verified === 1 ? 'vendor.verified' : 'vendor.unverified', 'vendor', (string)$id,
+        $verified === 1 ? 'Verified' : 'Verification revoked'
+    );
 
     echo json_encode(['success' => true, 'notified' => $notified]);
     exit;

@@ -10,11 +10,16 @@
 // the calling file's directory OR the working directory depending on how PHP
 // was reached, and this file is opened directly by Apache.
 require_once __DIR__ . '/auth_check.php';
-requireAdminLoginWeb();
 
 // $dbh, for the sidebar's pending-requests badge.
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/admin_permissions.php';
+// This page's three cards (Bulk listings, cancellation requests/refunds,
+// vendor verification) belong to three different permissions -- reachable
+// with any one of them; each underlying AJAX action in
+// api/admin/Bulk-approval.php / vendors.php enforces its own specific one.
+requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendors.manage']);
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -14,13 +14,9 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// === true, not a bare isset(): isset() is satisfied by a value of
-// literal false, which would let a logged-out session through.
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('payouts.manage');
 
 $flash = '';
 $flashError = '';
@@ -66,6 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             )->execute([$requestId]);
 
             $dbh->commit();
+            logAdminAction($dbh, 'rider_payout.marked_paid', 'rider_payout_request', (string)$requestId,
+                'Marked paid, UGX ' . number_format((float)$payout['amount']));
             $flash = 'Payout marked as paid.';
         } catch (Exception $e) {
             if ($dbh->inTransaction()) $dbh->rollBack();
@@ -79,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               WHERE id = ? AND status = 'pending'"
         );
         $stmt->execute([$note ?: null, $requestId]);
+        logAdminAction($dbh, 'rider_payout.rejected', 'rider_payout_request', (string)$requestId, $note ?: 'Rejected');
         $flash = 'Payout request rejected.';
     }
 }

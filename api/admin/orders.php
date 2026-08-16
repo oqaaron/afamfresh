@@ -2,11 +2,9 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('orders.manage');
 
 // Handle order status update or rider assignment
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -18,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = trim($_POST['status'] ?? '');
         $stmt = $dbh->prepare("UPDATE orders SET status = ? WHERE orderid = ?");
         $stmt->execute([$status, $orderId]);
+        logAdminAction($dbh, 'order.status_changed', 'order', (string)$orderId, "Status set to \"$status\"");
         header('Location: orders.php?updated=1');
         exit;
     }
@@ -83,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 )->execute([$riderId, $orderId]);
 
                 $dbh->commit();
+                logAdminAction($dbh, 'order.rider_assigned', 'order', (string)$orderId, "Assigned rider #$riderId");
 
                 // Told after commit, never inside the transaction: a
                 // notification failure must not roll back a real assignment.

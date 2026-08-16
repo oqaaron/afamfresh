@@ -2,13 +2,9 @@
 session_start();
 require_once 'includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
-
-// === true, not a bare isset(): isset() is satisfied by a value of
-// literal false, which would let a logged-out session through.
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/../includes/admin_permissions.php';
+require_once __DIR__ . '/../includes/admin_audit.php';
+requireAdminPermission('products.manage_pricing');
 
 // POST only. This used to delete on a GET, which meant any page an admin
 // happened to visit could destroy a product with nothing more than
@@ -30,6 +26,7 @@ $id = intval($_POST['id'] ?? 0);
 if ($id) {
     $stmt = $dbh->prepare("DELETE FROM items WHERE id = ?");
     $stmt->execute([$id]);
+    logAdminAction($dbh, 'product.deleted', 'product', (string)$id, 'Deleted product');
 }
 
 header('Location: products.php?deleted=1');
