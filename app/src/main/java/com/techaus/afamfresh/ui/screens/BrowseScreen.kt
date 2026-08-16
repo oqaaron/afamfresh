@@ -96,10 +96,7 @@ fun BrowseScreen(
                         CategoryCard(
                             category = category,
                             productCount = products.count { it.category == category },
-                            onClick = {
-                                onCategorySelect(category)
-                                onBack()
-                            }
+                            onClick = { onCategorySelect(category) }
                         )
                     }
                 }
