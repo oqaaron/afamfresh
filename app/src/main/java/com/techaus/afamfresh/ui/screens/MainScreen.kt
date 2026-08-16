@@ -46,6 +46,7 @@ fun MainScreen(
     riderViewModel: RiderViewModel,
     roleGateViewModel: RoleGateViewModel,
     addressViewModel: AddressViewModel,
+    locationViewModel: LocationViewModel,
     notificationViewModel: NotificationViewModel,
     favoritesViewModel: FavoritesViewModel,
     trackingViewModel: TrackingViewModel,
@@ -109,6 +110,14 @@ fun MainScreen(
     // rather than firing from the ViewModel's init block.
     LaunchedEffect(user?.id) {
         if (user != null) notificationViewModel.refresh()
+    }
+
+    // Auto-detect GPS location for diaspora users setting delivery addresses.
+    // Runs once on app start to populate currentLocation in LocationViewModel.
+    LaunchedEffect(Unit) {
+        if (isCustomerApp) {
+            locationViewModel.requestCurrentLocation()
+        }
     }
 
     // The vendor endpoints identify the vendor from a query parameter rather
@@ -579,9 +588,34 @@ fun MainScreen(
             if (isCustomerApp) composable("addresses") {
                 AddressesScreen(
                     addressViewModel = addressViewModel,
-                    onBack = { navController.popBackStack() }
+                    locationViewModel = locationViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSelectLocation = { navController.navigate("location_picker") }
                 )
             }
+
+            // ===== LOCATION PICKER =====
+            if (isCustomerApp) composable("location_picker") {
+                val currentLocation by locationViewModel.currentLocation.collectAsState()
+                LocationPickerScreen(
+                    initialLat = null,
+                    initialLng = null,
+                    currentGpsLat = currentLocation?.latitude,
+                    currentGpsLng = currentLocation?.longitude,
+                    onBack = { navController.popBackStack() },
+                    onLocationPicked = { lat: Double, lng: Double ->
+                        locationViewModel.reverseGeocode(
+                            latitude = lat,
+                            longitude = lng,
+                            onSuccess = { area: String, fullAddress: String ->
+                                locationViewModel.setPickedLocation(area, fullAddress)
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                )
+            }
+
             // ===== SETTINGS =====
             composable("settings") {
                 SettingsScreen(

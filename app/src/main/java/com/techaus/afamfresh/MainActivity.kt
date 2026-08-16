@@ -63,9 +63,10 @@ class MainActivity : ComponentActivity() {
     private val riderViewModel: RiderViewModel by viewModels { viewModelFactory }
     private val roleGateViewModel: RoleGateViewModel by viewModels { viewModelFactory }
     private val addressViewModel: AddressViewModel by viewModels { viewModelFactory }
+    private val locationViewModel: LocationViewModel by viewModels { viewModelFactory }
     private val notificationViewModel: NotificationViewModel by viewModels { viewModelFactory }
     private val favoritesViewModel: FavoritesViewModel by viewModels { viewModelFactory }
-val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
+    private val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
 
     /** Order id carried by a tapped push notification. */
     private val pendingOrderId = mutableStateOf<String?>(null)
@@ -299,6 +300,7 @@ val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
                                             riderViewModel = riderViewModel,
                                             roleGateViewModel = roleGateViewModel,
                                             addressViewModel = addressViewModel,
+                                            locationViewModel = locationViewModel,
                                             notificationViewModel = notificationViewModel,
                                             favoritesViewModel = favoritesViewModel,
                                             trackingViewModel = trackingViewModel,

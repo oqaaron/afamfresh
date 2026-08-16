@@ -35,6 +35,12 @@ class LocationViewModel(
     private val _locationError = MutableStateFlow<String?>(null)
     val locationError: StateFlow<String?> = _locationError.asStateFlow()
 
+    private val _pickedArea = MutableStateFlow<String?>(null)
+    val pickedArea: StateFlow<String?> = _pickedArea.asStateFlow()
+
+    private val _pickedAddress = MutableStateFlow<String?>(null)
+    val pickedAddress: StateFlow<String?> = _pickedAddress.asStateFlow()
+
     /**
      * Attempts to get the user's current GPS location.
      * Called on app start to detect location automatically.
@@ -130,6 +136,16 @@ class LocationViewModel(
             Log.e("LocationViewModel", "Reverse geocoding failed: ${e.message}")
             onError(e.message ?: "Geocoding service unavailable")
         }
+    }
+
+    fun setPickedLocation(area: String, address: String) {
+        _pickedArea.value = area
+        _pickedAddress.value = address
+    }
+
+    fun clearPickedLocation() {
+        _pickedArea.value = null
+        _pickedAddress.value = null
     }
 
     fun clearError() {

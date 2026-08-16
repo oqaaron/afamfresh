@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
@@ -24,19 +24,27 @@ import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.Address
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.viewmodel.AddressViewModel
+import com.techaus.afamfresh.viewmodel.LocationViewModel
 
 /**
  * Saved delivery addresses: list, add, edit, delete, and choose a default.
  *
  * Reachable from Profile → Addresses, whose callback was previously an empty
  * lambda pointing at a screen that did not exist.
+ *
+ * Integrates map-based location picker for diaspora users to precisely pin
+ * their delivery locations before checkout or scheduling.
  */
 @Composable
 fun AddressesScreen(
     addressViewModel: AddressViewModel,
-    onBack: () -> Unit
+    locationViewModel: LocationViewModel,
+    onBack: () -> Unit,
+    onSelectLocation: () -> Unit
 ) {
     val addresses by addressViewModel.addresses.collectAsState()
+    val pickedArea by locationViewModel.pickedArea.collectAsState()
+    val pickedAddress by locationViewModel.pickedAddress.collectAsState()
 
     var editing by remember { mutableStateOf<Address?>(null) }
     var showForm by remember { mutableStateOf(false) }
@@ -50,7 +58,7 @@ fun AddressesScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text("Addresses", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
             }
@@ -125,7 +133,13 @@ fun AddressesScreen(
         AddressFormDialog(
             initial = editing,
             isFirstAddress = addresses.isEmpty(),
-            onDismiss = { showForm = false },
+            pickedArea = pickedArea,
+            pickedAddressLine = pickedAddress,
+            onDismiss = {
+                showForm = false
+                locationViewModel.clearPickedLocation()
+            },
+            onPickLocation = onSelectLocation,
             onSave = { label, name, phone, area, line, isDefault ->
                 addressViewModel.save(
                     existingId = editing?.id,
@@ -137,6 +151,7 @@ fun AddressesScreen(
                     isDefault = isDefault
                 )
                 showForm = false
+                locationViewModel.clearPickedLocation()
             }
         )
     }
@@ -228,7 +243,11 @@ private fun AddressCard(
 private fun AddressFormDialog(
     initial: Address?,
     isFirstAddress: Boolean,
+    pickedArea: String? = null,
+    pickedAddressLine: String? = null,
     onDismiss: () -> Unit,
+    onPickLocation: () -> Unit,
+    onLocationPicked: (area: String, address: String) -> Unit = { _, _ -> },
     onSave: (
         label: String,
         recipientName: String,
@@ -247,6 +266,16 @@ private fun AddressFormDialog(
     // could be — so the switch is forced on and disabled in that case.
     var isDefault by remember { mutableStateOf(initial?.isDefault ?: isFirstAddress) }
 
+    // Auto-fill area and address line when user picks location from map
+    LaunchedEffect(pickedArea, pickedAddressLine) {
+        if (!pickedArea.isNullOrEmpty()) {
+            area = pickedArea
+        }
+        if (!pickedAddressLine.isNullOrEmpty()) {
+            line = pickedAddressLine
+        }
+    }
+
     val canSave = label.isNotBlank() && name.isNotBlank() && line.isNotBlank()
 
     AlertDialog(
@@ -259,6 +288,17 @@ private fun AddressFormDialog(
                 AddressField(phone, { phone = it }, "Phone number")
                 AddressField(area, { area = it }, "Area / neighbourhood")
                 AddressField(line, { line = it }, "Street address / directions")
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onPickLocation,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Forest)
+                ) {
+                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Pick Location on Map", color = Color.White, fontWeight = FontWeight.Bold)
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
