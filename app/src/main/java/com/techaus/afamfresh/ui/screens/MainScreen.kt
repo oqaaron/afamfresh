@@ -236,7 +236,7 @@ fun MainScreen(
                     onProfileClick = { navController.navigate("profile") },
                     onBulkClick = { navController.navigate("Bulk") },
                     onCartClick = { navController.navigate("cart") },
-                    onBrowseClick = { navController.navigate("home") },
+                    onBrowseClick = { navController.navigate("browse") },
                     productViewModel = productViewModel,
                     cartViewModel = cartViewModel,
                     favoritesViewModel = favoritesViewModel,
@@ -251,6 +251,37 @@ fun MainScreen(
                     notificationViewModel = notificationViewModel,
                     onBack = { navController.popBackStack() },
                     onOpenOrder = { orderId -> navController.navigate("edit_order/$orderId") }
+                )
+            }
+
+            // ===== BROWSE (all categories) =====
+            if (isCustomerApp) composable("browse") {
+                BrowseScreen(
+                    onBack = { navController.popBackStack() },
+                    onCategorySelect = { category ->
+                        navController.navigate("browse_category/$category")
+                    },
+                    productViewModel = productViewModel,
+                    onProductClick = { product ->
+                        onProductClick(product)
+                        navController.navigate("product_detail/${product.id}")
+                    }
+                )
+            }
+
+            // ===== BROWSE CATEGORY (products in category) =====
+            if (isCustomerApp) composable("browse_category/{categoryName}") { backStackEntry ->
+                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+                BrowseCategoryScreen(
+                    categoryName = categoryName,
+                    onBack = { navController.popBackStack() },
+                    onProductClick = { product ->
+                        onProductClick(product)
+                        navController.navigate("product_detail/${product.id}")
+                    },
+                    productViewModel = productViewModel,
+                    cartViewModel = cartViewModel,
+                    favoritesViewModel = favoritesViewModel
                 )
             }
 
