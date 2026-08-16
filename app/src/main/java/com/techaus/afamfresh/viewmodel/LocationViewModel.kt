@@ -44,6 +44,17 @@ class LocationViewModel(
     private val _pickedAddress = MutableStateFlow<String?>(null)
     val pickedAddress: StateFlow<String?> = _pickedAddress.asStateFlow()
 
+    // The coordinates the customer actually pinned. These are the whole point
+    // of the map picker — a delivery quote and a rider's navigation need the
+    // point, not a street name — and they were being dropped entirely:
+    // AddressViewModel.save() built its Address without lat/lng, so every
+    // pinned address reached the server with both null.
+    private val _pickedLat = MutableStateFlow<Double?>(null)
+    val pickedLat: StateFlow<Double?> = _pickedLat.asStateFlow()
+
+    private val _pickedLng = MutableStateFlow<Double?>(null)
+    val pickedLng: StateFlow<Double?> = _pickedLng.asStateFlow()
+
     /**
      * Attempts to get the user's current GPS location.
      * Called on app start to detect location automatically.
@@ -92,7 +103,15 @@ class LocationViewModel(
                 geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
                     if (addresses.isNotEmpty()) {
                         val address = addresses[0]
-                        val area = address.adminArea ?: address.subAdminArea ?: "Kampala"
+                        // No "Kampala" fallback. Defaulting the area to the capital labelled
+                        // every pin whose adminArea came back null as Kampala — so a
+                        // delivery pinned in Gulu or Mbarara was saved with the wrong
+                        // area and nothing told the customer. Blank is honest, and the
+                        // form requires the field, so they name it themselves.
+                        val area = address.adminArea
+                            ?: address.subAdminArea
+                            ?: address.locality
+                            ?: ""
                         val fullAddress = buildString {
                             if (!address.thoroughfare.isNullOrEmpty()) append(address.thoroughfare)
                             if (!address.subThoroughfare.isNullOrEmpty()) {
@@ -123,7 +142,11 @@ class LocationViewModel(
                 val addresses = geocoder.getFromLocation(latitude, longitude, 1)
                 if (!addresses.isNullOrEmpty()) {
                     val address = addresses[0]
-                    val area = address.adminArea ?: address.subAdminArea ?: "Kampala"
+                    // Same as the TIRAMISU branch above: no "Kampala" fallback.
+                    val area = address.adminArea
+                        ?: address.subAdminArea
+                        ?: address.locality
+                        ?: ""
                     val fullAddress = buildString {
                         if (!address.thoroughfare.isNullOrEmpty()) append(address.thoroughfare)
                         if (!address.subThoroughfare.isNullOrEmpty()) {
@@ -150,14 +173,35 @@ class LocationViewModel(
         }
     }
 
-    fun setPickedLocation(area: String, address: String) {
+    fun setPickedLocation(area: String, address: String, lat: Double? = null, lng: Double? = null) {
         _pickedArea.value = area
         _pickedAddress.value = address
+        _pickedLat.value = lat
+        _pickedLng.value = lng
+    }
+
+    /**
+     * The pin succeeded but naming it did not — no geocoder result, no network,
+     * or simply nowhere with a registered address, which is common outside
+     * Kampala.
+     *
+     * The coordinates are still the valuable part, so they are kept and the
+     * address line is filled with them. Area is deliberately left blank: it is
+     * a required field, so the customer is asked to name the place themselves
+     * rather than having a wrong guess saved on their behalf.
+     */
+    fun setPickedCoordinatesOnly(lat: Double, lng: Double) {
+        _pickedArea.value = null
+        _pickedAddress.value = "Pinned location (%.5f, %.5f)".format(lat, lng)
+        _pickedLat.value = lat
+        _pickedLng.value = lng
     }
 
     fun clearPickedLocation() {
         _pickedArea.value = null
         _pickedAddress.value = null
+        _pickedLat.value = null
+        _pickedLng.value = null
     }
 
     fun clearError() {

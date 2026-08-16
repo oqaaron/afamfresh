@@ -608,7 +608,18 @@ fun MainScreen(
                             latitude = lat,
                             longitude = lng,
                             onSuccess = { area: String, fullAddress: String ->
-                                locationViewModel.setPickedLocation(area, fullAddress)
+                                locationViewModel.setPickedLocation(area, fullAddress, lat, lng)
+                                navController.popBackStack()
+                            },
+                            // Without this the default no-op ran, so neither the
+                            // location nor popBackStack() happened: tapping the map
+                            // did nothing at all and the customer was stranded on
+                            // it. Geocoder coverage is thin outside Kampala, so
+                            // finding no address is an ordinary outcome, not an
+                            // error — the pin is still good, and it is the
+                            // coordinates that the delivery actually needs.
+                            onError = {
+                                locationViewModel.setPickedCoordinatesOnly(lat, lng)
                                 navController.popBackStack()
                             }
                         )

@@ -46,6 +46,8 @@ fun AddressesScreen(
     val addresses by addressViewModel.addresses.collectAsState()
     val pickedArea by locationViewModel.pickedArea.collectAsState()
     val pickedAddress by locationViewModel.pickedAddress.collectAsState()
+    val pickedLat by locationViewModel.pickedLat.collectAsState()
+    val pickedLng by locationViewModel.pickedLng.collectAsState()
 
     // The form's state lives here, not inside AddressFormDialog, and every
     // piece of it is rememberSaveable.
@@ -202,6 +204,10 @@ fun AddressesScreen(
             onSave = {
                 isSaving = true
                 saveError = null
+                // A fresh pin wins; otherwise an edit keeps whatever the address
+                // was already pinned at, so saving a phone-number correction
+                // does not quietly strip its coordinates.
+                val existing = addresses.firstOrNull { it.id == editingId }
                 addressViewModel.save(
                     existingId = editingId,
                     label = formLabel,
@@ -209,7 +215,9 @@ fun AddressesScreen(
                     phone = formPhone,
                     area = formArea,
                     addressLine = formLine,
-                    isDefault = formIsDefault
+                    isDefault = formIsDefault,
+                    lat = pickedLat ?: existing?.lat,
+                    lng = pickedLng ?: existing?.lng
                 ) { ok ->
                     // The dialog stays open on failure, holding everything the
                     // customer typed, instead of discarding it silently.

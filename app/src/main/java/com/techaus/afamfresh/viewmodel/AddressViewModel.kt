@@ -50,6 +50,17 @@ class AddressViewModel(
         area: String,
         addressLine: String,
         isDefault: Boolean,
+        /**
+         * From the map picker, or carried over from the address being edited.
+         * These were previously not parameters at all, so [Address]'s lat/lng
+         * defaulted to null on every save: api/addresses.php has columns for
+         * them and Address.kt has the fields, but a pinned point never once
+         * reached the database. Null stays meaningful — a typed-in address
+         * genuinely has no coordinates, and inventing them would produce a
+         * wrong delivery quote.
+         */
+        lat: Double? = null,
+        lng: Double? = null,
         onDone: (Boolean) -> Unit = {}
     ) {
         val address = Address(
@@ -59,7 +70,9 @@ class AddressViewModel(
             phone = phone.trim(),
             area = area.trim(),
             addressLine = addressLine.trim(),
-            isDefault = isDefault
+            isDefault = isDefault,
+            lat = lat,
+            lng = lng
         )
         addressRepository.saveAddress(address) { ok ->
             refresh()
