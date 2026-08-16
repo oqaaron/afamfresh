@@ -3,10 +3,9 @@ package com.techaus.afamfresh.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -16,22 +15,26 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,12 +50,6 @@ import com.techaus.afamfresh.viewmodel.FavoritesViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
 import kotlinx.coroutines.delay
 
-/**
- * Replaces the discontinued web storefront's homepage curation
- * (`items.homepage`/`offer`/`weekly_deal`) with real, in-app browsing. Only
- * one filter is active at a time, so "what is the customer looking at right
- * now" always has a single answer.
- */
 private sealed class HomeFilter {
     object All : HomeFilter()
     object HotSale : HomeFilter()
@@ -81,6 +78,7 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     onBulkClick: () -> Unit,
     onCartClick: () -> Unit,
+    onBrowseClick: () -> Unit,
     productViewModel: ProductViewModel,
     cartViewModel: CartViewModel,
     favoritesViewModel: FavoritesViewModel,
@@ -92,16 +90,9 @@ fun HomeScreen(
     val productsError by productViewModel.error.collectAsState()
     val canRetryProducts by productViewModel.canRetry.collectAsState()
     val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf<HomeFilter>(HomeFilter.All) }
-
-    // Derived from whatever is already loaded — no separate categories call
-    // needed, the full catalogue is already in `products`.
-    val categories = remember(products) {
-        products.mapNotNull { it.category?.trim()?.takeIf { c -> c.isNotEmpty() } }
-            .distinct()
-            .sorted()
-    }
 
     val visibleProducts = remember(products, searchQuery, selectedFilter) {
         products
@@ -110,237 +101,272 @@ fun HomeScreen(
     }
 
     Scaffold(containerColor = Cream) { padding ->
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            // ===== TOP GLOVO BUBBLE HEADER (COLLAPSES WITH SCROLL) =====
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(ForestSurface)
+                        .padding(bottom = 18.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(12.dp))
 
-            // ===== Header matching the mockup styling =====
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onProfileClick,
+                    // Location Pill and Action Icons
+                    Row(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(PillGray)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = Ink,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Hello, $userName",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        color = Ink
-                    )
-                }
+                        Surface(
+                            shape = CircleShape,
+                            color = CardWhite,
+                            shadowElevation = 1.dp,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .clickable { onProfileClick() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = "Location",
+                                    tint = Forest,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Deliver to Kampala • $userName",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = InkMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onNotificationsClick) {
-                        BadgedBox(
-                            badge = {
-                                if (unreadNotifications > 0) {
-                                    Badge(containerColor = Tomato) {
-                                        Text(
-                                            if (unreadNotifications > 99) "99+" else "$unreadNotifications",
-                                            color = Color.White,
-                                            fontSize = 10.sp
-                                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onNotificationsClick) {
+                                BadgedBox(
+                                    badge = {
+                                        if (unreadNotifications > 0) {
+                                            Badge(containerColor = Tomato) {
+                                                Text(
+                                                    if (unreadNotifications > 99) "99+" else "$unreadNotifications",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
                                     }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        contentDescription = "Notifications",
+                                        tint = Ink
+                                    )
                                 }
                             }
-                        ) {
-                            Icon(
-                                Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = Ink
-                            )
+                            IconButton(onClick = onCartClick) {
+                                Icon(
+                                    Icons.Default.ShoppingCart,
+                                    contentDescription = "Cart",
+                                    tint = Ink
+                                )
+                            }
                         }
                     }
-                    IconButton(onClick = onCartClick) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = "Cart", tint = Ink)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Glovo-style 3-Row Bubble Grid
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            GlovoBubble(
+                                icon = Icons.Default.Spa,
+                                title = "Groceries",
+                                isSelected = selectedFilter == HomeFilter.All,
+                                onClick = { selectedFilter = HomeFilter.All }
+                            )
+                            GlovoBubble(
+                                icon = Icons.Default.Inventory2,
+                                title = "Bulk Deals",
+                                isSelected = false,
+                                onClick = onBulkClick
+                            )
+                            GlovoBubble(
+                                icon = Icons.Default.LocalFireDepartment,
+                                title = "Hot Sale",
+                                isSelected = selectedFilter == HomeFilter.HotSale,
+                                onClick = {
+                                    selectedFilter = if (selectedFilter == HomeFilter.HotSale) HomeFilter.All else HomeFilter.HotSale
+                                }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            GlovoBubble(
+                                icon = Icons.Default.Sell,
+                                title = "Promos",
+                                isSelected = selectedFilter == HomeFilter.Promos,
+                                onClick = {
+                                    selectedFilter = if (selectedFilter == HomeFilter.Promos) HomeFilter.All else HomeFilter.Promos
+                                }
+                            )
+                            GlovoBubble(
+                                icon = Icons.Default.Bolt,
+                                title = "Flash Sales",
+                                isSelected = selectedFilter == HomeFilter.FlashSales,
+                                onClick = {
+                                    selectedFilter = if (selectedFilter == HomeFilter.FlashSales) HomeFilter.All else HomeFilter.FlashSales
+                                }
+                            )
+                            GlovoBubble(
+                                icon = Icons.Default.ShoppingCart,
+                                title = "Orders",
+                                isSelected = false,
+                                onClick = onOrdersClick
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            GlovoBubble(
+                                icon = Icons.Default.ViewAgenda,
+                                title = "Browse",
+                                isSelected = false,
+                                onClick = onBrowseClick
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // ===== SEARCH & TITLE HEADER =====
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(10.dp))
 
-            // ===== Search Pill Bar (Rounded pill shape from mockup) =====
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = {
-                    Text(
-                        "Search here...",
-                        color = InkMuted,
-                        fontSize = 14.sp
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text("Search fresh produce, fruits...", color = InkMuted, fontSize = 13.sp)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = InkMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = CircleShape,
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = CardWhite,
+                            focusedContainerColor = CardWhite,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Forest
+                        )
                     )
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = InkMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = CircleShape,
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = CardWhite,
-                    focusedContainerColor = CardWhite,
-                    unfocusedBorderColor = ForestSurface,
-                    focusedBorderColor = Forest
-                )
-            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            // ===== Status quick-access row: Hot Sale / Promos / Flash Sales =====
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                StatusTile(
-                    icon = Icons.Default.LocalFireDepartment,
-                    label = "Hot Sale",
-                    selected = selectedFilter == HomeFilter.HotSale,
-                    onClick = {
-                        selectedFilter =
-                            if (selectedFilter == HomeFilter.HotSale) HomeFilter.All else HomeFilter.HotSale
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "Search Results" else "$userName, these are for you",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Ink
+                        )
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = InkMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                )
-                StatusTile(
-                    icon = Icons.Default.Sell,
-                    label = "Promos",
-                    selected = selectedFilter == HomeFilter.Promos,
-                    onClick = {
-                        selectedFilter =
-                            if (selectedFilter == HomeFilter.Promos) HomeFilter.All else HomeFilter.Promos
-                    }
-                )
-                StatusTile(
-                    icon = Icons.Default.Bolt,
-                    label = "Flash Sales",
-                    selected = selectedFilter == HomeFilter.FlashSales,
-                    onClick = {
-                        selectedFilter =
-                            if (selectedFilter == HomeFilter.FlashSales) HomeFilter.All else HomeFilter.FlashSales
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // ===== Section Title & Category Filter Pills =====
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Products",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Ink
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CategoryPill(
-                    label = "All",
-                    selected = selectedFilter == HomeFilter.All,
-                    onClick = { selectedFilter = HomeFilter.All }
-                )
-                categories.forEach { category ->
-                    CategoryPill(
-                        label = category,
-                        selected = selectedFilter == HomeFilter.Category(category),
-                        onClick = { selectedFilter = HomeFilter.Category(category) }
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // ===== Product Grid Area =====
+            // ===== PRODUCT CATALOGUE / STATES =====
             if (isLoadingProducts && products.isEmpty()) {
-                ProductGridSkeleton(modifier = Modifier.weight(1f))
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    ProductGridSkeleton(modifier = Modifier.fillMaxWidth().height(350.dp))
+                }
             } else if (productsError != null && products.isEmpty()) {
-                ErrorState(
-                    message = productsError ?: "",
-                    modifier = Modifier.weight(1f),
-                    onRetry = if (canRetryProducts) ({ productViewModel.loadProducts() }) else null
-                )
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    ErrorState(
+                        message = productsError ?: "",
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                        onRetry = if (canRetryProducts) ({ productViewModel.loadProducts() }) else null
+                    )
+                }
             } else if (visibleProducts.isEmpty()) {
-                if (searchQuery.isNotBlank()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(
                         icon = Icons.Default.Search,
-                        title = "No matches for \"$searchQuery\"",
-                        detail = "Try a different spelling or a broader word.",
-                        modifier = Modifier.weight(1f),
-                        actionLabel = "CLEAR SEARCH",
-                        onAction = { searchQuery = "" }
-                    )
-                } else if (selectedFilter != HomeFilter.All) {
-                    val filterLabel = when (val filter = selectedFilter) {
-                        HomeFilter.HotSale -> "Hot Sale"
-                        HomeFilter.Promos -> "Promos"
-                        HomeFilter.FlashSales -> "Flash Sales"
-                        is HomeFilter.Category -> filter.name
-                        HomeFilter.All -> ""
-                    }
-                    EmptyState(
-                        icon = Icons.Default.Search,
-                        title = "Nothing in $filterLabel right now",
-                        detail = "Check back later, or browse everything instead.",
-                        modifier = Modifier.weight(1f),
+                        title = "No products found",
+                        detail = "Try a different search term or remove filters.",
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
                         actionLabel = "CLEAR FILTER",
-                        onAction = { selectedFilter = HomeFilter.All }
-                    )
-                } else {
-                    EmptyState(
-                        icon = Icons.Default.ShoppingCart,
-                        title = "Nothing available yet",
-                        detail = "There are no products to show right now.",
-                        modifier = Modifier.weight(1f),
-                        actionLabel = "REFRESH",
-                        onAction = { productViewModel.loadProducts() }
+                        onAction = {
+                            searchQuery = ""
+                            selectedFilter = HomeFilter.All
+                        }
                     )
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(visibleProducts, key = { it.id }) { product ->
-                        MockupStyleProductCard(
+                items(visibleProducts, key = { it.id }) { product ->
+                    Box(modifier = Modifier.padding(horizontal = 8.dp)) {
+                        ProductCard(
                             product = product,
                             isFavorite = product.id in favoriteIds,
                             onClick = { onProductClick(product) },
@@ -355,10 +381,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StatusTile(
+private fun GlovoBubble(
     icon: ImageVector,
-    label: String,
-    selected: Boolean,
+    title: String,
+    isSelected: Boolean,
     onClick: () -> Unit
 ) {
     Column(
@@ -367,60 +393,49 @@ private fun StatusTile(
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(72.dp)
                 .clip(CircleShape)
-                .background(if (selected) Forest else ForestSurface),
+                .background(if (isSelected) Forest else CardWhite)
+                .then(
+                    if (!isSelected) Modifier.border(1.5.dp, ForestSurface, CircleShape)
+                    else Modifier
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                icon,
-                contentDescription = label,
-                tint = if (selected) Color.White else Forest,
-                modifier = Modifier.size(20.dp)
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (isSelected) Color.White else Forest,
+                modifier = Modifier.size(30.dp)
             )
         }
+
         Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) Forest else Ink
-        )
+
+        Surface(
+            shape = CircleShape,
+            color = CardWhite,
+            shadowElevation = 1.dp
+        ) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Ink,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
     }
 }
 
 @Composable
-private fun CategoryPill(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) Forest else PillGray)
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = label,
-            color = if (selected) Color.White else Ink,
-            fontWeight = FontWeight.Medium,
-            fontSize = 12.sp
-        )
-    }
-}
-
-@Composable
-private fun MockupStyleProductCard(
+private fun ProductCard(
     product: Product,
     isFavorite: Boolean,
     onClick: () -> Unit,
     onQuickAdd: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
-    // Brief "Added" confirmation so a tap has visible effect beyond the cart
-    // badge changing off-screen — reverts on its own, no user action needed.
     var justAdded by remember { mutableStateOf(false) }
     LaunchedEffect(justAdded) {
         if (justAdded) {
@@ -432,18 +447,16 @@ private fun MockupStyleProductCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(CardWhite)
             .clickable { onClick() }
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(10.dp)
     ) {
-        // Image Container with Soft Card Background
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(115.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .height(105.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(ForestSurface),
             contentAlignment = Alignment.Center
         ) {
@@ -453,10 +466,9 @@ private fun MockupStyleProductCard(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(8.dp)
+                    .padding(6.dp)
             )
 
-            // Favorite Icon Overlay
             IconButton(
                 onClick = onToggleFavorite,
                 modifier = Modifier
@@ -470,39 +482,36 @@ private fun MockupStyleProductCard(
                     if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
                     tint = if (isFavorite) Tomato else InkMuted,
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Product Name
         Text(
             text = product.name,
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             color = Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        // Pack Size / Weight & Discount
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = product.packLabel ?: "1 unit",
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 color = InkMuted
             )
             if (product.hasDiscount) {
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "-${product.discountPercent.toInt()}%",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Tomato
                 )
@@ -511,56 +520,44 @@ private fun MockupStyleProductCard(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Price
-        Text(
-            text = formatUgx(product.price),
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 15.sp,
-            color = Ink
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Mockup-style "Add to Cart" Pill Button — fills solid green with a
-        // check for a moment on tap, then reverts to the outlined resting state.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(CircleShape)
-                .then(
-                    if (justAdded) Modifier.background(Forest)
-                    else Modifier.border(1.dp, Forest, CircleShape)
-                )
-                .clickable {
-                    onQuickAdd()
-                    justAdded = true
-                }
-                .padding(vertical = 7.dp),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (justAdded) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = formatUgx(product.price),
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.sp,
+                color = Ink
+            )
+
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (justAdded) Forest else ForestSurface)
+                    .clickable {
+                        onQuickAdd()
+                        justAdded = true
+                    }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (justAdded) {
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                } else {
                     Text(
-                        text = "Added",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        text = "+ Add",
+                        color = Forest,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            } else {
-                Text(
-                    text = "Add to Cart",
-                    color = Forest,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
     }
