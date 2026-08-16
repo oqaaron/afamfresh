@@ -49,6 +49,11 @@ fun AddressesScreen(
     var editing by remember { mutableStateOf<Address?>(null) }
     var showForm by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Address?>(null) }
+    // A save used to close the dialog immediately and discard the result, so a
+    // rejected create looked exactly like a successful one: dialog gone, list
+    // refreshed and unchanged, address silently missing.
+    var isSaving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = Cream,
@@ -135,12 +140,17 @@ fun AddressesScreen(
             isFirstAddress = addresses.isEmpty(),
             pickedArea = pickedArea,
             pickedAddressLine = pickedAddress,
+            isSaving = isSaving,
+            saveError = saveError,
             onDismiss = {
                 showForm = false
+                saveError = null
                 locationViewModel.clearPickedLocation()
             },
             onPickLocation = onSelectLocation,
             onSave = { label, name, phone, area, line, isDefault ->
+                isSaving = true
+                saveError = null
                 addressViewModel.save(
                     existingId = editing?.id,
                     label = label,
@@ -149,9 +159,17 @@ fun AddressesScreen(
                     area = area,
                     addressLine = line,
                     isDefault = isDefault
-                )
-                showForm = false
-                locationViewModel.clearPickedLocation()
+                ) { ok ->
+                    // The dialog stays open on failure, holding everything the
+                    // customer typed, instead of discarding it silently.
+                    isSaving = false
+                    if (ok) {
+                        showForm = false
+                        locationViewModel.clearPickedLocation()
+                    } else {
+                        saveError = "Couldn't save that address. Check your connection and try again."
+                    }
+                }
             }
         )
     }
@@ -245,6 +263,8 @@ private fun AddressFormDialog(
     isFirstAddress: Boolean,
     pickedArea: String? = null,
     pickedAddressLine: String? = null,
+    isSaving: Boolean = false,
+    saveError: String? = null,
     onDismiss: () -> Unit,
     onPickLocation: () -> Unit,
     onLocationPicked: (area: String, address: String) -> Unit = { _, _ -> },
@@ -276,18 +296,26 @@ private fun AddressFormDialog(
         }
     }
 
-    val canSave = label.isNotBlank() && name.isNotBlank() && line.isNotBlank()
+    // `area` is in this list because api/addresses.php rejects a create or
+    // update outright when it is empty ("area and address_line are required").
+    // Leaving it out let the button enable, fire a request the server was
+    // always going to refuse, and drop the address on the floor.
+    val canSave = label.isNotBlank() && name.isNotBlank() &&
+        line.isNotBlank() && area.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Add address" else "Edit address") },
         text = {
             Column {
-                AddressField(label, { label = it }, "Label (Home, Work…)")
-                AddressField(name, { name = it }, "Recipient name")
+                // Required fields are marked, because Save stays disabled until
+                // all four are filled and there was previously nothing on screen
+                // explaining why the button would not respond.
+                AddressField(label, { label = it }, "Label (Home, Work…) *")
+                AddressField(name, { name = it }, "Recipient name *")
                 AddressField(phone, { phone = it }, "Phone number")
-                AddressField(area, { area = it }, "Area / neighbourhood")
-                AddressField(line, { line = it }, "Street address / directions")
+                AddressField(area, { area = it }, "Area / neighbourhood *")
+                AddressField(line, { line = it }, "Street address / directions *")
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -298,6 +326,11 @@ private fun AddressFormDialog(
                     Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Pick Location on Map", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                saveError?.let { message ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(message, fontSize = 13.sp, color = Tomato)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -319,14 +352,18 @@ private fun AddressFormDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = canSave,
+                enabled = canSave && !isSaving,
                 onClick = { onSave(label, name, phone, area, line, isDefault) }
             ) {
-                Text("Save", fontWeight = FontWeight.Bold, color = if (canSave) Forest else InkMuted)
+                Text(
+                    if (isSaving) "Saving…" else "Save",
+                    fontWeight = FontWeight.Bold,
+                    color = if (canSave && !isSaving) Forest else InkMuted
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
         }
     )
 }
