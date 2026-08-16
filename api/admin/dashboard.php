@@ -9,6 +9,7 @@ $fullAccess = adminHasPermission('reports.view_financial');
 $stats = [];
 $revenue = null;
 $platformFees = null;
+$dispatcherQueues = null;
 
 if ($fullAccess) {
     require_once __DIR__ . '/../includes/revenue.php';
@@ -34,6 +35,55 @@ if ($fullAccess) {
     } catch (Exception $e) {
         error_log('admin dashboard stats: ' . $e->getMessage());
         $stats = [];
+    }
+} else {
+    // Dispatcher dashboard: action-focused queues
+    try {
+        $dispatcherQueues = [
+            'orders_needing_rider' => 0,
+            'pending_orders' => 0,
+            'pending_Bulk' => 0,
+        ];
+
+        // Paid orders with no rider assigned — most time-critical
+        $stmt = $dbh->query("
+            SELECT COUNT(*) FROM orders o
+            LEFT JOIN rider_assignments ra ON ra.order_id = o.id AND ra.source = 'Shop'
+            WHERE o.payment_status IN ('paid', 'pending_cash')
+            AND o.status NOT IN ('delivered', 'cancelled', 'refunded')
+            AND ra.id IS NULL
+        ");
+        $dispatcherQueues['orders_needing_rider'] = (int)$stmt->fetchColumn();
+
+        // Orders awaiting status confirmation
+        $stmt = $dbh->query("
+            SELECT COUNT(*) FROM orders
+            WHERE status IN ('Received', 'Pending')
+        ");
+        $dispatcherQueues['pending_orders'] = (int)$stmt->fetchColumn();
+
+        // Bulk orders awaiting dispatch
+        $stmt = $dbh->query("
+            SELECT COUNT(*) FROM Bulk_orders so
+            JOIN Bulk_listings sl ON sl.id = so.listing_id
+            LEFT JOIN rider_assignments ra ON ra.order_id = so.id AND ra.source = 'Bulk'
+            WHERE so.payment_status IN ('paid', 'pending_cash')
+            AND sl.pickup_only = 0
+            AND so.status NOT IN ('delivered', 'cancelled', 'refunded')
+            AND ra.id IS NULL
+        ");
+        $dispatcherQueues['orders_needing_rider'] += (int)$stmt->fetchColumn();
+
+        // Bulk listings pending approval
+        $stmt = $dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending'");
+        $dispatcherQueues['pending_Bulk'] = (int)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        error_log('admin dashboard dispatcher queues: ' . $e->getMessage());
+        $dispatcherQueues = [
+            'orders_needing_rider' => 0,
+            'pending_orders' => 0,
+            'pending_Bulk' => 0,
+        ];
     }
 }
 ?>
@@ -213,7 +263,73 @@ if ($fullAccess) {
 
         <?php endif; ?>
 
-        <!-- Quick Links / Actions (permission-filtered) -->
+        <?php if (!$fullAccess): ?>
+        <!-- DISPATCHER: Action Queues -->
+        <div class="mb-8">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">Active queues</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Most urgent: Orders awaiting rider assignment -->
+                <a href="orders.php" class="bg-red-50 border-l-4 border-red-500 p-5 rounded-lg shadow hover:shadow-md transition">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold text-red-700 uppercase tracking-wide">🚨 Awaiting Riders</span>
+                        <i class="fas fa-motorcycle text-red-500 text-lg"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-red-700"><?= $dispatcherQueues['orders_needing_rider'] ?></p>
+                    <p class="text-xs text-gray-600 mt-2">Orders paid, no rider assigned yet</p>
+                </a>
+
+                <!-- Pending orders awaiting status update -->
+                <a href="orders.php" class="bg-yellow-50 border-l-4 border-yellow-500 p-5 rounded-lg shadow hover:shadow-md transition">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold text-yellow-700 uppercase tracking-wide">⏳ Pending Orders</span>
+                        <i class="fas fa-hourglass-half text-yellow-500 text-lg"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-yellow-700"><?= $dispatcherQueues['pending_orders'] ?></p>
+                    <p class="text-xs text-gray-600 mt-2">Awaiting status confirmation</p>
+                </a>
+
+                <!-- Bulk orders to dispatch -->
+                <a href="Bulk-orders.php" class="bg-orange-50 border-l-4 border-orange-500 p-5 rounded-lg shadow hover:shadow-md transition">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold text-orange-700 uppercase tracking-wide">📦 Bulk Orders</span>
+                        <i class="fas fa-boxes-stacked text-orange-500 text-lg"></i>
+                    </div>
+                    <p class="text-3xl font-bold text-orange-700"><?= $dispatcherQueues['pending_Bulk'] ?></p>
+                    <p class="text-xs text-gray-600 mt-2">Awaiting dispatch & riders</p>
+                </a>
+            </div>
+        </div>
+
+        <!-- Core Tools -->
+        <div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">Tools</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <a href="orders.php" class="bg-white p-5 rounded-lg shadow hover:shadow-md transition flex items-center gap-3">
+                    <i class="fas fa-shopping-cart text-2xl text-blue-600"></i>
+                    <div>
+                        <p class="font-medium text-gray-800">Manage Orders</p>
+                        <p class="text-xs text-gray-500">Update statuses, assign riders</p>
+                    </div>
+                </a>
+                <a href="Bulk-orders.php" class="bg-white p-5 rounded-lg shadow hover:shadow-md transition flex items-center gap-3">
+                    <i class="fas fa-truck-fast text-2xl text-orange-600"></i>
+                    <div>
+                        <p class="font-medium text-gray-800">Bulk Orders</p>
+                        <p class="text-xs text-gray-500">Dispatch & assign riders</p>
+                    </div>
+                </a>
+                <a href="products.php" class="bg-white p-5 rounded-lg shadow hover:shadow-md transition flex items-center gap-3">
+                    <i class="fas fa-box text-2xl text-purple-600"></i>
+                    <div>
+                        <p class="font-medium text-gray-800">Products</p>
+                        <p class="text-xs text-gray-500">Update availability</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+        <?php else: ?>
+
+        <!-- Quick Links / Actions (permission-filtered, super admin only) -->
         <?php
         $quickLinks = array_values(array_filter([
             ['orders.php', 'Manage Orders', 'fa-shopping-cart', 'text-blue-600', 'orders.manage'],
@@ -233,6 +349,7 @@ if ($fullAccess) {
             </a>
             <?php endforeach; ?>
         </div>
+        <?php endif; ?>
     </div>
 </div>
 
