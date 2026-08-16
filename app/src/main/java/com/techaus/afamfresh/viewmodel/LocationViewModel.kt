@@ -5,11 +5,14 @@ import android.location.Geocoder
 import android.location.Location
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Manages GPS location detection and reverse geocoding for delivery addresses.
@@ -71,6 +74,10 @@ class LocationViewModel(
     /**
      * Reverse geocode coordinates to get area/address name.
      * Used to fill in address field when user pins location on map.
+     *
+     * Note: Geocoding callback may run on a background thread on TIRAMISU+,
+     * so we switch to Main dispatcher before calling callbacks to ensure
+     * Compose state updates are visible.
      */
     fun reverseGeocode(
         latitude: Double,
@@ -101,9 +108,14 @@ class LocationViewModel(
                                 append(area)
                             }
                         }
-                        onSuccess(area, fullAddress.ifEmpty { "Location ($latitude, $longitude)" })
+                        // Switch to main thread before calling Compose-affecting callbacks
+                        viewModelScope.launch(Dispatchers.Main) {
+                            onSuccess(area, fullAddress.ifEmpty { "Location ($latitude, $longitude)" })
+                        }
                     } else {
-                        onError("Address not found for this location")
+                        viewModelScope.launch(Dispatchers.Main) {
+                            onError("Address not found for this location")
+                        }
                     }
                 }
             } else {
