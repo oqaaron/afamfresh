@@ -1,5 +1,6 @@
 package com.techaus.afamfresh.ui.screens
 
+import com.techaus.afamfresh.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -218,19 +219,19 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             GlovoBubble(
-                                icon = Icons.Default.Spa,
+                                drawableRes = R.drawable.groceries,
                                 title = "Groceries",
                                 isSelected = selectedFilter == HomeFilter.All,
                                 onClick = { selectedFilter = HomeFilter.All }
                             )
                             GlovoBubble(
-                                icon = Icons.Default.Inventory2,
+                                drawableRes = R.drawable.bulkdeals,
                                 title = "Bulk Deals",
                                 isSelected = false,
                                 onClick = onBulkClick
                             )
                             GlovoBubble(
-                                icon = Icons.Default.LocalFireDepartment,
+                                drawableRes = R.drawable.hotsales,
                                 title = "Hot Sale",
                                 isSelected = selectedFilter == HomeFilter.HotSale,
                                 onClick = {
@@ -244,7 +245,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
                             GlovoBubble(
-                                icon = Icons.Default.Sell,
+                                drawableRes = R.drawable.promos,
                                 title = "Promos",
                                 isSelected = selectedFilter == HomeFilter.Promos,
                                 onClick = {
@@ -252,7 +253,7 @@ fun HomeScreen(
                                 }
                             )
                             GlovoBubble(
-                                icon = Icons.Default.Bolt,
+                                drawableRes = R.drawable.flashsales,
                                 title = "Flash Sales",
                                 isSelected = selectedFilter == HomeFilter.FlashSales,
                                 onClick = {
