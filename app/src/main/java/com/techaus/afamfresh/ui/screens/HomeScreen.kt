@@ -267,7 +267,7 @@ fun HomeScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceAround
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             GlovoBubble(
                                 icon = Icons.Default.ViewAgenda,
@@ -275,8 +275,6 @@ fun HomeScreen(
                                 isSelected = false,
                                 onClick = onBrowseClick
                             )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
