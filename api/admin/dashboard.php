@@ -9,8 +9,6 @@ $fullAccess = adminHasPermission('reports.view_financial');
 $stats = [];
 $revenue = null;
 $platformFees = null;
-$myActivity = null;
-$myActivityAllTime = null;
 
 if ($fullAccess) {
     require_once __DIR__ . '/../includes/revenue.php';
@@ -36,38 +34,6 @@ if ($fullAccess) {
     } catch (Exception $e) {
         error_log('admin dashboard stats: ' . $e->getMessage());
         $stats = [];
-    }
-} else {
-    // Limited-access branch: dispatcher or other role with reports.view but not reports.view_financial.
-    // Show personal activity only, no financial figures.
-    try {
-        $todayStmt = $dbh->prepare(
-            "SELECT action, COUNT(DISTINCT target_id) AS n
-               FROM admin_action_log
-              WHERE admin_id = ? AND created_at >= CURDATE()
-              GROUP BY action"
-        );
-        $todayStmt->execute([$_SESSION['admin_id']]);
-        $myActivity = [];
-        foreach ($todayStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $myActivity[$row['action']] = (int)$row['n'];
-        }
-
-        $allTimeStmt = $dbh->prepare(
-            "SELECT action, COUNT(DISTINCT target_id) AS n
-               FROM admin_action_log
-              WHERE admin_id = ?
-              GROUP BY action"
-        );
-        $allTimeStmt->execute([$_SESSION['admin_id']]);
-        $myActivityAllTime = [];
-        foreach ($allTimeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $myActivityAllTime[$row['action']] = (int)$row['n'];
-        }
-    } catch (Exception $e) {
-        error_log('admin dashboard activity: ' . $e->getMessage());
-        $myActivity = [];
-        $myActivityAllTime = [];
     }
 }
 ?>
@@ -244,37 +210,6 @@ if ($fullAccess) {
             </div>
         </div>
         <?php endif; ?>
-
-        <?php else: ?>
-        <!-- LIMITED ACCESS BRANCH: Personal activity counts (dispatcher) -->
-
-        <h2 class="font-semibold text-gray-800 mb-4">Your activity today</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="bg-white p-5 rounded-xl shadow">
-                <div class="flex items-center justify-between mb-3">
-                    <p class="text-gray-500 text-sm font-medium">Orders updated</p>
-                    <i class="fas fa-edit text-blue-600"></i>
-                </div>
-                <p class="text-3xl font-bold text-gray-800"><?= $myActivity['order.status_changed'] ?? 0 ?></p>
-                <p class="text-xs text-gray-400 mt-2">All time: <?= $myActivityAllTime['order.status_changed'] ?? 0 ?></p>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow">
-                <div class="flex items-center justify-between mb-3">
-                    <p class="text-gray-500 text-sm font-medium">Riders assigned</p>
-                    <i class="fas fa-person-biking text-orange-600"></i>
-                </div>
-                <p class="text-3xl font-bold text-gray-800"><?= ($myActivity['order.rider_assigned'] ?? 0) + ($myActivity['Bulk_order.rider_assigned'] ?? 0) ?></p>
-                <p class="text-xs text-gray-400 mt-2">All time: <?= ($myActivityAllTime['order.rider_assigned'] ?? 0) + ($myActivityAllTime['Bulk_order.rider_assigned'] ?? 0) ?></p>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow">
-                <div class="flex items-center justify-between mb-3">
-                    <p class="text-gray-500 text-sm font-medium">Products edited</p>
-                    <i class="fas fa-box text-purple-600"></i>
-                </div>
-                <p class="text-3xl font-bold text-gray-800"><?= $myActivity['product.updated'] ?? 0 ?></p>
-                <p class="text-xs text-gray-400 mt-2">All time: <?= $myActivityAllTime['product.updated'] ?? 0 ?></p>
-            </div>
-        </div>
 
         <?php endif; ?>
 
