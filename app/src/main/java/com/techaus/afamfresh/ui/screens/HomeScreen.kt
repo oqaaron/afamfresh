@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
@@ -49,6 +50,7 @@ import com.techaus.afamfresh.viewmodel.AddressViewModel
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.FavoritesViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
+import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
 
 private sealed class HomeFilter {
@@ -385,7 +387,8 @@ fun HomeScreen(
 
 @Composable
 private fun GlovoBubble(
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    drawableRes: Int? = null,
     title: String,
     isSelected: Boolean,
     onClick: () -> Unit
@@ -405,12 +408,22 @@ private fun GlovoBubble(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = if (isSelected) Color.White else Forest,
-                modifier = Modifier.size(30.dp)
-            )
+            // Show drawable image if provided, otherwise fall back to icon
+            if (drawableRes != null) {
+                Image(
+                    painter = painterResource(id = drawableRes),
+                    contentDescription = title,
+                    modifier = Modifier.size(48.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (isSelected) Color.White else Forest,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
