@@ -55,13 +55,21 @@ fun CheckoutScreen(
     val checkoutError by checkoutViewModel.error.collectAsState()
     val paymentError by paymentViewModel.error.collectAsState()
 
-    var fname by remember { mutableStateOf("") }
-    var lname by remember { mutableStateOf("") }
-    var mobile by remember(userPhone) { mutableStateOf(userPhone ?: "") }
-    var email by remember(userEmail) { mutableStateOf(userEmail ?: "") }
-    var area by remember { mutableStateOf("") }
-    var address by remember(deliveryResult) { mutableStateOf(deliveryResult?.dropoffAddress ?: "") }
-    var paymentMethod by remember { mutableStateOf("mobile_money") }
+    // rememberSaveable throughout: "Pin location on map" navigates to
+    // delivery_map, which takes this screen out of composition. With plain
+    // remember, every field the customer had already filled in was discarded
+    // and they came back to an empty checkout form.
+    //
+    // `address` keeps its deliveryResult key on purpose — when a new pin
+    // produces a new quote, the field SHOULD re-initialise to that dropoff
+    // address. Only an unchanged quote restores what was typed.
+    var fname by rememberSaveable { mutableStateOf("") }
+    var lname by rememberSaveable { mutableStateOf("") }
+    var mobile by rememberSaveable(userPhone) { mutableStateOf(userPhone ?: "") }
+    var email by rememberSaveable(userEmail) { mutableStateOf(userEmail ?: "") }
+    var area by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable(deliveryResult) { mutableStateOf(deliveryResult?.dropoffAddress ?: "") }
+    var paymentMethod by rememberSaveable { mutableStateOf("mobile_money") }
 
     /** Fills the form from a saved address so nothing has to be retyped. */
     fun applyAddress(saved: com.techaus.afamfresh.models.Address) {
@@ -92,7 +100,7 @@ fun CheckoutScreen(
     val subtotal = cartItems.sumOf { it.lineTotal }
     val deliveryCost = deliveryResult?.cost ?: 0.0
 
-    var pointsToRedeem by remember { mutableStateOf(0) }
+    var pointsToRedeem by rememberSaveable { mutableStateOf(0) }
     val loyaltyPreview by checkoutViewModel.loyaltyPreview.collectAsState()
     val loyaltyDiscount = loyaltyPreview?.discount ?: 0.0
 

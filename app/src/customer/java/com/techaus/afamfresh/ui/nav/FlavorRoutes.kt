@@ -64,9 +64,10 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
                         cost = totalCost
                     )
                 )
-                nav.navigate("Bulk_checkout/$listingId") {
-                    popUpTo("Bulk_delivery_map/$listingId") { inclusive = true }
-                }
+                // popBackStack rather than navigate(): see the delivery_map
+                // route below. Pushing a fresh Bulk_checkout discarded whatever
+                // the customer had already filled in there.
+                nav.popBackStack()
             }
         )
     }
@@ -74,7 +75,12 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     composable("delivery_map") {
         val cartItems by deps.cartViewModel.cartItems.collectAsState()
         DeliveryMapScreen(
-            onBack = { nav.navigate("checkout") },
+            // popBackStack, not navigate("checkout"). navigate() pushed a
+            // SECOND checkout on top of the one that opened this map, and a new
+            // destination gets a new NavBackStackEntry — so it got a fresh
+            // SaveableStateHolder and the customer's half-filled form was gone.
+            // Popping returns to the original entry with its state intact.
+            onBack = { nav.popBackStack() },
             // The fee is tiered by order value, so the quote cannot be
             // requested without the cart subtotal.
             cartSubtotal = OrderCalc.subtotal(cartItems),
@@ -93,9 +99,10 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
                         cost = totalCost
                     )
                 )
-                nav.navigate("checkout") {
-                    popUpTo("delivery_map") { inclusive = true }
-                }
+                // Same reason as onBack above. The quote is already in
+                // DeliveryResultViewModel, so checkout picks it up from there
+                // on the way back rather than needing it passed through.
+                nav.popBackStack()
             }
         )
     }

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,16 +120,21 @@ fun BulkCheckoutScreen(
         max(byWeight, byValue)
     }
 
-    var quantity by remember(listing.id) {
+    // rememberSaveable: pinning a delivery point navigates to
+    // Bulk_delivery_map, taking this screen out of composition. Plain remember
+    // threw away the quantity, area and notes the customer had already entered.
+    // The existing keys are kept — a new listing or a new pin SHOULD reset the
+    // field they feed.
+    var quantity by rememberSaveable(listing.id) {
         mutableStateOf(minQuantity.coerceAtMost(listing.remainingQuantity.toDouble()))
     }
-    var address by remember(pinnedAddress) {
+    var address by rememberSaveable(pinnedAddress) {
         mutableStateOf(pinnedAddress ?: defaultAddress?.addressLine.orEmpty())
     }
-    var area by remember { mutableStateOf(defaultAddress?.area.orEmpty()) }
-    var notes by remember { mutableStateOf("") }
-    var payWithCash by remember { mutableStateOf(false) }
-    var pointsToRedeem by remember { mutableStateOf(0) }
+    var area by rememberSaveable { mutableStateOf(defaultAddress?.area.orEmpty()) }
+    var notes by rememberSaveable { mutableStateOf("") }
+    var payWithCash by rememberSaveable { mutableStateOf(false) }
+    var pointsToRedeem by rememberSaveable { mutableStateOf(0) }
 
     val unit = listing.unit?.takeIf { it.isNotBlank() } ?: if (listing.isWeightBased) "kg" else "units"
     val goodsTotal = quantity * listing.discountedPrice
