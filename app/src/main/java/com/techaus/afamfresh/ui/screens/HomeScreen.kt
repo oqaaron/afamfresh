@@ -45,6 +45,7 @@ import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.components.ProductGridSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
+import com.techaus.afamfresh.viewmodel.AddressViewModel
 import com.techaus.afamfresh.viewmodel.CartViewModel
 import com.techaus.afamfresh.viewmodel.FavoritesViewModel
 import com.techaus.afamfresh.viewmodel.ProductViewModel
@@ -82,12 +83,14 @@ fun HomeScreen(
     productViewModel: ProductViewModel,
     cartViewModel: CartViewModel,
     favoritesViewModel: FavoritesViewModel,
+    addressViewModel: AddressViewModel,
     unreadNotifications: Int,
     onNotificationsClick: () -> Unit
 ) {
     val products by productViewModel.products.collectAsState()
     val isLoadingProducts by productViewModel.isLoading.collectAsState()
     val productsError by productViewModel.error.collectAsState()
+    val addresses by addressViewModel.addresses.collectAsState()
     val canRetryProducts by productViewModel.canRetry.collectAsState()
     val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
 
@@ -147,8 +150,9 @@ fun HomeScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
+                                val deliveryArea = addresses.firstOrNull { it.isDefault }?.area ?: "Kampala"
                                 Text(
-                                    text = "Deliver to Kampala • $userName",
+                                    text = "Deliver to $deliveryArea • $userName",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Ink,

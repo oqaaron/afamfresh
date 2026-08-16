@@ -240,6 +240,7 @@ fun MainScreen(
                     productViewModel = productViewModel,
                     cartViewModel = cartViewModel,
                     favoritesViewModel = favoritesViewModel,
+                    addressViewModel = addressViewModel,
                     unreadNotifications = unreadNotifications,
                     onNotificationsClick = { navController.navigate("notifications") }
                 )
