@@ -22,6 +22,12 @@ const ADMIN_ROLES = [
     // quantity). Deliberately excludes products.manage_pricing,
     // configuration.manage, payouts.manage, Bulk.manage_refunds,
     // vendors.manage, and admins.manage.
+    //
+    // reports.view (not reports.view_financial) only unlocks dashboard.php
+    // itself, which branches internally on reports.view_financial to show a
+    // personal activity summary instead of business-wide revenue/fees —
+    // see admin/dashboard.php. reconciliation.php/export-reconciliation.php/
+    // routing-check.php all require reports.view_financial directly.
     'dispatcher' => [
         'orders.manage',
         'Bulk.dispatch',

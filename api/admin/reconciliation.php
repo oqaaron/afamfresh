@@ -19,7 +19,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/revenue.php';
 require_once __DIR__ . '/../includes/reconciliation.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
-requireAdminPermission('reports.view');
+requireAdminPermission('reports.view_financial');
 
 // Default to the last 30 days rather than all time: an all-time default makes
 // the page slow and answers a question nobody actually asks.

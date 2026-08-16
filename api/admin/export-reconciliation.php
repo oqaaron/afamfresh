@@ -15,7 +15,7 @@ require_once __DIR__ . '/auth_check.php';
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/reconciliation.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
-requireAdminPermission('reports.view');
+requireAdminPermission('reports.view_financial');
 
 $type = $_GET['type'] ?? 'daily';
 if (!in_array($type, ['daily', 'rider_cash', 'orders'], true)) {

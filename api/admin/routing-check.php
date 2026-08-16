@@ -21,7 +21,7 @@ require_once __DIR__ . '/auth_check.php';
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/google_routes.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
-requireAdminPermission('reports.view');
+requireAdminPermission('reports.view_financial');
 
 // Kampala city centre to Entebbe: a real road journey of roughly 35-40km, and
 // one whose straight-line distance is visibly shorter. If the reported distance

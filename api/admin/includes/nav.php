@@ -127,8 +127,8 @@ $navItemsAll = [
     ['Bulk-listings.php',    'Bulk Listings',      'fa-tags',             'Bulk.manage_listings'],
     ['Bulk-orders.php',      'Bulk Orders',        'fa-truck-fast',       'Bulk.dispatch'],
     ['vendor-payouts.php',   'Vendor Payouts',     'fa-wallet',           'payouts.manage'],
-    ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced',   'reports.view'],
-    ['routing-check.php',    'Routing check',      'fa-route',            'reports.view'],
+    ['reconciliation.php',   'Reconciliation',     'fa-scale-balanced',   'reports.view_financial'],
+    ['routing-check.php',    'Routing check',      'fa-route',            'reports.view_financial'],
     ['manage-admins.php',    'Manage Admins',      'fa-user-shield',      'admins.manage'],
     ['audit-log.php',        'Audit Log',          'fa-clipboard-list',   'admins.manage'],
 ];

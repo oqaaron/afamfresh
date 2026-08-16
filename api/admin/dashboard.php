@@ -4,32 +4,71 @@ require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 requireAdminPermission('reports.view');
 
-require_once __DIR__ . '/../includes/revenue.php';
+$fullAccess = adminHasPermission('reports.view_financial');
 
 $stats = [];
 $revenue = null;
 $platformFees = null;
-try {
-    // 'Received'/'Pending', not 'pending': orders.status is written capitalised
-    // everywhere, so the old lowercase comparison reported a permanent zero.
-    $stmt = $dbh->query("SELECT
-        (SELECT COUNT(*) FROM orders) as total_orders,
-        (SELECT COUNT(*) FROM users) as total_users,
-        (SELECT COUNT(*) FROM items) as total_products,
-        (SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending') as pending_Bulk,
-        (SELECT COUNT(*) FROM orders WHERE status IN ('Received','Pending')) as pending_orders
-    ");
-    $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+$myActivity = null;
+$myActivityAllTime = null;
 
-    // The revenue figure here used to be `SUM(total_amount) FROM orders` with
-    // no WHERE clause, counting unpaid, failed, reversed and cancelled orders
-    // as revenue while excluding the entire Bulk channel. It now comes from
-    // one shared definition — see includes/revenue.php.
-    $revenue = revenueSummary($dbh);
-    $platformFees = platformFeesSummary($dbh);
-} catch (Exception $e) {
-    error_log('admin dashboard stats: ' . $e->getMessage());
-    $stats = [];
+if ($fullAccess) {
+    require_once __DIR__ . '/../includes/revenue.php';
+
+    try {
+        // 'Received'/'Pending', not 'pending': orders.status is written capitalised
+        // everywhere, so the old lowercase comparison reported a permanent zero.
+        $stmt = $dbh->query("SELECT
+            (SELECT COUNT(*) FROM orders) as total_orders,
+            (SELECT COUNT(*) FROM users) as total_users,
+            (SELECT COUNT(*) FROM items) as total_products,
+            (SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending') as pending_Bulk,
+            (SELECT COUNT(*) FROM orders WHERE status IN ('Received','Pending')) as pending_orders
+        ");
+        $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // The revenue figure here used to be `SUM(total_amount) FROM orders` with
+        // no WHERE clause, counting unpaid, failed, reversed and cancelled orders
+        // as revenue while excluding the entire Bulk channel. It now comes from
+        // one shared definition — see includes/revenue.php.
+        $revenue = revenueSummary($dbh);
+        $platformFees = platformFeesSummary($dbh);
+    } catch (Exception $e) {
+        error_log('admin dashboard stats: ' . $e->getMessage());
+        $stats = [];
+    }
+} else {
+    // Limited-access branch: dispatcher or other role with reports.view but not reports.view_financial.
+    // Show personal activity only, no financial figures.
+    try {
+        $todayStmt = $dbh->prepare(
+            "SELECT action, COUNT(DISTINCT target_id) AS n
+               FROM admin_action_log
+              WHERE admin_id = ? AND created_at >= CURDATE()
+              GROUP BY action"
+        );
+        $todayStmt->execute([$_SESSION['admin_id']]);
+        $myActivity = [];
+        foreach ($todayStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $myActivity[$row['action']] = (int)$row['n'];
+        }
+
+        $allTimeStmt = $dbh->prepare(
+            "SELECT action, COUNT(DISTINCT target_id) AS n
+               FROM admin_action_log
+              WHERE admin_id = ?
+              GROUP BY action"
+        );
+        $allTimeStmt->execute([$_SESSION['admin_id']]);
+        $myActivityAllTime = [];
+        foreach ($allTimeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $myActivityAllTime[$row['action']] = (int)$row['n'];
+        }
+    } catch (Exception $e) {
+        error_log('admin dashboard activity: ' . $e->getMessage());
+        $myActivity = [];
+        $myActivityAllTime = [];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -50,6 +89,9 @@ try {
     <!-- Main Content -->
     <div class="flex-1 overflow-y-auto p-6">
         <h1 class="text-3xl font-bold text-green-800 mb-6">Dashboard</h1>
+
+        <?php if ($fullAccess): ?>
+        <!-- FULL ACCESS BRANCH: System-wide stats and revenue (super admin) -->
 
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
@@ -203,32 +245,58 @@ try {
         </div>
         <?php endif; ?>
 
-        <!-- Quick Links / Actions -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <a href="orders.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
-                <div><i class="fas fa-shopping-cart text-3xl text-blue-600"></i></div>
-                <div><span class="font-medium">Manage Orders</span> <span class="text-gray-400">→</span></div>
-            </a>
-            <a href="products.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
-                <div><i class="fas fa-box text-3xl text-purple-600"></i></div>
-                <div><span class="font-medium">Manage Products</span> <span class="text-gray-400">→</span></div>
-            </a>
-            <a href="users.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
-                <div><i class="fas fa-users text-3xl text-green-600"></i></div>
-                <div><span class="font-medium">Manage Users</span> <span class="text-gray-400">→</span></div>
-            </a>
-            <a href="riders.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
-                <div><i class="fas fa-motorcycle text-3xl text-yellow-600"></i></div>
-                <div><span class="font-medium">Manage Riders</span> <span class="text-gray-400">→</span></div>
-            </a>
-            <a href="configuration.php" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
-                <div><i class="fas fa-cog text-3xl text-gray-600"></i></div>
-                <div><span class="font-medium">Configuration</span> <span class="text-gray-400">→</span></div>
-            </a>
-            <div class="bg-white p-6 rounded-xl shadow flex items-center justify-between">
-                <div><i class="fas fa-tags text-3xl text-orange-600"></i></div>
-                <div><span class="font-medium">Bulk Approvals</span> <span class="text-gray-400">→</span></div>
+        <?php else: ?>
+        <!-- LIMITED ACCESS BRANCH: Personal activity counts (dispatcher) -->
+
+        <h2 class="font-semibold text-gray-800 mb-4">Your activity today</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-gray-500 text-sm font-medium">Orders updated</p>
+                    <i class="fas fa-edit text-blue-600"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-800"><?= $myActivity['order.status_changed'] ?? 0 ?></p>
+                <p class="text-xs text-gray-400 mt-2">All time: <?= $myActivityAllTime['order.status_changed'] ?? 0 ?></p>
             </div>
+            <div class="bg-white p-5 rounded-xl shadow">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-gray-500 text-sm font-medium">Riders assigned</p>
+                    <i class="fas fa-person-biking text-orange-600"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-800"><?= ($myActivity['order.rider_assigned'] ?? 0) + ($myActivity['Bulk_order.rider_assigned'] ?? 0) ?></p>
+                <p class="text-xs text-gray-400 mt-2">All time: <?= ($myActivityAllTime['order.rider_assigned'] ?? 0) + ($myActivityAllTime['Bulk_order.rider_assigned'] ?? 0) ?></p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-gray-500 text-sm font-medium">Products edited</p>
+                    <i class="fas fa-box text-purple-600"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-800"><?= $myActivity['product.updated'] ?? 0 ?></p>
+                <p class="text-xs text-gray-400 mt-2">All time: <?= $myActivityAllTime['product.updated'] ?? 0 ?></p>
+            </div>
+        </div>
+
+        <?php endif; ?>
+
+        <!-- Quick Links / Actions (permission-filtered) -->
+        <?php
+        $quickLinks = array_values(array_filter([
+            ['orders.php', 'Manage Orders', 'fa-shopping-cart', 'text-blue-600', 'orders.manage'],
+            ['products.php', 'Manage Products', 'fa-box', 'text-purple-600', 'products.manage_operational'],
+            ['Bulk-orders.php', 'Bulk Orders', 'fa-truck-fast', 'text-orange-600', 'Bulk.dispatch'],
+            ['users.php', 'Manage Users', 'fa-users', 'text-green-600', 'users.manage'],
+            ['riders.php', 'Manage Riders', 'fa-motorcycle', 'text-yellow-600', 'users.manage'],
+            ['configuration.php', 'Configuration', 'fa-cog', 'text-gray-600', 'configuration.manage'],
+            ['admin-dashboard.php', 'Bulk Approvals', 'fa-tags', 'text-orange-600', 'Bulk.manage_listings'],
+        ], fn($l) => adminHasPermission($l[4])));
+        ?>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <?php foreach ($quickLinks as $link): ?>
+            <a href="<?= htmlspecialchars($link[0]) ?>" class="bg-white p-6 rounded-xl shadow hover:shadow-md flex items-center justify-between">
+                <div><i class="fas <?= htmlspecialchars($link[2]) ?> text-3xl <?= htmlspecialchars($link[3]) ?>"></i></div>
+                <div><span class="font-medium"><?= htmlspecialchars($link[1]) ?></span> <span class="text-gray-400">→</span></div>
+            </a>
+            <?php endforeach; ?>
         </div>
     </div>
 </div>
