@@ -54,11 +54,32 @@ import com.techaus.afamfresh.viewmodel.ProductViewModel
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.delay
 
+/** Must match the `category` value the backend sends for grocery products. */
+private const val GROCERIES_CATEGORY = "Groceries"
+
+/**
+ * Categories the "Fresh Food" bubble collapses into one view.
+ *
+ * Product categories are free text — api/admin/add-product.php takes them from
+ * a plain text input, so nothing stops two admins entering "Fruit" and
+ * "Fruits". Both spellings are listed here, and matching is lowercase and
+ * trimmed, so a casing or plural slip does not silently drop a product out of
+ * the bubble. Add to this set rather than renaming rows in the database.
+ */
+private val FRESH_FOOD_CATEGORIES = setOf(
+    "vegetable", "vegetables",
+    "fruit", "fruits",
+    "meat", "meats",
+    "fish",
+    "chicken", "poultry"
+)
+
 private sealed class HomeFilter {
     object All : HomeFilter()
     object HotSale : HomeFilter()
     object Promos : HomeFilter()
     object FlashSales : HomeFilter()
+    object FreshFood : HomeFilter()
     data class Category(val name: String) : HomeFilter()
 }
 
@@ -67,7 +88,11 @@ private fun Product.matches(filter: HomeFilter): Boolean = when (filter) {
     HomeFilter.HotSale -> hasDiscount
     HomeFilter.Promos -> isOffer
     HomeFilter.FlashSales -> isWeeklyDeal
-    is HomeFilter.Category -> category == filter.name
+    HomeFilter.FreshFood -> category?.trim()?.lowercase() in FRESH_FOOD_CATEGORIES
+    // Case-insensitive for the same free-text reason as FRESH_FOOD_CATEGORIES:
+    // an exact == meant a product filed under "groceries" never matched the
+    // Groceries bubble.
+    is HomeFilter.Category -> category?.trim().equals(filter.name, ignoreCase = true)
 }
 
 @Composable
@@ -221,8 +246,13 @@ fun HomeScreen(
                             GlovoBubble(
                                 drawableRes = R.drawable.groceries,
                                 title = "Groceries",
-                                isSelected = selectedFilter == HomeFilter.All,
-                                onClick = { selectedFilter = HomeFilter.All }
+                                isSelected = selectedFilter == HomeFilter.Category(GROCERIES_CATEGORY),
+                                onClick = {
+                                    selectedFilter = if (selectedFilter == HomeFilter.Category(GROCERIES_CATEGORY))
+                                        HomeFilter.All
+                                    else
+                                        HomeFilter.Category(GROCERIES_CATEGORY)
+                                }
                             )
                             GlovoBubble(
                                 drawableRes = R.drawable.bulkdeals,
@@ -268,10 +298,22 @@ fun HomeScreen(
                             )
                         }
 
+                        // Two bubbles, so SpaceEvenly rather than SpaceAround:
+                        // it lands them at 1/3 and 2/3 of the width, sitting in
+                        // the gaps of the three-bubble rows above instead of
+                        // hanging off the edges.
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                            horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
+                            GlovoBubble(
+                                icon = Icons.Default.Spa,
+                                title = "Fresh Food",
+                                isSelected = selectedFilter == HomeFilter.FreshFood,
+                                onClick = {
+                                    selectedFilter = if (selectedFilter == HomeFilter.FreshFood) HomeFilter.All else HomeFilter.FreshFood
+                                }
+                            )
                             GlovoBubble(
                                 icon = Icons.Default.ViewAgenda,
                                 title = "Browse",
