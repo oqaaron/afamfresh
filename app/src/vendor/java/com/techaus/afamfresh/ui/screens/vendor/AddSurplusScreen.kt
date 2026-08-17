@@ -36,8 +36,9 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  *   - product_id        a listing decorates an EXISTING catalogue item, so the
  *                       vendor picks one of their products rather than typing a
  *                       name; the server joins on `items` to render the listing
- *   - discount_percent  30-70 inclusive, rejected outside that range. The
- *                       server computes discounted_price itself
+ *   - discount_percent  within CreateBulkListingRequest.DISCOUNT_RANGE
+ *                       inclusive, rejected outside it. The server computes
+ *                       discounted_price itself
  *   - Bulk_quantity  an integer
  *   - expiry_date       "YYYY-MM-DD HH:MM:SS"
  *
@@ -148,7 +149,7 @@ fun AddBulkScreen(
         // Checked here as well as server-side so the vendor is told immediately
         // rather than after a round trip.
         if (discountVal !in CreateBulkListingRequest.DISCOUNT_RANGE) {
-            formError = "Discount must be between 30% and 70%"
+            formError = "Discount must be between ${CreateBulkListingRequest.discountRangeLabel()}"
             return
         }
         if (quantityVal == null || quantityVal <= 0) {
@@ -416,7 +417,16 @@ fun AddBulkScreen(
                         value = discountPercent,
                         onValueChange = { discountPercent = it.filter { c -> c.isDigit() } },
                         label = { Text("Discount %") },
-                        supportingText = { Text("30-70", fontSize = 11.sp) },
+                        // Derived, not typed: this hint is what the vendor
+                        // actually reads, so a stale literal here would advertise
+                        // a floor the app no longer enforces.
+                        supportingText = {
+                            Text(
+                                "${CreateBulkListingRequest.DISCOUNT_RANGE.start.toInt()}-" +
+                                    "${CreateBulkListingRequest.DISCOUNT_RANGE.endInclusive.toInt()}",
+                                fontSize = 11.sp
+                            )
+                        },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = KeyboardType.Number
                         ),

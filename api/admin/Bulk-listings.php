@@ -23,6 +23,7 @@ require_once __DIR__ . '/../includes/vendor-notification-helper.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 require_once __DIR__ . '/../includes/admin_audit.php';
+require_once __DIR__ . '/../includes/bulk_listing_rules.php';
 requireAdminPermission('Bulk.manage_listings');
 
 $flash = '';
@@ -56,8 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $quantity = $_POST['Bulk_quantity'] !== '' ? (int)$_POST['Bulk_quantity'] : (int)$listing['Bulk_quantity'];
         $expiry   = trim($_POST['expiry_date'] ?? '') ?: $listing['expiry_date'];
 
-        if ($discount < 30 || $discount > 70) {
-            $flashError = 'Discount must be between 30% and 70% — the same rule the vendor app enforces.';
+        if (!isValidSurplusDiscount($discount)) {
+            $flashError = surplusDiscountRangeMessage() . ' — the same rule the vendor app enforces.';
         } else {
             // The server has always computed discounted_price rather than
             // trusting a submitted one; an adjustment has to recompute it or
@@ -236,8 +237,12 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
 
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
                         <div>
-                            <label class="block text-xs font-medium text-gray-600">Discount % (30–70)</label>
-                            <input type="number" step="0.01" min="30" max="70" name="discount_percent"
+                            <!-- Bounds come from the same constants the server validates against
+                                 (includes/bulk_listing_rules.php). Hardcoding them here once meant
+                                 the form refused a correction the server would have accepted, with
+                                 no error shown because the browser blocked the submit. -->
+                            <label class="block text-xs font-medium text-gray-600">Discount % (<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MIN, 2, '.', ''), '0'), '.') ?>–<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MAX, 2, '.', ''), '0'), '.') ?>)</label>
+                            <input type="number" step="0.01" min="<?= SURPLUS_DISCOUNT_MIN ?>" max="<?= SURPLUS_DISCOUNT_MAX ?>" name="discount_percent"
                                    value="<?= htmlspecialchars($l['discount_percent']) ?>"
                                    class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                             <div class="text-xs text-gray-500 mt-1">

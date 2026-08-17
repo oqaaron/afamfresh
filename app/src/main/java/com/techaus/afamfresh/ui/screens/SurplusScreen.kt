@@ -100,8 +100,8 @@ fun BulkScreen(
 
 @Composable
 private fun BulkCard(listing: BulkListing, onClick: () -> Unit) {
-    // The server stores and validates discount_percent itself (30-70%), so use
-    // it rather than recomputing it from the two prices.
+    // The server stores and validates discount_percent itself, so use it rather
+    // than recomputing it from the two prices.
     val discountPercent = listing.discountPercent.toInt()
 
     Row(

@@ -1,6 +1,7 @@
 <?php
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
+require_once __DIR__ . '/../includes/bulk_listing_rules.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -82,8 +83,8 @@ try {
             echo json_encode(['error' => 'Missing required fields']);
             exit;
         }
-        if ($discount_percent < 30 || $discount_percent > 70) {
-            echo json_encode(['error' => 'Discount must be between 30% and 70%']);
+        if (!isValidSurplusDiscount($discount_percent)) {
+            echo json_encode(['error' => surplusDiscountRangeMessage()]);
             exit;
         }
         

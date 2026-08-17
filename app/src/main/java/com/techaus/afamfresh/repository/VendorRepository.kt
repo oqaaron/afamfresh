@@ -196,15 +196,22 @@ class VendorRepository(
      * Submits a new Bulk listing. The server sets status='pending' and
      * computes the discounted price itself, so no price is sent.
      *
-     * Rejects locally on the 30–70% discount rule rather than making a round
-     * trip to be told the same thing.
+     * Rejects locally on the discount rule rather than making a round trip to
+     * be told the same thing. The bounds live in
+     * CreateBulkListingRequest.DISCOUNT_RANGE so this and the message below
+     * cannot disagree.
      */
     fun createListing(
         request: CreateBulkListingRequest,
         callback: (BulkListing?, ApiError?) -> Unit
     ) {
         if (request.discountPercent !in CreateBulkListingRequest.DISCOUNT_RANGE) {
-            callback(null, ApiError.Reported("Discount must be between 30% and 70%."))
+            callback(
+                null,
+                ApiError.Reported(
+                    "Discount must be between ${CreateBulkListingRequest.discountRangeLabel()}."
+                )
+            )
             return
         }
 

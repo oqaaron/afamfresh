@@ -93,8 +93,8 @@ data class BulkListingResponse(
  * `user_id` — not vendor_id: the endpoint looks the vendor up from the user and
  * requires `is_verified = TRUE`.
  *
- * The server rejects `discount_percent` outside 30–70 inclusive, and computes
- * `discounted_price` itself, so the app must not send a price.
+ * The server rejects `discount_percent` outside [DISCOUNT_RANGE] inclusive, and
+ * computes `discounted_price` itself, so the app must not send a price.
  */
 data class CreateBulkListingRequest(
     @SerializedName("user_id") val userId: Int,
@@ -112,7 +112,20 @@ data class CreateBulkListingRequest(
     @SerializedName("is_weight_based") val isWeightBased: Boolean = true
 ) {
     companion object {
-        val DISCOUNT_RANGE = 30.0..70.0
+        /**
+         * Must stay in step with SURPLUS_DISCOUNT_MIN/MAX in
+         * api/includes/bulk_listing_rules.php — the server is the authority and
+         * this copy exists only to fail fast without a round trip. The floor
+         * moved from 30 to 10 so vendors can post modest markdowns rather than
+         * being forced into a distress discount to list at all.
+         */
+        val DISCOUNT_RANGE = 10.0..70.0
+
+        /** Renders the bounds without trailing zeros, for user-facing messages. */
+        fun discountRangeLabel(): String {
+            fun trim(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
+            return "${trim(DISCOUNT_RANGE.start)}% and ${trim(DISCOUNT_RANGE.endInclusive)}%"
+        }
     }
 }
 
