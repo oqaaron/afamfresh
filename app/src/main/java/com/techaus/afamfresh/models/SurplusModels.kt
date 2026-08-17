@@ -261,6 +261,19 @@ data class CreateBulkOrderRequest(
     @SerializedName("quantity") val quantity: Double,
     @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("delivery_area") val deliveryArea: String? = null,
+
+    /**
+     * Who receives the goods, when that is not the buyer.
+     *
+     * AfamFresh sells to the diaspora ordering for family in Uganda, so the
+     * person at the door is routinely not the account holder. Null means "the
+     * buyer" — the server falls back to the account's own name and number, and
+     * the fallback lives there rather than being defaulted here, so only one
+     * place decides it.
+     */
+    @SerializedName("recipient_name") val recipientName: String? = null,
+    @SerializedName("recipient_phone") val recipientPhone: String? = null,
+
     @SerializedName("delivery_lat") val deliveryLat: Double? = null,
     @SerializedName("delivery_lng") val deliveryLng: Double? = null,
     @SerializedName("order_notes") val orderNotes: String? = null,

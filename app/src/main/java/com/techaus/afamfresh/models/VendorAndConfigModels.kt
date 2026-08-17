@@ -225,6 +225,14 @@ data class BulkOrder(
 
     @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("delivery_area") val deliveryArea: String? = null,
+
+    /**
+     * Who receives the goods, when the buyer named someone else. Null means
+     * the account holder — the server resolves that fallback, so a null here
+     * is not missing data.
+     */
+    @SerializedName("recipient_name") val recipientName: String? = null,
+    @SerializedName("recipient_phone") val recipientPhone: String? = null,
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
     @SerializedName("pickup_code") val pickupCode: String? = null,
     @SerializedName("scheduled_delivery_date") val scheduledDeliveryDate: String? = null,

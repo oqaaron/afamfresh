@@ -69,12 +69,32 @@ function loadDeliverable(PDO $dbh, string $source, int $orderId): ?array {
     }
 
     if ($source === 'Bulk') {
-        // The customer's name and phone are on `users`; the pickup point is the
-        // vendor's location, because a Bulk delivery starts at the vendor
-        // rather than at the AfamFresh warehouse. That is the substantive
-        // difference between the two kinds of job, and the rider needs it.
+        // The RECIPIENT's name and phone, falling back to the account holder's
+        // when the order did not name one.
+        //
+        // This used to read u.fname/u.mobile unconditionally, which is wrong
+        // for the customer this product is built around: a diaspora buyer
+        // ordering for family in Uganda left the rider holding a foreign phone
+        // number and no way to reach the person at the door. `orders` has
+        // carried per-order recipient columns all along; Bulk_orders did not
+        // until the recipient-details migration.
+        //
+        // NULLIF on the trimmed value, not just COALESCE: an empty string is a
+        // present-but-useless value that COALESCE would happily prefer over
+        // the account holder's real number.
+        //
+        // The pickup point is the vendor's location, because a Bulk delivery
+        // starts at the vendor rather than at the AfamFresh warehouse.
         $stmt = $dbh->prepare(
-            "SELECT so.id AS order_id, u.fname, u.lname, u.mobile,
+            "SELECT so.id AS order_id,
+                    COALESCE(NULLIF(TRIM(so.recipient_name), ''),
+                             CONCAT_WS(' ', u.fname, u.lname))       AS fname,
+                    ''                                                AS lname,
+                    COALESCE(NULLIF(TRIM(so.recipient_phone), ''), u.mobile) AS mobile,
+                    -- Kept alongside so a rider or an admin can still see who
+                    -- PLACED the order, which is who to chase about payment.
+                    u.fname AS buyer_fname, u.lname AS buyer_lname, u.mobile AS buyer_mobile,
+                    so.recipient_name, so.recipient_phone,
                     so.delivery_area AS area, so.delivery_address AS address,
                     so.delivery_address, so.status, so.status AS current_status,
                     so.payment_status,

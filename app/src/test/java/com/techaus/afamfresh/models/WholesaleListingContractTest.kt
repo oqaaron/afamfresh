@@ -264,6 +264,64 @@ class WholesaleListingContractTest {
     }
 
     // ==================================================================
+    // Ordering for someone else
+    // ==================================================================
+
+    @Test
+    fun `an order can name a recipient other than the buyer`() {
+        val body = json(
+            CreateBulkOrderRequest(
+                listingId = 3, userId = 7, quantity = 20.0,
+                deliveryAddress = "Plot 4, Bukoto", deliveryArea = "Bukoto",
+                recipientName = "Grace Namuli", recipientPhone = "0772123456"
+            )
+        )
+        assertEquals("Grace Namuli", body["recipient_name"].asString)
+        assertEquals("0772123456", body["recipient_phone"].asString)
+    }
+
+    @Test
+    fun `omitting the recipient leaves the server to fall back to the buyer`() {
+        val body = json(
+            CreateBulkOrderRequest(
+                listingId = 3, userId = 7, quantity = 20.0,
+                deliveryAddress = "Plot 4, Bukoto", deliveryArea = "Bukoto"
+            )
+        )
+        // Gson drops nulls, so the keys are absent rather than empty strings.
+        // That matters: rider_dispatch.php uses NULLIF(TRIM(...), '') so an
+        // empty string would be preferred over the account holder's real
+        // number, leaving the rider with nothing to call.
+        assertFalse(body.has("recipient_name"))
+        assertFalse(body.has("recipient_phone"))
+    }
+
+    @Test
+    fun `a returned order exposes the recipient to vendor and admin screens`() {
+        val order = gson.fromJson(
+            """
+            {"id": 9, "status": "ready", "payment_status": "paid",
+             "delivery_area": "Bukoto",
+             "recipient_name": "Grace Namuli", "recipient_phone": "0772123456"}
+            """.trimIndent(),
+            BulkOrder::class.java
+        )
+        assertEquals("Grace Namuli", order.recipientName)
+        assertEquals("0772123456", order.recipientPhone)
+    }
+
+    @Test
+    fun `an order placed for the buyer themselves reports a null recipient`() {
+        val order = gson.fromJson(
+            """{"id": 9, "delivery_area": "Bukoto"}""",
+            BulkOrder::class.java
+        )
+        // Null means "the account holder", not "unknown".
+        assertNull(order.recipientName)
+        assertNull(order.recipientPhone)
+    }
+
+    // ==================================================================
     // The quote's verdict — what stops the app hardcoding the limits
     // ==================================================================
 

@@ -178,6 +178,12 @@ try {
         $quantity = floatval($input['quantity'] ?? 0); // Can be decimal for kg
         $delivery_address = trim($input['delivery_address'] ?? '');
         $delivery_area = trim($input['delivery_area'] ?? '');
+        // Who actually receives the goods, when that is not the buyer. Left
+        // null rather than defaulted to the account holder here, so
+        // rider_dispatch.php's COALESCE stays the single place that decides
+        // the fallback — two places deciding it is how they come to disagree.
+        $recipient_name  = trim((string)($input['recipient_name'] ?? ''));
+        $recipient_phone = trim((string)($input['recipient_phone'] ?? ''));
         $delivery_lat = isset($input['delivery_lat']) ? floatval($input['delivery_lat']) : null;
         $delivery_lng = isset($input['delivery_lng']) ? floatval($input['delivery_lng']) : null;
         $scheduled_delivery_date = isset($input['scheduled_delivery_date']) ? trim($input['scheduled_delivery_date']) : null;
@@ -337,11 +343,12 @@ try {
         $stmt = $dbh->prepare("
             INSERT INTO Bulk_orders
             (listing_id, user_id, quantity, total_price, total_weight_kg, status,
-             delivery_address, delivery_area, delivery_lat, delivery_lng,
+             delivery_address, delivery_area, recipient_name, recipient_phone,
+             delivery_lat, delivery_lng,
              delivery_fee, delivery_fee_breakdown, delivery_distance_km, pickup_code,
              scheduled_delivery_date, scheduled_delivery_slot, order_notes,
              points_redeemed, loyalty_discount)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $result = $stmt->execute([
@@ -352,6 +359,8 @@ try {
             $totalWeightKg,
             $delivery_address ?: null,
             $delivery_area ?: null,
+            $recipient_name ?: null,
+            $recipient_phone ?: null,
             $delivery_lat,
             $delivery_lng,
             $delivery_fee,

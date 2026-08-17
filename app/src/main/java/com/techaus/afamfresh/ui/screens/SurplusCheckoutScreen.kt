@@ -142,7 +142,38 @@ fun BulkCheckoutScreen(
     var address by rememberSaveable(pinnedAddress) {
         mutableStateOf(pinnedAddress ?: defaultAddress?.addressLine.orEmpty())
     }
-    var area by rememberSaveable { mutableStateOf(defaultAddress?.area.orEmpty()) }
+
+    // Keyed on the pin, exactly like `address` above.
+    //
+    // Without the key this was set once from the customer's OWN default address
+    // and never moved again, so pinning a location filled in the address line
+    // and silently left the area saying wherever the buyer usually shops. For
+    // a diaspora customer sending to a relative that is not a cosmetic
+    // mismatch: delivery_area is what the rider is shown and what the order is
+    // filed under.
+    //
+    // Seeded from the pinned address's leading component — reverse geocoding
+    // returns "Bukoto, Kampala, Uganda" and the first part is the area far more
+    // often than not. It stays editable, and a wrong guess the customer can see
+    // and correct beats a stale value they cannot.
+    var area by rememberSaveable(pinnedAddress) {
+        mutableStateOf(
+            if (pinnedAddress != null) {
+                pinnedAddress.substringBefore(',').trim()
+            } else {
+                defaultAddress?.area.orEmpty()
+            }
+        )
+    }
+
+    // Who receives it. Defaults to the buyer, because that is the common case,
+    // but both fields are editable — see the "Who is receiving this" card.
+    var recipientName by rememberSaveable {
+        mutableStateOf(defaultAddress?.recipientName.orEmpty())
+    }
+    var recipientPhone by rememberSaveable {
+        mutableStateOf(defaultAddress?.phone ?: userPhone.orEmpty())
+    }
     var notes by rememberSaveable { mutableStateOf("") }
     var payWithCash by rememberSaveable { mutableStateOf(false) }
     var pointsToRedeem by rememberSaveable { mutableStateOf(0) }
@@ -328,6 +359,43 @@ fun BulkCheckoutScreen(
                 }
             }
 
+            // Who is at the other end.
+            //
+            // Not an edge case for this product: AfamFresh sells to the
+            // diaspora ordering for family in Uganda, so the person receiving
+            // the goods is routinely not the person paying. Bulk_orders stored
+            // nothing about them, and the rider was handed the buyer's own
+            // name and phone — a foreign number they cannot call on arrival.
+            if (!listing.pickupOnly) {
+                SectionCard(title = "Who is receiving this") {
+                    Text(
+                        "The rider calls this number on arrival. Change it if the " +
+                            "order is going to someone else.",
+                        fontSize = 12.sp,
+                        color = InkMuted
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = recipientName,
+                        onValueChange = { recipientName = it },
+                        label = { Text("Recipient's name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = recipientPhone,
+                        onValueChange = { recipientPhone = it },
+                        label = { Text("Recipient's phone") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Phone
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+
             SectionCard(title = "Anything else") {
                 OutlinedTextField(
                     value = notes,
@@ -430,6 +498,11 @@ fun BulkCheckoutScreen(
                         quantity = quantity,
                         deliveryAddress = address.takeIf { it.isNotBlank() },
                         deliveryArea = area.takeIf { it.isNotBlank() },
+                        // Blank means "the buyer" — the server falls back to
+                        // the account holder rather than storing an empty
+                        // string the rider would see instead of a number.
+                        recipientName = recipientName.trim().takeIf { it.isNotBlank() },
+                        recipientPhone = recipientPhone.trim().takeIf { it.isNotBlank() },
                         // The pin the customer just dropped, falling back to a
                         // saved address that was itself pinned. A typed address
                         // has no coordinates, and inventing them would produce a
