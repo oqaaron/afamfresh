@@ -42,6 +42,27 @@ function adminPermissions(): array {
     return ADMIN_ROLES[$role] ?? [];
 }
 
+/**
+ * True for a session that authenticated BEFORE admin roles existed.
+ *
+ * Such a session has admin_logged_in = true but no admin_role key at all, so
+ * adminPermissions() returns [] and every guarded action is refused — while
+ * the pages themselves still render, because they were reached with a valid
+ * login. The symptom is a control that appears to work, silently fails, and
+ * reverts: a select that snaps back, a toggle that un-toggles.
+ *
+ * Told apart from a real permission refusal because the fix is completely
+ * different. "You lack rights" is permanent and the answer is to ask a super
+ * admin; this is a stale cookie and the answer is to sign in again.
+ *
+ * Note the check is for the key's ABSENCE, not its emptiness — login.php has
+ * always written a non-empty value (defaulting to 'super_admin'), so a missing
+ * key can only mean the session predates that code.
+ */
+function adminSessionPredatesRoles(): bool {
+    return !empty($_SESSION['admin_logged_in']) && !array_key_exists('admin_role', $_SESSION);
+}
+
 function adminHasPermission(string $permission): bool {
     $perms = adminPermissions();
     return in_array('*', $perms, true) || in_array($permission, $perms, true);
@@ -64,6 +85,13 @@ function adminHasAnyPermission(array $permissions): bool {
 function requireAdminPermission(string $permission): void {
     require_once __DIR__ . '/../admin/auth_check.php';
     requireAdminLoginWeb();
+    // A pre-roles session cannot hold any permission, so send it to the login
+    // form rather than showing "Access denied" for something the account is
+    // very likely entitled to.
+    if (adminSessionPredatesRoles()) {
+        header('Location: logout.php');
+        exit;
+    }
     if (!adminHasPermission($permission)) {
         http_response_code(403);
         echo '<!DOCTYPE html><html><head><title>Access denied</title>'
@@ -82,6 +110,10 @@ function requireAdminPermission(string $permission): void {
 function requireAnyAdminPermission(array $permissions): void {
     require_once __DIR__ . '/../admin/auth_check.php';
     requireAdminLoginWeb();
+    if (adminSessionPredatesRoles()) {
+        header('Location: logout.php');
+        exit;
+    }
     if (!adminHasAnyPermission($permissions)) {
         http_response_code(403);
         echo '<!DOCTYPE html><html><head><title>Access denied</title>'
@@ -101,6 +133,18 @@ function requireAdminPermissionApi(string $permission): void {
     if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
         http_response_code(401);
         echo json_encode(['success' => false, 'error' => 'Unauthorized. Please log in.']);
+        exit;
+    }
+    // 401, not 403: this is an authentication problem wearing a permission
+    // problem's clothes, and the caller must be told to sign in rather than to
+    // go and ask for rights it may already have.
+    if (adminSessionPredatesRoles()) {
+        http_response_code(401);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Your admin session was started before roles were introduced. '
+                       . 'Please sign out and sign in again.',
+        ]);
         exit;
     }
     if (!adminHasPermission($permission)) {

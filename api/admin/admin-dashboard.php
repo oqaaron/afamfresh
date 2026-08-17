@@ -197,18 +197,42 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
 
-        // Generic API request with error handling
+        // Generic API request with error handling.
+        //
+        // A 401/403 from requireAdminPermissionApi() carries a perfectly good
+        // explanation in its JSON body ("Please log in", "Your account does not
+        // have permission to do that"). This used to throw on any non-2xx and
+        // surface `HTTP 403: {"success":false,...}` as the toast, so a
+        // permission problem read as a mysterious failure -- and a session that
+        // predated the admin-roles migration (no admin_role, therefore no
+        // permissions) looked like the control silently refusing to work.
+        //
+        // The body is parsed first now, and only falls back to the status line
+        // when there is nothing useful in it.
         async function apiRequest(url, options = {}) {
             try {
                 const response = await fetch(url, {
                     ...options,
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN, ...(options.headers || {}) }
                 });
+
+                const rawBody = await response.text();
+                let parsed = null;
+                try { parsed = JSON.parse(rawBody); } catch (_) { /* not JSON */ }
+
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    // 401 means the session is gone or was never an admin one.
+                    // Say so plainly -- the fix is to sign in again, and no
+                    // amount of retrying the control will help.
+                    const fallback = response.status === 401
+                        ? 'Your admin session has expired. Please sign in again.'
+                        : `Request failed (HTTP ${response.status}).`;
+                    return { success: false, error: (parsed && parsed.error) || fallback };
                 }
-                return await response.json();
+                if (parsed === null) {
+                    return { success: false, error: 'The server returned an unreadable response.' };
+                }
+                return parsed;
             } catch (e) {
                 console.error('API Request failed:', e);
                 return { success: false, error: e.message || 'Network error' };
