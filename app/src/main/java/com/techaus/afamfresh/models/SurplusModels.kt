@@ -163,6 +163,36 @@ data class CreateBulkListingRequest(
     @SerializedName("weight_per_unit_kg") val weightPerUnitKg: Double = 1.0,
     @SerializedName("is_weight_based") val isWeightBased: Boolean = true
 ) {
+    /**
+     * A wholesale offer rather than a surplus markdown.
+     *
+     * Set only by VendorViewModel.createWholesaleListing. The server does not
+     * trust it — it forces listing_type from the seller's business_type — but
+     * the CLIENT needs it, to know which of its own pre-flight checks apply.
+     */
+    val isWholesale: Boolean get() = listingType == "wholesale"
+
+    /**
+     * The local discount check, or null if there is nothing to complain about.
+     *
+     * Wholesale listings are exempt: they carry discount 0 by definition,
+     * because there is no retail price they are a discount FROM. The check
+     * used to be an unconditional `discountPercent !in DISCOUNT_RANGE` inside
+     * VendorRepository.createListing, which every wholesale submission failed
+     * — locally, before any request was sent, with a message about a discount
+     * the form had never asked for. The rule belongs to the surplus path only,
+     * exactly as the server's own fork has it.
+     *
+     * Pure and on the request itself so it can be tested without an
+     * ApiService, and so the two callers cannot drift.
+     */
+    fun localDiscountRejection(): String? = when {
+        isWholesale -> null
+        discountPercent !in DISCOUNT_RANGE ->
+            "Discount must be between ${discountRangeLabel()}."
+        else -> null
+    }
+
     companion object {
         /**
          * Must stay in step with SURPLUS_DISCOUNT_MIN/MAX in
@@ -170,6 +200,8 @@ data class CreateBulkListingRequest(
          * this copy exists only to fail fast without a round trip. The floor
          * moved from 30 to 10 so vendors can post modest markdowns rather than
          * being forced into a distress discount to list at all.
+         *
+         * Applies to SURPLUS listings only. See [localDiscountRejection].
          */
         val DISCOUNT_RANGE = 10.0..70.0
 

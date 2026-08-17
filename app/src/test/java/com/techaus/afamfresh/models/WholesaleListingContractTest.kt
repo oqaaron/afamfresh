@@ -146,6 +146,48 @@ class WholesaleListingContractTest {
     }
 
     // ==================================================================
+    // The local pre-flight check — surplus only
+    // ==================================================================
+
+    @Test
+    fun `a wholesale request is exempt from the discount range`() {
+        // The regression this pins: VendorRepository.createListing rejected
+        // ANY request outside DISCOUNT_RANGE, so every wholesale submission
+        // failed on the device before a request was ever sent, with a message
+        // about a discount the wholesale form does not ask for.
+        assertNull(wholesaleRequest().localDiscountRejection())
+        assertNull(wholesaleRequest(retail = 6000.0).localDiscountRejection())
+    }
+
+    @Test
+    fun `a surplus request is still held to the discount range`() {
+        fun surplus(pct: Double) = CreateBulkListingRequest(
+            userId = 7,
+            productId = 42,
+            originalPrice = 10000.0,
+            discountPercent = pct,
+            BulkQuantity = 12.0,
+            expiryDate = "2026-08-20 23:59:59",
+            listingType = "goodie_bag"
+        )
+
+        // Both ends of the range are accepted...
+        assertNull(surplus(10.0).localDiscountRejection())
+        assertNull(surplus(70.0).localDiscountRejection())
+        assertNull(surplus(40.0).localDiscountRejection())
+
+        // ...and outside it, still refused, with the bounds named.
+        val tooLow = surplus(9.0).localDiscountRejection()
+        assertTrue("below the floor must be refused", tooLow != null)
+        assertTrue("message should name the range", tooLow!!.contains("10%"))
+        assertTrue(surplus(71.0).localDiscountRejection() != null)
+
+        // 0 is what a wholesale listing carries; on the surplus path it is
+        // still a missing discount and must not slip through.
+        assertTrue(surplus(0.0).localDiscountRejection() != null)
+    }
+
+    // ==================================================================
     // Inbound — what GET returns
     // ==================================================================
 

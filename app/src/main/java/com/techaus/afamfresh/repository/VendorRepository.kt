@@ -197,21 +197,20 @@ class VendorRepository(
      * computes the discounted price itself, so no price is sent.
      *
      * Rejects locally on the discount rule rather than making a round trip to
-     * be told the same thing. The bounds live in
-     * CreateBulkListingRequest.DISCOUNT_RANGE so this and the message below
-     * cannot disagree.
+     * be told the same thing.
+     *
+     * The decision lives on the request (localDiscountRejection) because it is
+     * NOT unconditional: it applies to surplus listings only. A wholesale
+     * listing carries discount 0 by definition, and this guard used to fail
+     * every one of them here on the device, reporting a discount range for a
+     * field the wholesale form does not have.
      */
     fun createListing(
         request: CreateBulkListingRequest,
         callback: (BulkListing?, ApiError?) -> Unit
     ) {
-        if (request.discountPercent !in CreateBulkListingRequest.DISCOUNT_RANGE) {
-            callback(
-                null,
-                ApiError.Reported(
-                    "Discount must be between ${CreateBulkListingRequest.discountRangeLabel()}."
-                )
-            )
+        request.localDiscountRejection()?.let { reason ->
+            callback(null, ApiError.Reported(reason))
             return
         }
 
