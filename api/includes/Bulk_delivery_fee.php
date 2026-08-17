@@ -20,15 +20,26 @@
 //
 // WHAT MAKES UP THE FEE
 //
-//   base            flat, per delivery                 Bulk_delivery_settings
+//   base            flat; INCLUDES the first N km      Bulk_delivery_settings
 //   weight          per kg of the load                 Bulk_delivery_settings
-//   distance        per km, vendor -> customer         Bulk_delivery_settings
+//   distance        per km BEYOND the included N       Bulk_delivery_settings
 //   service         flat, platform handling            delivery_pricing
 //   insurance       % of goods value                   delivery_pricing
 //   processing      % of goods value                   delivery_pricing
 //
 // The whole fee is then capped at Bulk_delivery_settings.max_fee. Every one of
 // those is admin-editable on the configuration page; none is a literal here.
+//
+// WHAT "FREE DELIVERY" WAIVES
+//
+// Above free_delivery_threshold, only the CARRIAGE goes: base, weight and
+// distance. Service, insurance and processing are platform costs that do not
+// disappear because an order is large, so they are still charged. The fee is
+// therefore reduced, not zero -- deliberately.
+//
+// pickup_only is the one case that charges nothing at all: the customer
+// collects, so nothing is carried, nothing is insured in transit and no rider
+// is paid.
 //
 // Weight AND distance both count, unlike the shop where only distance does. A
 // tonne is expensive to move three kilometres and a sack is cheap to move
@@ -47,8 +58,16 @@ require_once __DIR__ . '/google_routes.php';  // roadDistanceBetween()
  * values below reproduce them exactly, so an empty settings table behaves as
  * the code always did.
  */
+/** Trims 3.000 to "3" and 2.500 to "2.5" for a fee explanation. */
+function tidyBulkKm($n): string {
+    return rtrim(rtrim(number_format((float)$n, 3, '.', ''), '0'), '.');
+}
+
 const Bulk_FEE_DEFAULTS = [
     'base_fee'                => 5000.0,
+    // Kilometres the flat base fee already covers. Only the excess is charged
+    // per km — see calculateBulkDeliveryFee().
+    'base_included_km'        => 3.0,
     'fee_per_kg'              => 500.0,
     'rate_per_km'             => 900.0,
     'max_fee'                 => 120000.0,
@@ -183,17 +202,28 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
     $insuranceFee  = $goodsValue * ($insurancePercent / 100);
     $processingFee = $goodsValue * ($processingPercent / 100);
 
-    // The carriage half: what it costs to actually move the load. This is the
-    // part the free-delivery threshold waives; the service, insurance and
-    // processing fees are platform costs that do not disappear because an order
-    // is large, which mirrors how the shop's Rule 1 behaves.
-    $baseFee     = $s['base_fee'];
-    $weightFee   = $weightKg * $s['fee_per_kg'];
-    $distanceKm  = $distance['km'] ?? null;
-    $distanceFee = $distanceKm !== null ? $distanceKm * $s['rate_per_km'] : 0.0;
+    $baseFee    = $s['base_fee'];
+    $weightFee  = $weightKg * $s['fee_per_kg'];
+    $distanceKm = $distance['km'] ?? null;
+
+    // The base fee INCLUDES the first base_included_km kilometres; only the
+    // excess is charged per km.
+    //
+    // Before this, base_fee and the full distance were both charged, so the
+    // short leg of every journey was paid for twice — once inside the flat fee
+    // and again per kilometre. A 2 km delivery came to 5,000 + 1,800, which
+    // describes nothing real. Setting base_included_km to 0 restores the old
+    // behaviour.
+    $includedKm   = (float)$s['base_included_km'];
+    $chargeableKm = $distanceKm !== null ? max(0.0, $distanceKm - $includedKm) : 0.0;
+    $distanceFee  = $chargeableKm * $s['rate_per_km'];
 
     $isFree = false;
     if ($goodsValue >= $s['free_delivery_threshold']) {
+        // Only the CARRIAGE is waived — what it costs to move the load. The
+        // service, insurance and processing fees are platform costs that do
+        // not disappear because an order is large, so they are still charged.
+        // Mirrors how the shop's Rule 1 behaves.
         $baseFee = $weightFee = $distanceFee = 0.0;
         $isFree = true;
         $reason = 'Carriage is free above UGX ' . number_format($s['free_delivery_threshold'], 0)
@@ -203,9 +233,21 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
     } elseif (!empty($distance['estimated'])) {
         $reason = 'Distance measured from our depot: this vendor has not pinned their premises yet.';
     } else {
-        $reason = number_format($distanceKm, 1) . ' km by road from the vendor at UGX '
-                . number_format($s['rate_per_km'], 0) . '/km, plus UGX '
-                . number_format($s['fee_per_kg'], 0) . '/kg on ' . round($weightKg) . ' kg.';
+        // Says what was actually charged for distance, which is no longer the
+        // same as the distance travelled.
+        $reason = number_format($distanceKm, 1) . ' km by road from the vendor. ';
+        if ($includedKm > 0) {
+            $reason .= 'The first ' . tidyBulkKm($includedKm) . ' km '
+                     . ($chargeableKm > 0 ? 'are included in the base fee; ' : 'are included in the base fee, so there is no distance charge. ');
+            if ($chargeableKm > 0) {
+                $reason .= tidyBulkKm($chargeableKm) . ' km beyond that at UGX '
+                         . number_format($s['rate_per_km'], 0) . '/km. ';
+            }
+        } else {
+            $reason .= 'Charged at UGX ' . number_format($s['rate_per_km'], 0) . '/km. ';
+        }
+        $reason .= 'Plus UGX ' . number_format($s['fee_per_kg'], 0) . '/kg on '
+                 . round($weightKg) . ' kg.';
 
         // Said plainly when the figure did not come from Google. A straight-line
         // fallback under-charges, and a customer should not later be told the
@@ -240,6 +282,11 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
         'is_capped'      => $capped,
         'weight_kg'      => round($weightKg, 2),
         'distance'       => $distanceKm !== null ? round($distanceKm, 2) : null,
+        // What the base fee covered, and what was actually billed per km, so a
+        // customer reading "8 km" next to a 4,500 distance charge can see why
+        // it is not 8 x the rate.
+        'included_km'    => round($includedKm, 3),
+        'chargeable_km'  => round($chargeableKm, 3),
         'distance_estimated' => (bool)($distance['estimated'] ?? false),
         // 'google' | 'osrm' | 'haversine'. Kept in the stored breakdown so a
         // fee queried months later can be explained — including the fact that

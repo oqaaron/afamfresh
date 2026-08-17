@@ -117,8 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // min_order_value and min_weight_kg are order LIMITS rather than fee
         // inputs, but they live on the same row and are read by the same
         // loader (BulkDeliverySettings), so they are saved together.
-        $fields = ['base_fee', 'fee_per_kg', 'rate_per_km', 'max_fee', 'max_weight_kg',
-                   'free_delivery_threshold', 'min_order_value', 'min_weight_kg'];
+        $fields = ['base_fee', 'base_included_km', 'fee_per_kg', 'rate_per_km', 'max_fee',
+                   'max_weight_kg', 'free_delivery_threshold', 'min_order_value', 'min_weight_kg'];
         $values = [];
         $ok = true;
         foreach ($fields as $name) {
@@ -138,25 +138,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($existing) {
                     $dbh->prepare(
                         "UPDATE Bulk_delivery_settings SET
-                            base_fee = ?, fee_per_kg = ?, rate_per_km = ?, max_fee = ?,
-                            max_weight_kg = ?,
+                            base_fee = ?, base_included_km = ?, fee_per_kg = ?,
+                            rate_per_km = ?, max_fee = ?, max_weight_kg = ?,
                             free_delivery_threshold = ?, min_order_value = ?, min_weight_kg = ?
                           WHERE id = ?"
                     )->execute([
-                        $values['base_fee'], $values['fee_per_kg'], $values['rate_per_km'],
-                        $values['max_fee'], $values['max_weight_kg'],
+                        $values['base_fee'], $values['base_included_km'], $values['fee_per_kg'],
+                        $values['rate_per_km'], $values['max_fee'], $values['max_weight_kg'],
                         $values['free_delivery_threshold'], $values['min_order_value'],
                         $values['min_weight_kg'], $existing,
                     ]);
                 } else {
                     $dbh->prepare(
                         "INSERT INTO Bulk_delivery_settings
-                            (base_fee, fee_per_kg, rate_per_km, max_fee, max_weight_kg,
-                             free_delivery_threshold, min_order_value, min_weight_kg)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                            (base_fee, base_included_km, fee_per_kg, rate_per_km, max_fee,
+                             max_weight_kg, free_delivery_threshold, min_order_value, min_weight_kg)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     )->execute([
-                        $values['base_fee'], $values['fee_per_kg'], $values['rate_per_km'],
-                        $values['max_fee'], $values['max_weight_kg'],
+                        $values['base_fee'], $values['base_included_km'], $values['fee_per_kg'],
+                        $values['rate_per_km'], $values['max_fee'], $values['max_weight_kg'],
                         $values['free_delivery_threshold'], $values['min_order_value'],
                         $values['min_weight_kg'],
                     ]);
@@ -368,6 +368,12 @@ function field($arr, $key, $default = '') {
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Base fee (UGX)</label>
                             <input type="number" step="0.01" min="0" name="base_fee" value="<?= field($BulkSettings, 'base_fee', '5000') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Flat charge per delivery. Covers the first few km — see below.</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Km included in the base fee</label>
+                            <input type="number" step="0.001" min="0" name="base_included_km" value="<?= field($BulkSettings, 'base_included_km', '3') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Only distance <strong>beyond</strong> this is charged per km. 0 charges every km on top of the base fee.</p>
                         </div>
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Fee per kg (UGX)</label>
