@@ -105,7 +105,8 @@ function getDeliveryPricingConfig() {
     global $dbh;
     try {
         $row = $dbh->query(
-            "SELECT service_fee, insurance_percent, free_delivery_threshold,
+            "SELECT service_fee, insurance_percent, processing_percent, min_delivery_fee,
+                    free_delivery_threshold,
                     free_delivery_distance_threshold, medium_order_threshold,
                     medium_order_rate, low_order_rate, profit_percent_enabled,
                     profit_percent
@@ -124,6 +125,13 @@ function getDeliveryPricingConfig() {
     $cached = [
         'service_fee'                      => (float)$row['service_fee'],
         'insurance_percent'                => (float)$row['insurance_percent'],
+        // Null-coalesced against the column rather than assumed present: this
+        // function is also reached before the configurable-platform-fees
+        // migration has run on a given database.
+        'processing_percent'               => isset($row['processing_percent'])
+                                              ? (float)$row['processing_percent'] : 1.8,
+        'min_delivery_fee'                 => isset($row['min_delivery_fee'])
+                                              ? (float)$row['min_delivery_fee'] : 0.0,
         'free_delivery_threshold'          => (float)$row['free_delivery_threshold'],
         'free_delivery_distance_threshold' => (float)$row['free_delivery_distance_threshold'],
         'medium_order_threshold'           => (float)$row['medium_order_threshold'],
@@ -153,7 +161,12 @@ function calculateDeliveryFee($orderValue, $distance) {
 
     $serviceFee = $pricing['service_fee'] ?? (defined('SERVICE_FEE') ? SERVICE_FEE : 1000);
     $insurancePercent = $pricing['insurance_percent'] ?? (defined('INSURANCE_PERCENT') ? INSURANCE_PERCENT : 0.9);
-    $processingPercent = defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8;
+    // From the table now. PROCESSING_FEE_PERCENT was never defined anywhere in
+    // the codebase, so this always evaluated to the 1.8 literal — a percentage
+    // of every order's value, on both channels, that no admin could see or
+    // change while admin/dashboard.php reported the revenue it produced.
+    $processingPercent = $pricing['processing_percent']
+        ?? (defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8);
     $freeThreshold = $pricing['free_delivery_threshold'] ?? (defined('FREE_DELIVERY_THRESHOLD') ? FREE_DELIVERY_THRESHOLD : 100000);
     $partialThreshold = $pricing['medium_order_threshold'] ?? (defined('PARTIAL_FREE_THRESHOLD') ? PARTIAL_FREE_THRESHOLD : 50000);
     $partialDistanceLimit = $pricing['free_delivery_distance_threshold'] ?? (defined('PARTIAL_FREE_DISTANCE_LIMIT') ? PARTIAL_FREE_DISTANCE_LIMIT : 10);
@@ -161,7 +174,11 @@ function calculateDeliveryFee($orderValue, $distance) {
     $longRate = $pricing['medium_order_rate'] ?? (defined('LONG_DISTANCE_RATE') ? LONG_DISTANCE_RATE : 375);
     $profitEnabled = $pricing['profit_percent_enabled'] ?? (defined('PROFIT_PERCENT_ENABLED') ? PROFIT_PERCENT_ENABLED : false);
     $profitPercent = $pricing['profit_percent'] ?? (defined('PROFIT_PERCENT') ? PROFIT_PERCENT : 8);
-    $minFee = defined('MIN_DELIVERY_FEE') ? MIN_DELIVERY_FEE : 0;
+    // Same story as processing: MIN_DELIVERY_FEE was never defined, so this
+    // was always 0. Kept as a real setting rather than deleted, since a floor
+    // under the computed fee is a thing an operator may genuinely want.
+    $minFee = $pricing['min_delivery_fee']
+        ?? (defined('MIN_DELIVERY_FEE') ? MIN_DELIVERY_FEE : 0);
     
     $insuranceCharge = $orderValue * ($insurancePercent / 100);
     $processingFee = $orderValue * ($processingPercent / 100);

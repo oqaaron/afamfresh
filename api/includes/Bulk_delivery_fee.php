@@ -25,7 +25,10 @@
 //   distance        per km, vendor -> customer         Bulk_delivery_settings
 //   service         flat, platform handling            delivery_pricing
 //   insurance       % of goods value                   delivery_pricing
-//   processing      % of goods value                   PROCESSING_FEE_PERCENT
+//   processing      % of goods value                   delivery_pricing
+//
+// The whole fee is then capped at Bulk_delivery_settings.max_fee. Every one of
+// those is admin-editable on the configuration page; none is a literal here.
 //
 // Weight AND distance both count, unlike the shop where only distance does. A
 // tonne is expensive to move three kilometres and a sack is cheap to move
@@ -47,6 +50,8 @@ require_once __DIR__ . '/google_routes.php';  // roadDistanceBetween()
 const Bulk_FEE_DEFAULTS = [
     'base_fee'                => 5000.0,
     'fee_per_kg'              => 500.0,
+    'rate_per_km'             => 900.0,
+    'max_fee'                 => 120000.0,
     'free_delivery_threshold' => 500000.0,
     'max_weight_kg'           => 1000.0,
     'min_order_value'         => 250000.0,
@@ -56,9 +61,15 @@ const Bulk_FEE_DEFAULTS = [
 /**
  * Per-km rate for Bulk, and the cap.
  *
- * Not in Bulk_delivery_settings, which predates distance pricing. Defined
- * here rather than added to the table so this ships without a second migration;
- * move them into the table when an admin needs to tune them without a deploy.
+ * These are now COLUMNS on Bulk_delivery_settings (rate_per_km, max_fee) and
+ * are read through BulkDeliverySettings() like everything else — the move the
+ * previous version of this comment said to make "when an admin needs to tune
+ * them without a deploy".
+ *
+ * The constants survive only as the fallback values in Bulk_FEE_DEFAULTS
+ * above, and as the names any older code may still reference. Do not read them
+ * directly in new code: an admin changing the rate would have no effect on
+ * whatever did.
  */
 const Bulk_RATE_PER_KM = 900.0;
 const Bulk_MAX_FEE     = 120000.0;
@@ -144,7 +155,11 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
 
     $serviceFee        = (float)($pricing['service_fee'] ?? 1000);
     $insurancePercent  = (float)($pricing['insurance_percent'] ?? 0.9);
-    $processingPercent = defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8;
+    // From delivery_pricing, like the service fee and insurance rate beside
+    // it. PROCESSING_FEE_PERCENT was never defined anywhere, so this always
+    // evaluated to the 1.8 literal on both channels.
+    $processingPercent = (float)($pricing['processing_percent']
+        ?? (defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8));
 
     if ($pickupOnly) {
         // The customer collects. Nothing is carried, nothing is insured in
@@ -175,7 +190,7 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
     $baseFee     = $s['base_fee'];
     $weightFee   = $weightKg * $s['fee_per_kg'];
     $distanceKm  = $distance['km'] ?? null;
-    $distanceFee = $distanceKm !== null ? $distanceKm * Bulk_RATE_PER_KM : 0.0;
+    $distanceFee = $distanceKm !== null ? $distanceKm * $s['rate_per_km'] : 0.0;
 
     $isFree = false;
     if ($goodsValue >= $s['free_delivery_threshold']) {
@@ -189,7 +204,7 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
         $reason = 'Distance measured from our depot: this vendor has not pinned their premises yet.';
     } else {
         $reason = number_format($distanceKm, 1) . ' km by road from the vendor at UGX '
-                . number_format(Bulk_RATE_PER_KM, 0) . '/km, plus UGX '
+                . number_format($s['rate_per_km'], 0) . '/km, plus UGX '
                 . number_format($s['fee_per_kg'], 0) . '/kg on ' . round($weightKg) . ' kg.';
 
         // Said plainly when the figure did not come from Google. A straight-line
@@ -207,10 +222,10 @@ function calculateBulkDeliveryFee(PDO $dbh, float $goodsValue, float $weightKg,
     // whole thing, and the itemised parts below are what was charged before it,
     // so a capped quote is visibly capped rather than silently rescaled.
     $capped = false;
-    if ($totalFee > Bulk_MAX_FEE) {
-        $totalFee = Bulk_MAX_FEE;
+    if ($totalFee > $s['max_fee']) {
+        $totalFee = $s['max_fee'];
         $capped = true;
-        $reason .= ' Capped at UGX ' . number_format(Bulk_MAX_FEE, 0) . '.';
+        $reason .= ' Capped at UGX ' . number_format($s['max_fee'], 0) . '.';
     }
 
     return [

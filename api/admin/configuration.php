@@ -42,6 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fields = [
             'service_fee' => false,
             'insurance_percent' => true,
+            // Charged on BOTH shop and Bulk orders. It was referenced as
+            // PROCESSING_FEE_PERCENT, a constant defined nowhere, so it was
+            // permanently 1.8% and invisible here.
+            'processing_percent' => true,
+            'min_delivery_fee' => false,
             'free_delivery_threshold' => false,
             'free_delivery_distance_threshold' => false,
             'medium_order_threshold' => false,
@@ -69,13 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($existing) {
                     $dbh->prepare(
                         "UPDATE delivery_pricing SET
-                            service_fee = ?, insurance_percent = ?, free_delivery_threshold = ?,
+                            service_fee = ?, insurance_percent = ?, processing_percent = ?,
+                            min_delivery_fee = ?, free_delivery_threshold = ?,
                             free_delivery_distance_threshold = ?, medium_order_threshold = ?,
                             medium_order_rate = ?, low_order_rate = ?,
                             profit_percent_enabled = ?, profit_percent = ?
                           WHERE id = ?"
                     )->execute([
-                        $values['service_fee'], $values['insurance_percent'], $values['free_delivery_threshold'],
+                        $values['service_fee'], $values['insurance_percent'],
+                        $values['processing_percent'], $values['min_delivery_fee'],
+                        $values['free_delivery_threshold'],
                         $values['free_delivery_distance_threshold'], $values['medium_order_threshold'],
                         $values['medium_order_rate'], $values['low_order_rate'],
                         $profitEnabled, $values['profit_percent'],
@@ -84,12 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $dbh->prepare(
                         "INSERT INTO delivery_pricing
-                            (service_fee, insurance_percent, free_delivery_threshold,
+                            (service_fee, insurance_percent, processing_percent, min_delivery_fee,
+                             free_delivery_threshold,
                              free_delivery_distance_threshold, medium_order_threshold,
                              medium_order_rate, low_order_rate, profit_percent_enabled, profit_percent)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                     )->execute([
-                        $values['service_fee'], $values['insurance_percent'], $values['free_delivery_threshold'],
+                        $values['service_fee'], $values['insurance_percent'],
+                        $values['processing_percent'], $values['min_delivery_fee'],
+                        $values['free_delivery_threshold'],
                         $values['free_delivery_distance_threshold'], $values['medium_order_threshold'],
                         $values['medium_order_rate'], $values['low_order_rate'],
                         $profitEnabled, $values['profit_percent'],
@@ -106,8 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // min_order_value and min_weight_kg are order LIMITS rather than fee
         // inputs, but they live on the same row and are read by the same
         // loader (BulkDeliverySettings), so they are saved together.
-        $fields = ['base_fee', 'fee_per_kg', 'max_weight_kg', 'free_delivery_threshold',
-                   'min_order_value', 'min_weight_kg'];
+        $fields = ['base_fee', 'fee_per_kg', 'rate_per_km', 'max_fee', 'max_weight_kg',
+                   'free_delivery_threshold', 'min_order_value', 'min_weight_kg'];
         $values = [];
         $ok = true;
         foreach ($fields as $name) {
@@ -127,22 +138,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($existing) {
                     $dbh->prepare(
                         "UPDATE Bulk_delivery_settings SET
-                            base_fee = ?, fee_per_kg = ?, max_weight_kg = ?,
+                            base_fee = ?, fee_per_kg = ?, rate_per_km = ?, max_fee = ?,
+                            max_weight_kg = ?,
                             free_delivery_threshold = ?, min_order_value = ?, min_weight_kg = ?
                           WHERE id = ?"
                     )->execute([
-                        $values['base_fee'], $values['fee_per_kg'], $values['max_weight_kg'],
+                        $values['base_fee'], $values['fee_per_kg'], $values['rate_per_km'],
+                        $values['max_fee'], $values['max_weight_kg'],
                         $values['free_delivery_threshold'], $values['min_order_value'],
                         $values['min_weight_kg'], $existing,
                     ]);
                 } else {
                     $dbh->prepare(
                         "INSERT INTO Bulk_delivery_settings
-                            (base_fee, fee_per_kg, max_weight_kg, free_delivery_threshold,
-                             min_order_value, min_weight_kg)
-                         VALUES (?, ?, ?, ?, ?, ?)"
+                            (base_fee, fee_per_kg, rate_per_km, max_fee, max_weight_kg,
+                             free_delivery_threshold, min_order_value, min_weight_kg)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                     )->execute([
-                        $values['base_fee'], $values['fee_per_kg'], $values['max_weight_kg'],
+                        $values['base_fee'], $values['fee_per_kg'], $values['rate_per_km'],
+                        $values['max_fee'], $values['max_weight_kg'],
                         $values['free_delivery_threshold'], $values['min_order_value'],
                         $values['min_weight_kg'],
                     ]);
@@ -301,6 +315,16 @@ function field($arr, $key, $default = '') {
                             <input type="number" step="0.01" min="0" max="100" name="insurance_percent" value="<?= field($deliveryPricing, 'insurance_percent', '0.9') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                         <div>
+                            <label class="block text-gray-700 font-bold mb-2">Processing fee (% of order value)</label>
+                            <input type="number" step="0.01" min="0" max="100" name="processing_percent" value="<?= field($deliveryPricing, 'processing_percent', '1.8') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Charged on <strong>both</strong> shop and Bulk orders. Was fixed at 1.8% in code with no setting anywhere.</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Minimum delivery fee (UGX)</label>
+                            <input type="number" step="0.01" min="0" name="min_delivery_fee" value="<?= field($deliveryPricing, 'min_delivery_fee', '0') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Floor under the computed shop delivery fee. 0 means no floor.</p>
+                        </div>
+                        <div>
                             <label class="block text-gray-700 font-bold mb-2">Free delivery threshold (UGX)</label>
                             <input type="number" step="0.01" min="0" name="free_delivery_threshold" value="<?= field($deliveryPricing, 'free_delivery_threshold', '100000') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
@@ -348,6 +372,16 @@ function field($arr, $key, $default = '') {
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Fee per kg (UGX)</label>
                             <input type="number" step="0.01" min="0" name="fee_per_kg" value="<?= field($BulkSettings, 'fee_per_kg', '500') ?>" class="w-full px-4 py-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Rate per km (UGX)</label>
+                            <input type="number" step="0.01" min="0" name="rate_per_km" value="<?= field($BulkSettings, 'rate_per_km', '900') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Vendor to customer, by road. Was fixed at 900 in code.</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Maximum delivery fee (UGX)</label>
+                            <input type="number" step="0.01" min="0" name="max_fee" value="<?= field($BulkSettings, 'max_fee', '120000') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Caps the whole Bulk fee after every component. Was fixed at 120,000 in code.</p>
                         </div>
                         <div>
                             <label class="block text-gray-700 font-bold mb-2">Max weight per order (kg)</label>
