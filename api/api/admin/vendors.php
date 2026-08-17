@@ -77,5 +77,51 @@ if ($action === 'toggle_verification' && $_SERVER['REQUEST_METHOD'] === 'POST') 
     exit;
 }
 
+if ($action === 'set_business_type' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfHeader();
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = intval($input['id'] ?? 0);
+    $type = trim((string)($input['business_type'] ?? ''));
+
+    // The only way to change this, by design. api/vendor-profile.php used to
+    // accept it on a seller's own profile save, which let any verified vendor
+    // hand themselves 'wholesaler' — and with it the right to post a listing
+    // with no discount and no expiry — by choosing an option in a dropdown.
+    // Taking it away there left no way to change it at all; this is that way.
+    $allowed = ['farmer', 'market_vendor', 'wholesaler'];
+    if (!$id || !in_array($type, $allowed, true)) {
+        echo json_encode(['success' => false, 'error' => 'Pick a valid business type.']);
+        exit;
+    }
+
+    $prev = $dbh->prepare("SELECT business_type FROM vendors WHERE id = ?");
+    $prev->execute([$id]);
+    $before = $prev->fetchColumn();
+    if ($before === false) {
+        echo json_encode(['success' => false, 'error' => 'No such vendor.']);
+        exit;
+    }
+    if ($before === $type) {
+        echo json_encode(['success' => true, 'unchanged' => true]);
+        exit;
+    }
+
+    $dbh->prepare("UPDATE vendors SET business_type = ? WHERE id = ?")->execute([$type, $id]);
+
+    // Existing listings are deliberately left alone. Switching a seller to
+    // wholesaler does not retrospectively make their surplus listings
+    // wholesale ones, and switching away does not strip a wholesale listing of
+    // the price it is already selling at — either would rewrite live offers
+    // customers may be part-way through ordering. Only what they post NEXT
+    // follows the new type.
+    logAdminAction(
+        $dbh, 'vendor.business_type_changed', 'vendor', (string)$id,
+        "Business type $before -> $type"
+    );
+
+    echo json_encode(['success' => true, 'business_type' => $type]);
+    exit;
+}
+
 echo json_encode(['success' => false, 'error' => 'Invalid action']);
 ?>

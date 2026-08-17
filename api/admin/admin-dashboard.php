@@ -411,7 +411,14 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
                         <td class="px-4 py-3 text-sm">${v.id}</td>
                         <td class="px-4 py-3 text-sm font-medium">${escapeHtml(v.business_name)}</td>
                         <td class="px-4 py-3 text-sm">${escapeHtml(v.email)}</td>
-                        <td class="px-4 py-3 text-sm">${escapeHtml(v.business_type)}</td>
+                        <td class="px-4 py-3 text-sm">
+                            <select onchange="setVendorType(${v.id}, this.value, this)"
+                                    class="border border-gray-300 rounded px-2 py-1 text-xs">
+                                ${['farmer','market_vendor','wholesaler'].map(t => `
+                                    <option value="${t}"${v.business_type === t ? ' selected' : ''}>${t.replace('_',' ')}</option>
+                                `).join('')}
+                            </select>
+                        </td>
                         <td class="px-4 py-3 text-sm">${v.total_listings}</td>
                         <td class="px-4 py-3 text-sm">
                             <span class="px-2 py-1 rounded-full text-xs font-semibold ${v.is_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
@@ -427,6 +434,29 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
                 `).join('');
             } else {
                 tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-4 text-center text-red-600">Error: ${res.error || 'Failed to load'}</td></tr>`;
+            }
+        }
+
+        // The only place business_type can be changed. It decides which pricing
+        // rules a seller's listings are validated against, so it is not
+        // something an account may set about itself.
+        async function setVendorType(id, type, el) {
+            const previous = el.dataset.previous || el.querySelector('option[selected]')?.value || '';
+            if (!confirm(`Change this seller's business type to "${type.replace('_',' ')}"?\n\n`
+                       + `Existing listings are not changed — only what they post from now on.`)) {
+                if (previous) el.value = previous;
+                return;
+            }
+            const res = await apiRequest('../api/admin/vendors.php?action=set_business_type', {
+                method: 'POST',
+                body: JSON.stringify({ id, business_type: type })
+            });
+            if (res.success) {
+                el.dataset.previous = type;
+                showNotification(res.unchanged ? 'Already that type.' : 'Business type updated.');
+            } else {
+                if (previous) el.value = previous;
+                showNotification(res.error || 'Could not change the business type.', 'error');
             }
         }
 
