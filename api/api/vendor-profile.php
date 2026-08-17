@@ -32,7 +32,7 @@ if (($_GET['action'] ?? '') === 'update') {
     $phone        = $field('phone');
     $location     = $field('location');
     $marketStall  = $field('market_stall');
-    $businessType = $field('business_type');
+    // business_type is deliberately NOT read from the request — see below.
 
     // business_name and phone are the two the table declares NOT NULL, and
     // the two an admin needs in order to verify anything at all.
@@ -44,13 +44,23 @@ if (($_GET['action'] ?? '') === 'update') {
         exit;
     }
 
-    // Whitelisted rather than passed through: business_type is an ENUM, and
-    // MySQL answers an unknown value with a truncation warning and an empty
-    // string, not an error.
-    $allowedTypes = ['farmer', 'market_vendor', 'wholesaler'];
-    if (!in_array($businessType, $allowedTypes, true)) {
-        $businessType = 'market_vendor';
-    }
+    // business_type is no longer settable here, for two reasons.
+    //
+    // It decides which pricing rules a listing is validated against: a
+    // 'wholesaler' may post a flat price with no discount and no expiry, while
+    // everyone else is held to the surplus discount range. Accepting it from
+    // the account's own profile save let any verified vendor grant themselves
+    // that by picking an option in a dropdown.
+    //
+    // The old fallback was the more likely bug of the two. Any client that did
+    // not send the field — an older build, or a form that simply omits it —
+    // fell through to 'market_vendor', so a wholesaler saving their business
+    // details silently demoted themselves and their listings started being
+    // refused for having no discount.
+    //
+    // It is set once by provisionRoleRecord() from the granted role. Changing
+    // it afterwards is an admin action; note there is currently no admin UI
+    // for it, so a seller who genuinely changes type needs a direct UPDATE.
 
     // Where the vendor's premises are, for pricing a Bulk delivery.
     //
@@ -89,13 +99,13 @@ if (($_GET['action'] ?? '') === 'update') {
         // alone rather than wiping it.
         $upd = $dbh->prepare(
             "UPDATE vendors
-                SET business_name = ?, business_type = ?, phone = ?,
+                SET business_name = ?, phone = ?,
                     location = ?, market_stall = ?,
                     lat = COALESCE(?, lat), lng = COALESCE(?, lng)
               WHERE user_id = ?"
         );
         $upd->execute([
-            $businessName, $businessType, $phone,
+            $businessName, $phone,
             $location !== '' ? $location : null,
             $marketStall !== '' ? $marketStall : null,
             $lat, $lng,

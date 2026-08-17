@@ -321,8 +321,17 @@ function getUserRoleRequests($userId) {
 function provisionRoleRecord($userId, $role) {
     global $dbh;
 
-    if ($role !== 'rider' && $role !== 'vendor') {
-        // 'user' needs nothing, and wholesaler has no table of its own yet.
+    // A wholesaler is a vendors row with business_type = 'wholesaler', not a
+    // table of its own: vendors.business_type already had the value, and
+    // Bulk_listings.vendor_id is a NOT NULL FK to vendors(id). Giving
+    // wholesalers their own table would mean a polymorphic seller column and
+    // rewriting every query that joins vendors, to gain nothing — this way
+    // listing creation, the approval chain, creditVendorEarnings(), commission,
+    // payout requests, rider dispatch and vendor notifications all work
+    // unchanged. What differs is the app they use and the pricing rules their
+    // listings are validated against, both of which key off business_type.
+    if ($role !== 'rider' && $role !== 'vendor' && $role !== 'wholesaler') {
+        // 'user' needs nothing.
         return true;
     }
 
@@ -363,11 +372,17 @@ function provisionRoleRecord($userId, $role) {
             return true;
         }
 
+        // Left alone if a row already exists, including its business_type: an
+        // account that is somehow granted both roles keeps whichever it was
+        // provisioned as rather than being silently reclassified. canRequestRole()
+        // permits only one extra role, so this should not arise in practice.
         $exists = $dbh->prepare("SELECT id FROM vendors WHERE user_id = ?");
         $exists->execute([$userId]);
         if ($exists->fetchColumn()) {
             return true;
         }
+
+        $businessType = ($role === 'wholesaler') ? 'wholesaler' : 'market_vendor';
         // is_verified starts at 0, and that is the whole point of this row.
         //
         // It used to be created with is_verified = 1, which collapsed a
@@ -383,9 +398,9 @@ function provisionRoleRecord($userId, $role) {
         // all along with nothing behind it.
         $ins = $dbh->prepare(
             "INSERT INTO vendors (user_id, business_name, business_type, phone, email, location, is_verified, verification_date)
-             VALUES (?, ?, 'market_vendor', ?, ?, ?, 0, NULL)"
+             VALUES (?, ?, ?, ?, ?, ?, 0, NULL)"
         );
-        $ins->execute([$userId, $name, $phone, $user['email'], $area]);
+        $ins->execute([$userId, $name, $businessType, $phone, $user['email'], $area]);
         return true;
     } catch (PDOException $e) {
         error_log("provisionRoleRecord($userId, $role) failed: " . $e->getMessage());

@@ -52,18 +52,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $productName = $listing['product_name'] ?: 'your Bulk listing';
 
-        // ---- Adjustments, applied whichever decision follows ----
-        $discount = $_POST['discount_percent'] !== '' ? (float)$_POST['discount_percent'] : (float)$listing['discount_percent'];
-        $quantity = $_POST['Bulk_quantity'] !== '' ? (int)$_POST['Bulk_quantity'] : (int)$listing['Bulk_quantity'];
-        $expiry   = trim($_POST['expiry_date'] ?? '') ?: $listing['expiry_date'];
+        // A wholesale listing is priced outright, so none of the discount
+        // machinery below applies to it: it carries discount 0 and often no
+        // original_price at all. Left unbranched, the range check would refuse
+        // every wholesale listing an admin tried to act on, and if it somehow
+        // passed, recomputing from a 0 discount against a NULL original_price
+        // would set discounted_price to 0 — the listing would go to sale free.
+        $isWholesale = ($listing['listing_type'] === 'wholesale');
 
-        if (!isValidSurplusDiscount($discount)) {
+        // ---- Adjustments, applied whichever decision follows ----
+        // ?? '' because the discount input is not rendered at all for a
+        // wholesale row — reading it unguarded warns on PHP 8 and reads as 0.
+        $discount = ($_POST['discount_percent'] ?? '') !== '' ? (float)$_POST['discount_percent'] : (float)$listing['discount_percent'];
+        $quantity = ($_POST['Bulk_quantity'] ?? '') !== '' ? (int)$_POST['Bulk_quantity'] : (int)$listing['Bulk_quantity'];
+        $expiry   = trim($_POST['expiry_date'] ?? '') ?: $listing['expiry_date'];
+        // Editable directly on a wholesale listing, since there is no discount
+        // to derive it from.
+        $wholesalePrice = ($isWholesale && trim($_POST['wholesale_price'] ?? '') !== '')
+            ? (float)$_POST['wholesale_price']
+            : (float)$listing['discounted_price'];
+
+        if ($isWholesale && $wholesalePrice <= 0) {
+            $flashError = 'A wholesale listing needs a price above zero.';
+        } elseif (!$isWholesale && !isValidSurplusDiscount($discount)) {
             $flashError = surplusDiscountRangeMessage() . ' — the same rule the vendor app enforces.';
         } else {
             // The server has always computed discounted_price rather than
             // trusting a submitted one; an adjustment has to recompute it or
             // the price shown to customers stops matching the discount.
-            $discountedPrice = (float)$listing['original_price'] * (1 - $discount / 100);
+            // Wholesale has no discount to recompute from, so the price stands
+            // as entered.
+            if ($isWholesale) {
+                $discountedPrice = $wholesalePrice;
+                $discount = (float)$listing['original_price'] > 0
+                    ? round((1 - ($wholesalePrice / (float)$listing['original_price'])) * 100, 2)
+                    : 0.00;
+            } else {
+                $discountedPrice = (float)$listing['original_price'] * (1 - $discount / 100);
+            }
 
             // Shift remaining by the same delta rather than overwriting it:
             // some of the original quantity may already be sold, and setting
@@ -235,19 +261,37 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
                         <span class="px-2 py-1 rounded-full text-xs font-semibold <?= $badge ?>"><?= htmlspecialchars($l['status']) ?></span>
                     </div>
 
+                    <?php $rowIsWholesale = ($l['listing_type'] === 'wholesale'); ?>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
                         <div>
-                            <!-- Bounds come from the same constants the server validates against
-                                 (includes/bulk_listing_rules.php). Hardcoding them here once meant
-                                 the form refused a correction the server would have accepted, with
-                                 no error shown because the browser blocked the submit. -->
-                            <label class="block text-xs font-medium text-gray-600">Discount % (<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MIN, 2, '.', ''), '0'), '.') ?>–<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MAX, 2, '.', ''), '0'), '.') ?>)</label>
-                            <input type="number" step="0.01" min="<?= SURPLUS_DISCOUNT_MIN ?>" max="<?= SURPLUS_DISCOUNT_MAX ?>" name="discount_percent"
-                                   value="<?= htmlspecialchars($l['discount_percent']) ?>"
-                                   class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <div class="text-xs text-gray-500 mt-1">
-                                Customer pays UGX <?= number_format((float)$l['discounted_price']) ?> now
-                            </div>
+                            <?php if ($rowIsWholesale): ?>
+                                <!-- Wholesale is priced outright. Offering the discount field here
+                                     would invite an admin to set a discount the server has no
+                                     original_price to apply it to. -->
+                                <label class="block text-xs font-medium text-gray-600">Wholesale price (UGX)</label>
+                                <input type="number" step="0.01" min="0" name="wholesale_price"
+                                       value="<?= htmlspecialchars($l['discounted_price']) ?>"
+                                       class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <div class="text-xs text-gray-500 mt-1">
+                                    <?php if ((float)$l['original_price'] > 0): ?>
+                                        vs UGX <?= number_format((float)$l['original_price']) ?> retail
+                                    <?php else: ?>
+                                        no retail reference given
+                                    <?php endif; ?>
+                                </div>
+                            <?php else: ?>
+                                <!-- Bounds come from the same constants the server validates against
+                                     (includes/bulk_listing_rules.php). Hardcoding them here once meant
+                                     the form refused a correction the server would have accepted, with
+                                     no error shown because the browser blocked the submit. -->
+                                <label class="block text-xs font-medium text-gray-600">Discount % (<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MIN, 2, '.', ''), '0'), '.') ?>–<?= rtrim(rtrim(number_format(SURPLUS_DISCOUNT_MAX, 2, '.', ''), '0'), '.') ?>)</label>
+                                <input type="number" step="0.01" min="<?= SURPLUS_DISCOUNT_MIN ?>" max="<?= SURPLUS_DISCOUNT_MAX ?>" name="discount_percent"
+                                       value="<?= htmlspecialchars($l['discount_percent']) ?>"
+                                       class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Customer pays UGX <?= number_format((float)$l['discounted_price']) ?> now
+                                </div>
+                            <?php endif; ?>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-600">Quantity</label>
