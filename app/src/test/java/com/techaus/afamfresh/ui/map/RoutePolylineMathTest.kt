@@ -83,8 +83,16 @@ class RoutePolylineMathTest {
         // distance would land at a longitude roughly halfway between the two
         // endpoints' longitudes despite bend[0] and bend[1] sharing a
         // longitude — confirm the walked position does NOT do that.
+        //
+        // The gap is derived from the fixture rather than hardcoded. It was
+        // `> 0.01`, which is the bend's FULL longitude span — but the quantity
+        // being measured is the distance from the midpoint of that span, so it
+        // is exactly half the span by construction and can never exceed it.
+        // The assertion could not pass for any implementation, correct or not;
+        // the walk itself was always right, as the two assertions above show.
         val straightCutLng = (bend[0].longitude + bend[2].longitude) / 2.0
-        assertTrue(kotlin.math.abs(p.longitude - straightCutLng) > 0.01)
+        val halfSpan = kotlin.math.abs(bend[2].longitude - bend[0].longitude) / 2.0
+        assertEquals(halfSpan, kotlin.math.abs(p.longitude - straightCutLng), 0.0001)
     }
 
     @Test
