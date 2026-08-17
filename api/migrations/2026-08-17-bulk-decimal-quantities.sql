@@ -27,9 +27,9 @@
 -- would write the corrected decimal straight back into an INT and truncate it
 -- a second time.
 --
--- Run against Cloud SQL:
---   mysql -h 127.0.0.1 -P 9470 -u aokwi -p --get-server-public-key kitchen \
---     < migrations/2026-08-17-bulk-decimal-quantities.sql
+-- DO NOT APPLY THIS BY HAND. scripts/run-migrations.php applies every pending
+-- file on the next container start and records it in the schema_migrations
+-- ledger. To apply: commit, push, deploy. See DEPLOY.md.
 --
 -- NOT idempotent in its repair step, but safely re-runnable: the widening is a
 -- no-op the second time, and the UPDATE matches nothing once the rows agree.

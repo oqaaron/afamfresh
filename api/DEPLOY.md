@@ -104,7 +104,32 @@ gcloud storage rm -r gs://afamfresh-sql-import
 Do not stage the dump in the public uploads bucket — it would publish the
 whole schema. Use a throwaway private one, as above.
 
-To query the instance afterwards, run the proxy and pass the flag that lets
+## Migrations apply themselves — do not run them by hand
+
+`scripts/run-migrations.php` runs from `start.sh` on **every container start**,
+before Apache serves traffic. It applies every file in `migrations/` that is
+not yet listed in the `schema_migrations` ledger, then records it. A new
+migration needs nothing but to exist in that directory and be committed.
+
+**Hand-applying a migration breaks the next deploy.** The ledger does not learn
+about it, so the runner retries the file, the unguarded `ADD COLUMN` fails with
+`SQLSTATE[42S21] Duplicate column name`, the script exits 2, and the container
+never starts — the deploy fails with the previous release still live. That
+happened on 2026-08-17 with the two wholesale migrations.
+
+If it has already happened, record the files as applied and redeploy:
+
+```sql
+INSERT IGNORE INTO schema_migrations (filename) VALUES ('YYYY-MM-DD-name.sql');
+```
+
+Only do that when the file really did apply in full — check the columns first.
+
+The section below is for **querying** the database, not migrating it.
+
+---
+
+To query the instance, run the proxy and pass the flag that lets
 `caching_sha2_password` do its key exchange:
 
 ```bash

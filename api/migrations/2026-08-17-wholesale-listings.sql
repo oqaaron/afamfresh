@@ -22,9 +22,15 @@
 --     renaming it to something wholesale-flavoured would break three call
 --     sites to gain nothing.
 --
--- Run against Cloud SQL:
---   mysql -h 127.0.0.1 -P 9470 -u aokwi -p --get-server-public-key kitchen \
---     < migrations/2026-08-17-wholesale-listings.sql
+-- DO NOT APPLY THIS BY HAND. scripts/run-migrations.php applies every pending
+-- file on the next container start and records it in the schema_migrations
+-- ledger. To apply: commit, push, deploy.
+--
+-- Hand-applying leaves the ledger unaware, so the runner retries the file,
+-- fails on `Duplicate column name`, exits 2, and the container never starts --
+-- the deploy dies with the previous release still live. This header used to
+-- carry a manual mysql command, which is exactly what caused that on
+-- 2026-08-17. See DEPLOY.md.
 --
 -- NOT idempotent: a second run stops at
 --   ERROR 1060 (42S21): Duplicate column name 'min_order_quantity'
