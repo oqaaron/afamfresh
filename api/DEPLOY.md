@@ -288,24 +288,31 @@ red one, because nobody looks twice.
 
 ## 7. Point the apps at it
 
-Cloud Run gives the service its own HTTPS URL immediately:
+The live backend is the Render service `afamfresh-backend` (see
+`render.yaml`), which gets its own HTTPS URL:
 
-```bash
-gcloud run services describe afamfresh-backend \
-  --region=europe-west3 --format='value(status.url)'
-# https://afamfresh-backend-XXXXXX-ew.a.run.app
+```
+https://afamfresh-backend.onrender.com
 ```
 
-Put it in `local.properties` (not committed):
+Apache's DocumentRoot is this `api/` directory, so the endpoints under
+`api/api/` are served at `/api/` — the app's base URL therefore ends in
+`/api/`, with no `/afamfresh/` segment:
 
-```properties
-base.url.release=https://afamfresh-backend-XXXXXX-ew.a.run.app/api/
+```
+https://afamfresh-backend.onrender.com/api/products.php?action=list
 ```
 
-This sidesteps DNS entirely. `afam.techaus.online` currently has **no DNS
-record** — it does not resolve — so any release build pointing there reaches
-nothing. Use the Cloud Run URL until you decide to map the domain; when you
-do, `gcloud run domain-mappings create` handles the certificate.
+That is already the **default** for `base.url.release` in
+`app/build.gradle.kts`, so a release build needs no `local.properties` entry.
+Only override `base.url.release` if you are pointing at something else.
+
+This sidesteps DNS entirely. The default used to be `afam.techaus.online`,
+which has **no DNS record** — it does not resolve — so every release build
+reached nothing at all. Do not reintroduce it. If you later map a custom
+domain, set `base.url.release`, `PESAPAL_PUBLIC_BASE_URL` and the
+`.well-known/assetlinks.json` host together; they must agree or App Links
+stop verifying and Pesapal's IPN stops arriving.
 
 Release builds block cleartext HTTP, so the URL must be `https://`. It will
 be.

@@ -78,14 +78,23 @@ define('PESAPAL_LIVE_IPN_ID', env('PESAPAL_IPN_ID', ''));
 
 // Callback URLs.
 //
-// ⚠️ afam.techaus.online currently has NO DNS A/AAAA record, so Pesapal cannot
-// reach either of these. Until the domain resolves (or these point at the Cloud
-// Run URL), IPN will never arrive and payments must be confirmed by polling
-// GetTransactionStatus instead — which api/payment.php?action=verify does.
+// This must be a host Pesapal's servers can reach from the public internet.
+// The default is the live Render service (render.yaml, afamfresh-backend).
+// Apache's DocumentRoot is the repo's api/ directory, so api/pesapal-ipn.php
+// and api/pesapal-callback.php are served at the paths built below.
 //
-// Override with PESAPAL_PUBLIC_BASE_URL in env.yaml, e.g.
-//   PESAPAL_PUBLIC_BASE_URL: https://afamfresh-backend-xxxxxx-ew.a.run.app
-define('PESAPAL_PUBLIC_BASE_URL', rtrim(env('PESAPAL_PUBLIC_BASE_URL', 'https://afam.techaus.online'), '/'));
+// The previous default was afam.techaus.online, which has no DNS A/AAAA
+// record — Pesapal could not reach either URL, so the IPN never arrived and
+// payment confirmation fell back entirely to the client polling
+// api/payment.php?action=verify. That polling path still exists and is still
+// the safety net, but the IPN is now deliverable.
+//
+// ⚠️ Registering the IPN URL with Pesapal is a SEPARATE step: the URL must be
+// registered with them to obtain PESAPAL_IPN_ID. Changing this base without
+// re-registering leaves the old, unreachable URL on file at their end.
+//
+// Override with PESAPAL_PUBLIC_BASE_URL in env.yaml / Render env vars.
+define('PESAPAL_PUBLIC_BASE_URL', rtrim(env('PESAPAL_PUBLIC_BASE_URL', 'https://afamfresh-backend.onrender.com'), '/'));
 define('PESAPAL_CALLBACK_URL', PESAPAL_PUBLIC_BASE_URL . '/pesapal-callback.php');
 define('PESAPAL_IPN_NOTIFICATION_URL', PESAPAL_PUBLIC_BASE_URL . '/pesapal-ipn.php');
 
@@ -207,6 +216,16 @@ define('BREVO_API_KEY', env_required('BREVO_API_KEY', 'transactional email'));
 // Overridable by environment so a sender change does not need a code deploy.
 define('BREVO_FROM_EMAIL', env('BREVO_FROM_EMAIL', 'noreply@techaus.online'));
 define('BREVO_FROM_NAME', env('BREVO_FROM_NAME', 'AfamFresh'));
+
+// The address customers are told to write to, shown in every email footer.
+// Distinct from BREVO_FROM_EMAIL, which is a no-reply sender.
+//
+// ⚠️ This must be a mailbox that actually RECEIVES. The previous value was
+// support@afam.techaus.online — a domain with no DNS at all, so every customer
+// who replied to a support prompt got a bounce. techaus.online is verified for
+// SENDING on Brevo, which does not by itself mean support@ is a live inbox.
+// Confirm it, or override SUPPORT_EMAIL with one that is.
+define('SUPPORT_EMAIL', env('SUPPORT_EMAIL', 'support@techaus.online'));
 
 // Fallback SMTP (if Brevo fails)
 define('SMTP_HOST', 'smtp.gmail.com');

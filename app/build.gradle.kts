@@ -207,15 +207,21 @@ android {
             // HTTPS only. The network security config forbids cleartext in
             // release, so an http:// URL here would fail at runtime rather
             // than silently sending customer data in the clear.
-            // ⚠️ UNVERIFIED. If production mirrors this dev machine's layout,
-            // the path needs the /afamfresh/ segment as well — check with
-            // `curl -s -o /dev/null -w "%{http_code}" https://afam.techaus.online/api/products.php?action=list`
-            // before shipping a release build.
-            val releaseBaseUrl = secret("base.url.release", "https://afam.techaus.online/api/")
+            //
+            // This is the live Render service (see render.yaml, service
+            // afamfresh-backend). Apache's DocumentRoot is the repo's api/
+            // directory, so the endpoints under api/api/ are served at /api/ —
+            // hence the /api/ suffix and no /afamfresh/ segment. Verified with
+            // `curl -s -o /dev/null -w "%{http_code}" https://afamfresh-backend.onrender.com/api/products.php?action=list`
+            //
+            // The previous default was afam.techaus.online, a domain with no
+            // DNS record that was never the backend — every release build
+            // pointed at a host that could not be reached at all.
+            val releaseBaseUrl = secret("base.url.release", "https://afamfresh-backend.onrender.com/api/")
             buildConfigField("String", "BASE_URL", "\"$releaseBaseUrl\"")
 
-            // Was https://afam.techaus.online:8080/ — a guessed self-hosted
-            // Nominatim. No such instance was found running anywhere, so this
+            // Was a guessed self-hosted Nominatim on port 8080 of a domain
+            // that never resolved. No such instance was found running, so this
             // defaults to the public service. If you do stand one up, set
             // nominatim.url.release in local.properties.
             buildConfigField("String", "NOMINATIM_BASE_URL", "\"${secret("nominatim.url.release", "https://nominatim.openstreetmap.org/")}\"")
@@ -228,7 +234,7 @@ android {
             // base.url.release in local.properties differs from what's
             // actually live, assetlinks.json (api/.well-known/assetlinks.json)
             // needs to be hosted on THAT host, not this build's guess.
-            manifestPlaceholders["appLinkHost"] = runCatching { URI(releaseBaseUrl).host }.getOrNull() ?: "afam.techaus.online"
+            manifestPlaceholders["appLinkHost"] = runCatching { URI(releaseBaseUrl).host }.getOrNull() ?: "afamfresh-backend.onrender.com"
 
             isMinifyEnabled = true
             isShrinkResources = true

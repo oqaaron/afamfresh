@@ -14,6 +14,7 @@ class BrevoEmailService {
     private $apiKey;
     private $fromEmail;
     private $fromName;
+    private $supportEmail;
     private $apiUrl = 'https://api.brevo.com/v3/smtp/email';
     private $isConfigured = false;
     private $lastError = null;
@@ -26,7 +27,14 @@ class BrevoEmailService {
         $this->apiKey = getenv('BREVO_API_KEY');
         $this->fromEmail = getenv('BREVO_FROM_EMAIL');
         $this->fromName = getenv('BREVO_FROM_NAME') ?: 'AfamFresh';
-        
+
+        // The reply-to address shown in the footer. Resolved the same way as
+        // the rest: env first, then the constant, then a literal — this class
+        // never require()s config.php, so referencing SUPPORT_EMAIL bare would
+        // be a fatal undefined-constant error on PHP 8 anywhere config has not
+        // already been loaded (cron/process_notifications.php, for one).
+        $this->supportEmail = getenv('SUPPORT_EMAIL') ?: 'support@techaus.online';
+
         // If not found via getenv, check constants
         if (empty($this->apiKey) && defined('BREVO_API_KEY')) {
             $this->apiKey = BREVO_API_KEY;
@@ -36,6 +44,9 @@ class BrevoEmailService {
         }
         if (empty($this->fromName) && defined('BREVO_FROM_NAME')) {
             $this->fromName = BREVO_FROM_NAME;
+        }
+        if (!getenv('SUPPORT_EMAIL') && defined('SUPPORT_EMAIL')) {
+            $this->supportEmail = SUPPORT_EMAIL;
         }
         
         // Check if configured properly
@@ -164,7 +175,7 @@ class BrevoEmailService {
                 </div>
                 <div class="email-footer">
                     <p>&copy; ' . date('Y') . ' AfamFresh. All rights reserved.</p>
-                    <p>Questions? <a href="mailto:support@afam.techaus.online">support@afam.techaus.online</a></p>
+                    <p>Questions? <a href="mailto:' . htmlspecialchars($this->supportEmail) . '">' . htmlspecialchars($this->supportEmail) . '</a></p>
                 </div>
             </div>
         </body>
@@ -204,9 +215,13 @@ class BrevoEmailService {
             </ul>
             <p>Start shopping today and experience the freshest produce delivered right to your home.</p>
             <hr style="margin: 20px 0;">
-            <p style="text-align: center;">
-                <a href="https://afam.techaus.online/products.php" style="display: inline-block; background: #1a6b2f; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 25px;">Start Shopping →</a>
-            </p>';
+            <!-- No call-to-action link: AfamFresh has no web storefront, only
+                 the Android app. This button used to point at
+                 afam.techaus.online/products.php — a page that does not exist,
+                 on a domain with no DNS record. A dead button in a welcome
+                 email is worse than no button, so customers are pointed back
+                 to the app they already have. -->
+            <p style="text-align: center; color: #1a6b2f;"><strong>Open the AfamFresh app to browse today\'s produce.</strong></p>';
         
         return $this->send($to, 'Welcome to AfamFresh!', $content, $name);
     }
@@ -257,7 +272,10 @@ class BrevoEmailService {
             </table>
             
             <p>We\'ll notify you when your order is out for delivery.</p>
-            <p><a href="https://afam.techaus.online/user-dashboard.php" style="color: #1a6b2f;">Track your order →</a></p>';
+            <!-- Was a link to afam.techaus.online/user-dashboard.php: no such
+                 page, no such DNS record. Live tracking is an app screen
+                 (OrderTrackingScreen), so send them there. -->
+            <p>Track your order any time under <strong>My Orders</strong> in the AfamFresh app.</p>';
         
         return $this->send($to, "Order #$orderId Confirmed - AfamFresh", $content, $customerName);
     }

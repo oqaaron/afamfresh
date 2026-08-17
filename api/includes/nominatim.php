@@ -21,7 +21,7 @@ function httpGet($url) {
     $options = [
         'http' => [
             'method' => 'GET',
-            'header' => "User-Agent: AfamFresh/1.0 (https://afam.techaus.online)\r\n",
+            'header' => "User-Agent: AfamFresh/1.0 (https://afamfresh-backend.onrender.com)\r\n",
             'timeout' => 10
         ],
         'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
@@ -212,7 +212,7 @@ function reverseGeocode($lat, $lng) {
     $options = [
         'http' => [
             'method' => 'GET',
-            'header' => "User-Agent: AfamFresh/1.0 (https://afam.techaus.online)\r\n",
+            'header' => "User-Agent: AfamFresh/1.0 (https://afamfresh-backend.onrender.com)\r\n",
             'timeout' => 10
         ],
         'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
@@ -268,7 +268,7 @@ function reverseGeocodeDetailed($lat, $lng) {
     $options = [
         'http' => [
             'method' => 'GET',
-            'header' => "User-Agent: AfamFresh/1.0 (https://afam.techaus.online)\r\n",
+            'header' => "User-Agent: AfamFresh/1.0 (https://afamfresh-backend.onrender.com)\r\n",
             'timeout' => 10
         ],
         'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
