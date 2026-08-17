@@ -33,6 +33,13 @@
 --
 -- NOT idempotent in its repair step, but safely re-runnable: the widening is a
 -- no-op the second time, and the UPDATE matches nothing once the rows agree.
+--
+-- Column aliases below avoid `stored`, which is RESERVED in MySQL 8.0+ (it
+-- appears in generated-column syntax, `GENERATED ALWAYS AS (...) STORED`).
+-- MariaDB accepts it, so a local MariaDB rehearsal passes and production
+-- fails with ERROR 1064 on the first reporting query -- after both ALTERs have
+-- already run. Rehearse on the engine you deploy to, or at least keep aliases
+-- boring.
 -- =============================================================
 
 -- -------------------------------------------------------------
@@ -51,7 +58,7 @@ ALTER TABLE `Bulk_orders`
 --    near 0.000 means it was already whole and nothing was lost.
 -- -------------------------------------------------------------
 SELECT so.id,
-       so.quantity                                        AS stored,
+       so.quantity                                        AS stored_qty,
        ROUND(so.total_price / sl.discounted_price, 3)     AS derived,
        ROUND(ABS(so.quantity - (so.total_price / sl.discounted_price)), 3) AS drift
   FROM `Bulk_orders` so
@@ -80,7 +87,7 @@ UPDATE `Bulk_orders` so
 -- 4. After: expect zero rows. Anything still listed was skipped by the
 --    < 1.000 guard and needs a person to look at it.
 -- -------------------------------------------------------------
-SELECT so.id, so.quantity AS stored,
+SELECT so.id, so.quantity AS stored_qty,
        ROUND(so.total_price / sl.discounted_price, 3) AS derived,
        'SKIPPED — drift of a whole unit or more, check whether the listing was repriced' AS note
   FROM `Bulk_orders` so
@@ -100,14 +107,14 @@ SELECT so.id, so.quantity AS stored,
 -- -------------------------------------------------------------
 SELECT sl.id,
        sl.Bulk_quantity,
-       sl.remaining_quantity                              AS stored,
+       sl.remaining_quantity                              AS stored_qty,
        sl.Bulk_quantity - COALESCE(SUM(
            CASE WHEN so.status NOT IN ('cancelled','refunded')
                 THEN so.quantity ELSE 0 END), 0)          AS expected_if_no_restocks
   FROM `Bulk_listings` sl
   LEFT JOIN `Bulk_orders` so ON so.listing_id = sl.id
  GROUP BY sl.id, sl.Bulk_quantity, sl.remaining_quantity
-HAVING ABS(stored - expected_if_no_restocks) > 0.001;
+HAVING ABS(stored_qty - expected_if_no_restocks) > 0.001;
 
 -- -------------------------------------------------------------
 -- 6. Column types, for the record.
