@@ -264,9 +264,14 @@ interface ApiService {
      * with [initiatePayment] passing `order_type = "Bulk"`; an order left
      * unpaid for 30 minutes is cancelled server-side and its stock returned.
      *
-     * The server rejects orders under UGX 250,000, under 20 kg on weight-based
-     * listings, and over 1000 kg. Those come back as {"error": "..."} with a
-     * message written for the customer, so show it rather than replacing it.
+     * The server rejects an order that breaks the Bulk limits — a minimum
+     * value and weight on surplus listings, the seller's own minimum on a
+     * wholesale one, and a ceiling on total weight. The numbers are
+     * admin-editable (Bulk_delivery_settings), so do not restate them in the
+     * app; call Bulk-quote.php, which reports the same verdict before the
+     * customer commits. Refusals come back as {"error": "...", "error_code":
+     * "..."} with a message written for the customer, so show it rather than
+     * replacing it.
      */
     @POST("Bulk-orders.php")
     @Headers("Content-Type: application/json")

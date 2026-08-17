@@ -264,64 +264,20 @@ try {
         // deploy. Defaults reproduce the values that used to be hardcoded.
         $limits = BulkDeliverySettings($dbh);
 
-        // Whether the SELLER stated a minimum, or the platform's floors apply.
-        // Read from the listing, not from the seller's current business_type:
-        // an admin can change a seller's type, and the listing is the honest
-        // record of the terms it was posted under.
-        $isWholesaleListing = ($listing['listing_type'] === 'wholesale');
-
-        /** Trims 20.000 to "20" and 2.500 to "2.5" for a message. */
-        $tidyQty = function ($n) {
-            return rtrim(rtrim(number_format((float)$n, 3, '.', ''), '0'), '.');
-        };
-
-        // Applies to every order, wholesale or surplus: this is a limit on
-        // what can physically be carried, not a commercial rule.
-        if ($totalWeightKg > $limits['max_weight_kg']) {
+        // The SAME function api/api/Bulk-quote.php calls to warn the customer
+        // before they commit. One implementation on purpose: a quote that
+        // accepted what the order then refused is precisely the failure this
+        // replaced, and two copies of the rule would drift straight back into
+        // it. See includes/bulk_listing_rules.php.
+        require_once __DIR__ . '/../includes/bulk_listing_rules.php';
+        $violation = bulkOrderViolation($listing, $quantity, $limits);
+        if ($violation !== null) {
             $dbh->rollBack();
-            echo json_encode(['error' =>
-                'Maximum order weight is ' . $tidyQty($limits['max_weight_kg'])
-                . 'kg. Your order weighs ' . number_format($totalWeightKg, 2) . 'kg']);
+            echo json_encode(['error' => $violation['error'], 'error_code' => $violation['code']]);
             exit;
         }
 
         $total_price = $listing['discounted_price'] * $quantity;
-
-        if ($isWholesaleListing) {
-            // The wholesaler's own minimum is the authority, and it was not
-            // enforced at all until now: a seller could state a 10-sack
-            // minimum and be handed a one-sack order. The platform's surplus
-            // floors deliberately do NOT apply here -- they would override a
-            // seller who asked for less, which is exactly what made a 5 kg
-            // wholesale minimum unreachable behind the 20 kg surplus floor.
-            $moq = (float)($listing['min_order_quantity'] ?? 0);
-            if ($moq > 0 && $quantity < $moq) {
-                $dbh->rollBack();
-                echo json_encode(['error' =>
-                    'This seller\'s minimum order is ' . $tidyQty($moq)
-                    . '. You asked for ' . $tidyQty($quantity) . '.']);
-                exit;
-            }
-        } else {
-            // Surplus, exactly as before, but tunable.
-            if ($total_price < $limits['min_order_value']) {
-                $dbh->rollBack();
-                echo json_encode(['error' =>
-                    'Minimum order value for Bulk is UGX '
-                    . number_format($limits['min_order_value'], 0)
-                    . '. Current total: UGX ' . number_format($total_price, 0)]);
-                exit;
-            }
-
-            if (($listing['is_weight_based'] || $listing['is_weight_based'] === 1)
-                && $quantity < $limits['min_weight_kg']) {
-                $dbh->rollBack();
-                echo json_encode(['error' =>
-                    'Minimum order for bulk/weight-based Bulk items is '
-                    . $tidyQty($limits['min_weight_kg']) . ' kg']);
-                exit;
-            }
-        }
 
 
         // The delivery fee, itemised.

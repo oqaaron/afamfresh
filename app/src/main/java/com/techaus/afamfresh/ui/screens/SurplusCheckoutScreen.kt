@@ -44,10 +44,15 @@ import kotlin.math.roundToInt
  * WHY THIS IS NOT THE ORDINARY CHECKOUT
  *
  * Bulk is a bulk channel with rules the shop does not have, all enforced by
- * api/Bulk-orders.php: a minimum order value of UGX 250,000, a minimum of
- * 20 kg on weight-based listings, and a 1000 kg ceiling. It also has no cart —
- * one listing from one vendor is one order, because the goods are perishable
- * Bulk held by that vendor and cannot be pooled.
+ * api/api/Bulk-orders.php: a minimum order value, a minimum weight on
+ * weight-based listings, and a ceiling on what one order can weigh. Those are
+ * admin-editable settings rather than fixed numbers, and a WHOLESALE listing
+ * is governed instead by the minimum its seller set — so this screen does not
+ * state any of them itself. It asks api/api/Bulk-quote.php, which answers with
+ * the same function the order endpoint refuses with.
+ *
+ * It also has no cart — one listing from one vendor is one order, because the
+ * goods are held by that vendor and cannot be pooled.
  *
  * THE SHAPE OF THE FLOW
  *
@@ -109,16 +114,21 @@ fun BulkCheckoutScreen(
     val paymentError by paymentViewModel.error.collectAsState()
     val isStartingPayment by paymentViewModel.isLoading.collectAsState()
 
-    // Start at whatever the server will accept, so the customer is not greeted
-    // by an error on a quantity the screen itself chose.
-    val minQuantity = remember(listing.id) {
-        val byWeight = if (listing.isWeightBased) {
-            CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY
-        } else 1.0
-        val byValue = if (listing.discountedPrice > 0) {
-            kotlin.math.ceil(CreateBulkOrderRequest.MIN_ORDER_VALUE / listing.discountedPrice)
-        } else 1.0
-        max(byWeight, byValue)
+    // A STARTING quantity, not a rule.
+    //
+    // The real limits live in Bulk_delivery_settings and differ per listing
+    // kind, so only the server knows them — see BulkQuoteResponse.limits, which
+    // takes over as soon as the first quote lands. This just picks somewhere
+    // sensible to begin so the customer is not greeted by an error on a
+    // quantity the screen itself chose.
+    //
+    // A wholesale listing carries its own minimum, which IS known up front.
+    val seedQuantity = remember(listing.id) {
+        when {
+            listing.minOrderQuantity > 0.0 -> listing.minOrderQuantity
+            listing.isWeightBased -> CreateBulkOrderRequest.SEED_MIN_WEIGHT_BASED_QUANTITY
+            else -> 1.0
+        }
     }
 
     // rememberSaveable: pinning a delivery point navigates to
@@ -127,7 +137,7 @@ fun BulkCheckoutScreen(
     // The existing keys are kept — a new listing or a new pin SHOULD reset the
     // field they feed.
     var quantity by rememberSaveable(listing.id) {
-        mutableStateOf(minQuantity.coerceAtMost(listing.remainingQuantity))
+        mutableStateOf(seedQuantity.coerceAtMost(listing.remainingQuantity))
     }
     var address by rememberSaveable(pinnedAddress) {
         mutableStateOf(pinnedAddress ?: defaultAddress?.addressLine.orEmpty())
@@ -148,20 +158,28 @@ fun BulkCheckoutScreen(
         BulkViewModel.quoteLoyaltyPoints(pointsToRedeem, goodsTotal)
     }
 
-    // The same three limits the server enforces, checked here so the customer
-    // learns before filling in an address rather than after submitting.
+    // The order limits are the SERVER's to state.
+    //
+    // This screen used to re-implement three of them from built-in constants:
+    // a 250,000 minimum value, 20 kg on weight-based listings and a 1000 kg
+    // ceiling. All three are now rows in Bulk_delivery_settings that an admin
+    // edits, and none of them applies to a wholesale listing, where the
+    // seller's own minimum governs instead. A local copy could only ever state
+    // a rule that was true when the APK was built.
+    //
+    // api/api/Bulk-quote.php now answers this with the SAME function
+    // api/api/Bulk-orders.php refuses with, so what the screen says and what
+    // the order does cannot disagree. Only the two checks that need no round
+    // trip are still made here.
     val blockingReason: String? = when {
         listing.isSoldOut -> "This listing is sold out."
         quantity > listing.remainingQuantity ->
             "Only ${formatQuantity(listing.remainingQuantity)} $unit left."
-        listing.isWeightBased && quantity < CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY ->
-            "Bulk listings start at ${CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY.roundToInt()} kg."
-        goodsTotal < CreateBulkOrderRequest.MIN_ORDER_VALUE ->
-            "Bulk orders start at ${formatUgx(CreateBulkOrderRequest.MIN_ORDER_VALUE)}. " +
-                "Add more to reach it."
-        totalWeight > CreateBulkOrderRequest.MAX_WEIGHT_KG ->
-            "That is ${totalWeight.roundToInt()} kg. The most we can move in one order is " +
-                "${CreateBulkOrderRequest.MAX_WEIGHT_KG.roundToInt()} kg."
+        // Blocks only when the server has actually said no. A quote that has
+        // not arrived yet leaves this open rather than guessing: the order
+        // endpoint is still the authority and refuses with the same wording.
+        quote?.canOrder == false ->
+            quote?.blockedReason ?: "That quantity cannot be ordered."
         !listing.pickupOnly && address.isBlank() ->
             "Add a delivery address, or nobody knows where this is going."
         userId == null -> "Sign in to place this order."
@@ -211,12 +229,12 @@ fun BulkCheckoutScreen(
                     quantity = quantity,
                     unit = unit,
                     // One step is one unit for counted goods, but 5 kg for bulk:
-                    // stepping from 20 kg to a 250,000-shilling minimum one
-                    // kilogram at a time is not a control, it is a punishment.
+                    // stepping to a minimum one kilogram at a time is not a
+                    // control, it is a punishment.
                     step = if (listing.isWeightBased) 5.0 else 1.0,
-                    min = if (listing.isWeightBased) {
-                        CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY
-                    } else 1.0,
+                    // From the server once it has told us, falling back to the
+                    // seed until then. Never a built-in rule.
+                    min = quote?.limits?.smallestQuantity ?: seedQuantity,
                     max = listing.remainingQuantity,
                     onChange = { quantity = it }
                 )
@@ -226,6 +244,32 @@ fun BulkCheckoutScreen(
                     fontSize = 12.sp,
                     color = InkMuted
                 )
+
+                // State the rules up front rather than only on refusal, and
+                // state the ones that actually apply to THIS listing — the
+                // server sends 0 for anything irrelevant, so nothing here
+                // shows a wholesale buyer a surplus floor or the reverse.
+                quote?.limits?.let { lim ->
+                    val rules = buildList {
+                        if (lim.minQuantity > 0.0) {
+                            add("This seller's minimum order is ${formatQuantity(lim.minQuantity)} $unit.")
+                        }
+                        if (lim.minWeightKg > 0.0) {
+                            add("Orders start at ${formatQuantity(lim.minWeightKg)} kg.")
+                        }
+                        if (lim.minOrderValue > 0.0) {
+                            add("Orders start at ${formatUgx(lim.minOrderValue)}.")
+                        }
+                    }
+                    if (rules.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            rules.joinToString(" "),
+                            fontSize = 12.sp,
+                            color = InkMuted
+                        )
+                    }
+                }
             }
 
             if (listing.pickupOnly) {

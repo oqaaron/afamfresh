@@ -247,12 +247,12 @@ data class UpdateBulkListingRequest(
  * discounted_price by the quantity and computes delivery from weight, so an
  * amount here would be ignored — see api/Bulk-orders.php.
  *
- * The server enforces three limits the UI should check first, so the customer
- * finds out before they fill in an address:
- *
- *   - minimum order value UGX 250,000
- *   - minimum 20 kg for weight-based listings
- *   - maximum 1000 kg total weight
+ * The server enforces order limits the UI should check first, so the customer
+ * finds out before they fill in an address. Ask Bulk-quote.php rather than
+ * assuming any of them here: which rules apply depends on the listing (a
+ * wholesale one is governed by its seller's minimum, a surplus one by the
+ * platform floors), and the numbers are admin-editable settings that a copy
+ * built into the APK would eventually misstate. See [BulkOrderLimits].
  */
 data class CreateBulkOrderRequest(
     @SerializedName("listing_id") val listingId: Int,
@@ -267,9 +267,21 @@ data class CreateBulkOrderRequest(
     @SerializedName("points_redeem") val pointsRedeem: Int? = null
 ) {
     companion object {
-        const val MIN_ORDER_VALUE = 250_000.0
-        const val MIN_WEIGHT_BASED_QUANTITY = 20.0
-        const val MAX_WEIGHT_KG = 1000.0
+        /**
+         * SEED VALUES ONLY — not the rules.
+         *
+         * These are what the limits used to be when they were literals in
+         * api/api/Bulk-orders.php. They are now rows in Bulk_delivery_settings
+         * that an admin edits on the configuration page, and they do not apply
+         * to wholesale listings at all, so a built-in copy cannot be trusted
+         * to state what is currently true.
+         *
+         * Used only to pick a starting quantity before the first quote comes
+         * back. From that point on, BulkQuoteResponse.limits is what the screen
+         * shows and BulkQuoteResponse.canOrder is what gates the Pay button —
+         * both answered by the same server function that will refuse the order.
+         */
+        const val SEED_MIN_WEIGHT_BASED_QUANTITY = 20.0
     }
 }
 
@@ -425,7 +437,70 @@ data class BulkQuoteResponse(
     /** Warns before committing, rather than letting order creation refuse it. */
     @SerializedName("exceeds_stock") val exceedsStock: Boolean = false,
 
+    /**
+     * Whether THIS quantity may actually be ordered.
+     *
+     * Answered by the same function Bulk-orders.php refuses with
+     * (bulkOrderViolation in includes/bulk_listing_rules.php), so a quote that
+     * says yes is an order that will be accepted on these rules. Before this
+     * existed the quote had no opinion at all: the customer got a clean total
+     * and a working Pay button, and was refused only after committing.
+     *
+     * Defaults to TRUE so an older server that does not send it behaves as it
+     * used to — the order endpoint remains the authority either way.
+     */
+    @SerializedName("can_order") val canOrder: Boolean = true,
+
+    /** Why not, in words meant for the customer. Null when [canOrder]. */
+    @SerializedName("blocked_reason") val blockedReason: String? = null,
+
+    /** BELOW_MIN_QUANTITY | BELOW_MIN_VALUE | BELOW_MIN_WEIGHT | OVER_MAX_WEIGHT */
+    @SerializedName("blocked_code") val blockedCode: String? = null,
+
+    /** The rules that apply to this listing, so the screen states them up front. */
+    @SerializedName("limits") val limits: BulkOrderLimits? = null,
+
     @SerializedName("error") val error: String? = null,
     /** OUT_OF_SERVICE_AREA when the pin falls outside Greater Kampala. */
     @SerializedName("error_code") val errorCode: String? = null
 )
+
+/**
+ * The order limits that apply to one listing, from the server.
+ *
+ * Sent per listing rather than as global settings because which rules apply
+ * depends on what kind of listing it is: a wholesale listing is governed by
+ * the seller's own minimum, a surplus one by the platform's floors. The server
+ * decides, and anything irrelevant arrives as 0 and is simply not shown.
+ *
+ * This exists so the app stops hardcoding "UGX 250,000 / 20 kg / 1000 kg".
+ * Those are admin-editable now (Bulk_delivery_settings, configuration page),
+ * so a built-in copy would confidently state a rule that is no longer true.
+ */
+data class BulkOrderLimits(
+    @SerializedName("is_wholesale") val isWholesale: Boolean = false,
+
+    /** The seller's minimum order, in the listing's unit. 0 for surplus. */
+    @SerializedName("min_quantity") val minQuantity: Double = 0.0,
+
+    /** Platform minimum order value. 0 for wholesale, where it does not apply. */
+    @SerializedName("min_order_value") val minOrderValue: Double = 0.0,
+
+    /** Platform minimum kg. 0 unless this is a weight-based surplus listing. */
+    @SerializedName("min_weight_kg") val minWeightKg: Double = 0.0,
+
+    /** What can physically be carried. Applies to every listing. */
+    @SerializedName("max_weight_kg") val maxWeightKg: Double = 0.0
+) {
+    /**
+     * The smallest quantity worth starting the stepper at, or null if the
+     * server has no opinion (a counted surplus listing has no minimum of its
+     * own — only a value floor, which depends on price).
+     */
+    val smallestQuantity: Double?
+        get() = when {
+            minQuantity > 0.0 -> minQuantity
+            minWeightKg > 0.0 -> minWeightKg
+            else -> null
+        }
+}

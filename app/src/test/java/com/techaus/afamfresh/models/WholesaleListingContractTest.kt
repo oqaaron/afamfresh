@@ -264,6 +264,107 @@ class WholesaleListingContractTest {
     }
 
     // ==================================================================
+    // The quote's verdict — what stops the app hardcoding the limits
+    // ==================================================================
+
+    @Test
+    fun `a blocked quote carries the reason and the applicable limits`() {
+        val q = gson.fromJson(
+            """
+            {
+              "success": true, "goods_total": 4500, "delivery_fee": 8000,
+              "grand_total": 12500, "total_weight_kg": 1.0,
+              "exceeds_stock": false,
+              "can_order": false,
+              "blocked_reason": "This seller's minimum order is 10. You asked for 1.",
+              "blocked_code": "BELOW_MIN_QUANTITY",
+              "limits": {
+                "is_wholesale": true, "min_quantity": 10.0,
+                "min_order_value": 0.0, "min_weight_kg": 0.0, "max_weight_kg": 1000.0
+              }
+            }
+            """.trimIndent(),
+            BulkQuoteResponse::class.java
+        )
+
+        assertFalse(q.canOrder)
+        assertEquals("BELOW_MIN_QUANTITY", q.blockedCode)
+        assertTrue(q.blockedReason!!.contains("minimum order is 10"))
+
+        // Only the wholesale rule is populated; the surplus floors arrive as 0
+        // so the screen renders nothing for them.
+        assertEquals(10.0, q.limits!!.minQuantity, 0.0001)
+        assertEquals(0.0, q.limits!!.minOrderValue, 0.0001)
+        assertEquals(0.0, q.limits!!.minWeightKg, 0.0001)
+        assertEquals(10.0, q.limits!!.smallestQuantity!!, 0.0001)
+    }
+
+    @Test
+    fun `a surplus quote surfaces the platform floors instead`() {
+        val q = gson.fromJson(
+            """
+            {
+              "success": true, "can_order": true,
+              "limits": {
+                "is_wholesale": false, "min_quantity": 0.0,
+                "min_order_value": 250000.0, "min_weight_kg": 20.0, "max_weight_kg": 1000.0
+              }
+            }
+            """.trimIndent(),
+            BulkQuoteResponse::class.java
+        )
+        assertTrue(q.canOrder)
+        assertEquals(250000.0, q.limits!!.minOrderValue, 0.001)
+        // The stepper floor comes from the weight minimum here, not a constant.
+        assertEquals(20.0, q.limits!!.smallestQuantity!!, 0.0001)
+    }
+
+    @Test
+    fun `an admin-changed floor flows through without an app release`() {
+        // The point of moving these server-side: the app must show whatever
+        // the setting currently is, not what it was when the APK was built.
+        val q = gson.fromJson(
+            """
+            {"success": true, "can_order": true,
+             "limits": {"is_wholesale": false, "min_order_value": 99000.0,
+                        "min_weight_kg": 5.0, "max_weight_kg": 500.0}}
+            """.trimIndent(),
+            BulkQuoteResponse::class.java
+        )
+        assertEquals(99000.0, q.limits!!.minOrderValue, 0.001)
+        assertEquals(5.0, q.limits!!.smallestQuantity!!, 0.0001)
+        assertEquals(500.0, q.limits!!.maxWeightKg, 0.001)
+    }
+
+    @Test
+    fun `a quote from an older server does not block ordering`() {
+        // can_order defaults to true and limits to null, so a server that has
+        // not shipped these fields behaves exactly as before rather than
+        // locking the customer out of checkout.
+        val q = gson.fromJson(
+            """{"success": true, "goods_total": 300000, "grand_total": 308000}""",
+            BulkQuoteResponse::class.java
+        )
+        assertTrue(q.canOrder)
+        assertNull(q.limits)
+        assertNull(q.blockedReason)
+    }
+
+    @Test
+    fun `no minimum to show leaves the stepper floor to the caller`() {
+        val q = gson.fromJson(
+            """{"success": true, "can_order": true,
+                "limits": {"is_wholesale": false, "min_quantity": 0.0,
+                           "min_order_value": 250000.0, "min_weight_kg": 0.0,
+                           "max_weight_kg": 1000.0}}""",
+            BulkQuoteResponse::class.java
+        )
+        // A counted surplus listing has only a VALUE floor, which depends on
+        // price — there is no quantity the stepper can be clamped to.
+        assertNull(q.limits!!.smallestQuantity)
+    }
+
+    // ==================================================================
     // Who completes a delivery
     // ==================================================================
 
