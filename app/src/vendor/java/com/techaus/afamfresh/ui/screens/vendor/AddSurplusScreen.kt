@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.CreateBulkListingRequest
 import com.techaus.afamfresh.models.BulkListing
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.decimalInput
+import com.techaus.afamfresh.utils.formatQuantity
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
 
@@ -39,7 +41,7 @@ import com.techaus.afamfresh.viewmodel.VendorViewModel
  *   - discount_percent  within CreateBulkListingRequest.DISCOUNT_RANGE
  *                       inclusive, rejected outside it. The server computes
  *                       discounted_price itself
- *   - Bulk_quantity  an integer
+ *   - Bulk_quantity  decimal, since produce is sold by weight
  *   - expiry_date       "YYYY-MM-DD HH:MM:SS"
  *
  * Edit mode is deliberately reduced to the remaining quantity: PUT on that
@@ -78,7 +80,7 @@ fun AddBulkScreen(
         mutableStateOf(existingListing?.discountPercent?.takeIf { it > 0 }?.toInt()?.toString() ?: "")
     }
     var BulkQuantity by remember(existingListing) {
-        mutableStateOf(existingListing?.BulkQuantity?.takeIf { it > 0 }?.toString() ?: "")
+        mutableStateOf(existingListing?.BulkQuantity?.takeIf { it > 0 }?.let { formatQuantity(it) } ?: "")
     }
     var expiryDate by remember(existingListing) {
         mutableStateOf(existingListing?.expiryDate ?: "")
@@ -106,7 +108,7 @@ fun AddBulkScreen(
 
     // ----- edit-mode state -----
     var remainingQuantity by remember(existingListing) {
-        mutableStateOf(existingListing?.remainingQuantity?.toString() ?: "")
+        mutableStateOf(existingListing?.remainingQuantity?.let { formatQuantity(it) } ?: "")
     }
 
     var formError by remember { mutableStateOf<String?>(null) }
@@ -125,7 +127,7 @@ fun AddBulkScreen(
         val productId = selectedProductId
         val originalPriceVal = originalPrice.toDoubleOrNull()
         val discountVal = discountPercent.toDoubleOrNull()
-        val quantityVal = BulkQuantity.toIntOrNull()
+        val quantityVal = BulkQuantity.toDoubleOrNull()
 
         if (productId == null) {
             // Told apart deliberately. "Choose which product" is useless advice
@@ -183,7 +185,7 @@ fun AddBulkScreen(
 
     fun submitEdit() {
         formError = null
-        val remaining = remainingQuantity.toIntOrNull()
+        val remaining = remainingQuantity.toDoubleOrNull()
         if (remaining == null || remaining < 0) {
             formError = "Enter a valid remaining quantity"
             return
@@ -244,7 +246,9 @@ fun AddBulkScreen(
 
                 OutlinedTextField(
                     value = remainingQuantity,
-                    onValueChange = { remainingQuantity = it.filter { c -> c.isDigit() } },
+                    // Digits AND a single decimal point: these are kilograms,
+                    // and a digit-only filter made 20.5 impossible to type.
+                    onValueChange = { input -> remainingQuantity = decimalInput(input) },
                     label = { Text("Remaining quantity") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = KeyboardType.Number
@@ -459,7 +463,7 @@ fun AddBulkScreen(
 
                 OutlinedTextField(
                     value = BulkQuantity,
-                    onValueChange = { BulkQuantity = it.filter { c -> c.isDigit() } },
+                    onValueChange = { input -> BulkQuantity = decimalInput(input) },
                     // Names the unit chosen above, so "12" is unambiguous.
                     label = { Text("How many ${unit.plural} available") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(

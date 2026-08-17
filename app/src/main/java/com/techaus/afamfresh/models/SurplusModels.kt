@@ -25,8 +25,12 @@ data class BulkListing(
     @SerializedName("discount_percent") val discountPercent: Double = 0.0,
     @SerializedName("discounted_price") val discountedPrice: Double = 0.0,
 
-    @SerializedName("Bulk_quantity") val BulkQuantity: Int = 0,
-    @SerializedName("remaining_quantity") val remainingQuantity: Int = 0,
+    // Double, not Int. Bulk produce is sold in decimal kilograms, and the
+    // columns are DECIMAL(12,3) as of the decimal-quantities migration. Gson
+    // coerced 20.500 into an Int silently, so the app displayed a different
+    // quantity from the one the server held.
+    @SerializedName("Bulk_quantity") val BulkQuantity: Double = 0.0,
+    @SerializedName("remaining_quantity") val remainingQuantity: Double = 0.0,
 
     /** datetime, e.g. "2026-08-04 18:00:00" — NOT an ISO-8601 instant. */
     @SerializedName("expiry_date") val expiryDate: String? = null,
@@ -68,7 +72,7 @@ data class BulkListing(
             ?: listOfNotNull(vendorFirstName, vendorLastName)
                 .joinToString(" ").trim().takeIf { it.isNotBlank() }
 
-    val isSoldOut: Boolean get() = remainingQuantity <= 0
+    val isSoldOut: Boolean get() = remainingQuantity <= 0.0
     val isApproved: Boolean get() = status == "approved"
 }
 
@@ -101,7 +105,7 @@ data class CreateBulkListingRequest(
     @SerializedName("product_id") val productId: Int,
     @SerializedName("original_price") val originalPrice: Double,
     @SerializedName("discount_percent") val discountPercent: Double,
-    @SerializedName("Bulk_quantity") val BulkQuantity: Int,
+    @SerializedName("Bulk_quantity") val BulkQuantity: Double,
     /** "YYYY-MM-DD HH:MM:SS" */
     @SerializedName("expiry_date") val expiryDate: String,
     @SerializedName("listing_type") val listingType: String = "goodie_bag",
@@ -136,13 +140,14 @@ data class CreateBulkListingRequest(
  * cannot edit price, quantity or expiry, which is what the app's old
  * `updateVendorBulkListing` tried to send.
  *
- * ⚠️ SECURITY: the PHP performs no ownership check, so any authenticated caller
- * can set any listing's status — including approving their own. This is
- * reported to the backend owner; the app only ever sends `remaining_quantity`.
+ * The ownership hole this used to warn about is closed: the endpoint now
+ * resolves the listing's owner and refuses a caller who is neither that vendor
+ * nor an admin, and status/admin_notes are admin-only. The app still sends
+ * only `remaining_quantity`.
  */
 data class UpdateBulkListingRequest(
     @SerializedName("listing_id") val listingId: Int,
-    @SerializedName("remaining_quantity") val remainingQuantity: Int? = null,
+    @SerializedName("remaining_quantity") val remainingQuantity: Double? = null,
     @SerializedName("status") val status: String? = null,
     @SerializedName("admin_notes") val adminNotes: String? = null
 )

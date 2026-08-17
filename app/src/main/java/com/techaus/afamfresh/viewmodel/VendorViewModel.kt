@@ -286,7 +286,7 @@ class VendorViewModel(
         productId: Int,
         originalPrice: Double,
         discountPercent: Double,
-        BulkQuantity: Int,
+        BulkQuantity: Double,
         expiryDate: String,
         listingType: String = "goodie_bag",
         description: String = "",
@@ -346,7 +346,7 @@ class VendorViewModel(
      */
     fun updateListingQuantity(
         listingId: Int,
-        remainingQuantity: Int,
+        remainingQuantity: Double,
         onResult: (Boolean, String?) -> Unit
     ) {
         _isLoading.value = true

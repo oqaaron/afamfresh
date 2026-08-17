@@ -236,7 +236,7 @@ class VendorRepository(
      */
     fun updateListingQuantity(
         listingId: Int,
-        remainingQuantity: Int,
+        remainingQuantity: Double,
         callback: (Boolean, ApiError?) -> Unit
     ) {
         apiService.updateVendorBulkListing(

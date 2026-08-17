@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ?? '' because the discount input is not rendered at all for a
         // wholesale row — reading it unguarded warns on PHP 8 and reads as 0.
         $discount = ($_POST['discount_percent'] ?? '') !== '' ? (float)$_POST['discount_percent'] : (float)$listing['discount_percent'];
-        $quantity = ($_POST['Bulk_quantity'] ?? '') !== '' ? (int)$_POST['Bulk_quantity'] : (int)$listing['Bulk_quantity'];
+        $quantity = ($_POST['Bulk_quantity'] ?? '') !== '' ? (float)$_POST['Bulk_quantity'] : (float)$listing['Bulk_quantity'];
         $expiry   = trim($_POST['expiry_date'] ?? '') ?: $listing['expiry_date'];
         // Editable directly on a wholesale listing, since there is no discount
         // to derive it from.
@@ -94,8 +94,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Shift remaining by the same delta rather than overwriting it:
             // some of the original quantity may already be sold, and setting
             // remaining = quantity would silently resurrect sold stock.
-            $delta = $quantity - (int)$listing['Bulk_quantity'];
-            $remaining = max(0, (int)$listing['remaining_quantity'] + $delta);
+            // (float), not (int): Bulk quantities are decimal kilograms. Casting
+            // here truncated an admin's correction and, worse, computed the delta
+            // from a truncated original — so adjusting a 20.5 kg listing shifted
+            // remaining stock by the wrong amount.
+            $delta = $quantity - (float)$listing['Bulk_quantity'];
+            $remaining = max(0, (float)$listing['remaining_quantity'] + $delta);
 
             $status = $listing['status'];
             if ($decision === 'approve') $status = 'approved';
@@ -120,8 +124,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $changed = [];
-                if ((float)$listing['discount_percent'] !== $discount) $changed[] = 'discount';
-                if ((int)$listing['Bulk_quantity'] !== $quantity)   $changed[] = 'quantity';
+                // Tolerance rather than !== on both of these: they are floats,
+                // and on the wholesale path $discount is a round()ed result, so
+                // an exact comparison reports a change that did not happen.
+                if (abs((float)$listing['discount_percent'] - $discount) > 0.0005) $changed[] = 'discount';
+                if (abs((float)$listing['Bulk_quantity'] - $quantity) > 0.0005) $changed[] = 'quantity';
                 if ($listing['expiry_date'] !== $expiry)               $changed[] = 'expiry date';
 
                 if ($decision === 'approve') {
@@ -296,9 +303,9 @@ $pendingCount = (int)$dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE statu
                         <div>
                             <label class="block text-xs font-medium text-gray-600">Quantity</label>
                             <input type="number" min="0" name="Bulk_quantity"
-                                   value="<?= (int)$l['Bulk_quantity'] ?>"
+                                   value="<?= rtrim(rtrim(number_format((float)$l['Bulk_quantity'], 3, '.', ''), '0'), '.') ?>"
                                    class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                            <div class="text-xs text-gray-500 mt-1"><?= (int)$l['remaining_quantity'] ?> remaining</div>
+                            <div class="text-xs text-gray-500 mt-1"><?= rtrim(rtrim(number_format((float)$l['remaining_quantity'], 3, '.', ''), '0'), '.') ?> remaining</div>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-gray-600">Expires</label>

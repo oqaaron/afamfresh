@@ -29,6 +29,7 @@ import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.VendorViewModel
+import com.techaus.afamfresh.utils.formatQuantity
 
 // ⚠️ INFERRED screen. Signature matches MainScreen.kt's composable("vendor_dashboard")
 // call exactly: VendorDashboardScreen(vendorViewModel, onAddListing, onEditListing,
@@ -221,7 +222,7 @@ private fun VendorListingRow(listing: BulkListing, onClick: () -> Unit) {
         Column {
             Text(listing.displayTitle, fontWeight = FontWeight.SemiBold, color = Ink)
             Text(
-                "${listing.remainingQuantity} ${listing.unit.orEmpty()}".trim() +
+                formatQuantity(listing.remainingQuantity, listing.unit) +
                     "  •  ${formatUgx(listing.discountedPrice)}",
                 fontSize = 12.sp,
                 color = InkMuted

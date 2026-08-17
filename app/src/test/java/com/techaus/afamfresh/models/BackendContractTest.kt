@@ -410,7 +410,7 @@ class BackendContractTest {
         assertEquals("Afam Farm", listing.vendorDisplayName)
         assertEquals(5700.0, listing.discountedPrice, 0.001)
         assertEquals(40.0, listing.discountPercent, 0.001)
-        assertEquals(4, listing.remainingQuantity)
+        assertEquals(4.0, listing.remainingQuantity, 0.001)
         assertFalse(listing.pickupOnly)
         assertFalse(listing.isSoldOut)
         assertTrue(listing.isApproved)
@@ -424,7 +424,7 @@ class BackendContractTest {
                 productId = 30,
                 originalPrice = 9500.0,
                 discountPercent = 40.0,
-                BulkQuantity = 10,
+                BulkQuantity = 10.0,
                 expiryDate = "2026-08-04 18:00:00"
             )
         )
@@ -441,11 +441,16 @@ class BackendContractTest {
 
     @Test
     fun `the discount range matches the server's validation`() {
+        // Must match SURPLUS_DISCOUNT_MIN/MAX in
+        // api/includes/bulk_listing_rules.php. The floor moved from 30 to 10 so
+        // a vendor can post a modest markdown instead of being pushed into a
+        // distress discount to list at all.
         val range = CreateBulkListingRequest.DISCOUNT_RANGE
 
+        assertTrue(10.0 in range)
         assertTrue(30.0 in range)
         assertTrue(70.0 in range)
-        assertFalse(29.9 in range)
+        assertFalse(9.9 in range)
         assertFalse(70.1 in range)
     }
 

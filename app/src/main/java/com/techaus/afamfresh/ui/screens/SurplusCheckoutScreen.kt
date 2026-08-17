@@ -31,6 +31,7 @@ import com.techaus.afamfresh.models.BulkQuoteResponse
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.formatQuantity
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.PaymentViewModel
 import com.techaus.afamfresh.viewmodel.BulkViewModel
@@ -126,7 +127,7 @@ fun BulkCheckoutScreen(
     // The existing keys are kept — a new listing or a new pin SHOULD reset the
     // field they feed.
     var quantity by rememberSaveable(listing.id) {
-        mutableStateOf(minQuantity.coerceAtMost(listing.remainingQuantity.toDouble()))
+        mutableStateOf(minQuantity.coerceAtMost(listing.remainingQuantity))
     }
     var address by rememberSaveable(pinnedAddress) {
         mutableStateOf(pinnedAddress ?: defaultAddress?.addressLine.orEmpty())
@@ -152,7 +153,7 @@ fun BulkCheckoutScreen(
     val blockingReason: String? = when {
         listing.isSoldOut -> "This listing is sold out."
         quantity > listing.remainingQuantity ->
-            "Only ${listing.remainingQuantity} $unit left."
+            "Only ${formatQuantity(listing.remainingQuantity)} $unit left."
         listing.isWeightBased && quantity < CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY ->
             "Bulk listings start at ${CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY.roundToInt()} kg."
         goodsTotal < CreateBulkOrderRequest.MIN_ORDER_VALUE ->
@@ -216,12 +217,12 @@ fun BulkCheckoutScreen(
                     min = if (listing.isWeightBased) {
                         CreateBulkOrderRequest.MIN_WEIGHT_BASED_QUANTITY
                     } else 1.0,
-                    max = listing.remainingQuantity.toDouble(),
+                    max = listing.remainingQuantity,
                     onChange = { quantity = it }
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "${listing.remainingQuantity} $unit available  •  about ${totalWeight.roundToInt()} kg",
+                    "${formatQuantity(listing.remainingQuantity)} $unit available  •  about ${totalWeight.roundToInt()} kg",
                     fontSize = 12.sp,
                     color = InkMuted
                 )

@@ -25,6 +25,7 @@ import com.techaus.afamfresh.ui.components.EmptyState
 import com.techaus.afamfresh.ui.components.ErrorState
 import com.techaus.afamfresh.ui.components.ListSkeleton
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.formatQuantity
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.BulkViewModel
 
@@ -125,7 +126,7 @@ private fun BulkCard(listing: BulkListing, onClick: () -> Unit) {
             listing.vendorDisplayName?.let { Text(it, fontSize = 12.sp, color = InkMuted) }
             Text(
                 buildString {
-                    append("${listing.remainingQuantity} ${listing.unit.orEmpty()} left".trim())
+                    append("${formatQuantity(listing.remainingQuantity, listing.unit)} left")
                     listing.expiryDate?.let { append("  •  Expires $it") }
                 },
                 fontSize = 11.sp,
