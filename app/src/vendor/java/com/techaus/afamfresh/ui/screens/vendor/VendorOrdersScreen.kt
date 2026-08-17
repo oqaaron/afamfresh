@@ -8,14 +8,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.techaus.afamfresh.models.BulkOrder
 import com.techaus.afamfresh.models.UpdateBulkOrderStatusRequest
 import com.techaus.afamfresh.ui.components.EmptyState
@@ -46,6 +50,26 @@ fun VendorOrdersScreen(
         if (profile != null) vendorViewModel.loadVendorOrders()
     }
 
+    // Reload whenever the screen comes back to the foreground.
+    //
+    // An order's status is moved by OTHER people — a rider marking it
+    // delivered, an admin dispatching or cancelling it — and this list used to
+    // load exactly once, on first composition. A seller who left it open (or
+    // switched away and back) kept looking at the state as it was when they
+    // opened it, which reads as the rider's delivery never having registered.
+    // Nothing here polls; this only costs a request when the seller is
+    // actually looking.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, profile?.id) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && profile != null) {
+                vendorViewModel.loadVendorOrders()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Scaffold(
         containerColor = Cream,
         topBar = {
@@ -54,6 +78,16 @@ fun VendorOrdersScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Text("Orders", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                // Explicit refresh as well as the resume hook above: a seller
+                // waiting on a rider who is minutes away should not have to
+                // leave the screen and come back to find out.
+                IconButton(
+                    onClick = { if (profile != null) vendorViewModel.loadVendorOrders() },
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh orders", tint = Ink)
+                }
             }
         }
     ) { padding ->

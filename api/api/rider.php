@@ -581,7 +581,8 @@ if ($action === 'update_status') {
         try {
             require_once __DIR__ . '/../includes/notifications.php';
             $who = $dbh->prepare(
-                "SELECT so.user_id, i.name AS product_name, v.business_name
+                "SELECT so.user_id, i.name AS product_name, v.business_name,
+                        v.user_id AS vendor_user_id
                    FROM Bulk_orders so
                    JOIN Bulk_listings sl ON sl.id = so.listing_id
                    JOIN items i ON i.id = sl.product_id
@@ -599,6 +600,31 @@ if ($action === 'update_status') {
                     null,
                     ['push', 'email']
                 );
+
+                // Tell the SELLER too.
+                //
+                // They were the only party in the chain nobody told anything.
+                // The rider is paid, the customer is notified, and the seller
+                // is credited -- silently. Their own screen loads once and
+                // never polls, so a seller watching their Orders list saw the
+                // order sit at its old status indefinitely, and reasonably
+                // concluded the rider's delivery had not registered.
+                //
+                // Says the earnings part explicitly: it is the half they
+                // cannot see from the order row, and it is the reason they do
+                // not need to mark anything delivered themselves.
+                if (!empty($row['vendor_user_id'])) {
+                    addNotification(
+                        (int)$row['vendor_user_id'],
+                        'Order delivered',
+                        'Order #' . $orderId . ' (' . $row['product_name']
+                            . ') was delivered by the rider. Your earnings for it '
+                            . 'have been credited.',
+                        'order',
+                        null,
+                        ['push']
+                    );
+                }
             }
         } catch (Throwable $e) {
             error_log("Bulk order $orderId delivered but the customer was not notified: " . $e->getMessage());

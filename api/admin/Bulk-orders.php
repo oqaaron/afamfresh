@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $orderStmt = $dbh->prepare(
         "SELECT so.*, v.business_name, v.location AS vendor_location,
+                v.user_id AS vendor_user_id,
                 sl.pickup_only, i.name AS product_name
            FROM Bulk_orders so
            JOIN Bulk_listings sl ON sl.id = so.listing_id
@@ -159,6 +160,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         null,
                         ['push']
                     );
+
+                    // The seller needs this more than either of the other two:
+                    // a rider is about to arrive at their premises for a
+                    // specific order, and nothing else on their screen says so.
+                    // It is also what tells them to stop expecting to mark the
+                    // order delivered themselves -- from this point the rider
+                    // completes it and the credit follows automatically.
+                    if (!empty($order['vendor_user_id'])) {
+                        addNotification(
+                            (int)$order['vendor_user_id'],
+                            'A rider is collecting order #' . $orderId,
+                            'Have ' . $order['product_name'] . ' ready for collection. '
+                                . 'The rider marks it delivered on arrival and your '
+                                . 'earnings are credited then.',
+                            'order',
+                            null,
+                            ['push']
+                        );
+                    }
                 } catch (Throwable $e) {
                     error_log("Bulk order $orderId assigned but notifications failed: " . $e->getMessage());
                 }
