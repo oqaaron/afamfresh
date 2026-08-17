@@ -109,8 +109,36 @@ To query the instance afterwards, run the proxy and pass the flag that lets
 
 ```bash
 cloud-sql-proxy afamfresh-f68c6:europe-west3:afamfresh --port 3307 &
-mysql -h 127.0.0.1 -P 3307 -u root -p --get-server-public-key kitchen
+mysql -h 127.0.0.1 -P 3307 -u aokwi -p --get-server-public-key kitchen
 ```
+
+**Run this from Cloud Shell, not a laptop.** The proxy dials the instance on
+outbound port **3307**, which ordinary ISP and office networks commonly block.
+The symptom is misleading — the proxy starts, reports "ready for new
+connections", accepts your local connection, and only then times out:
+
+```
+failed to dial: dial tcp 35.246.171.227:3307: i/o timeout
+ERROR 2013 (HY000): Lost connection at 'reading initial communication packet'
+```
+
+Test before assuming credentials are wrong:
+`timeout 10 bash -c 'cat < /dev/null > /dev/tcp/35.246.171.227/3307'`.
+Cloud Shell sits inside Google's network and is never blocked; it also already
+has `mysql` and credentials, so the only setup there is fetching the proxy.
+
+Two more things that waste time:
+
+- **The client must be MySQL 8, not MariaDB.** `--get-server-public-key` is a
+  MySQL option; XAMPP's `/opt/lampp/bin/mysql` is a MariaDB client and answers
+  `unknown option`. Install `mysql-client-core`. Without the flag,
+  `caching_sha2_password` refuses over the proxy's plaintext localhost hop.
+- **The user is `aokwi`.** It has enough privilege for `ALTER`, and every file
+  in `migrations/` names it in its header.
+
+The `--port` is whatever you tell the proxy to bind; the migration headers say
+`9470` because that is what an earlier session used. Either works — match the
+port you started the proxy on.
 
 Verify the load:
 
