@@ -229,6 +229,37 @@ private fun VendorOrderRow(
             return@Column
         }
 
+        // A delivery order with nobody dispatched yet. The seller can still
+        // move it through confirmed -> processing -> ready, but "delivered" is
+        // not theirs to claim: no rider has taken the goods, so nothing has
+        // been delivered to anybody. Marking it here would credit the seller
+        // for an order still sitting in their store — and the credit is
+        // idempotent, so it could not be taken back.
+        //
+        // Only a collection order (pickup_only) is ever completed by the
+        // seller, because there is no rider in that flow at all.
+        if (next == "delivered" && order.awaitingDispatch) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Ready for collection by a rider. An administrator assigns one, and " +
+                    "the rider marks it delivered on arrival — your earnings are " +
+                    "credited then.",
+                fontSize = 11.sp,
+                color = InkMuted
+            )
+            return@Column
+        }
+
+        if (order.sellerCompletesDelivery && next == "delivered") {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "The customer collects this one themselves. Mark it delivered when " +
+                    "you hand it over — that is what credits your earnings.",
+                fontSize = 11.sp,
+                color = InkMuted
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {

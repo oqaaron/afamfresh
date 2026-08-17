@@ -264,6 +264,59 @@ class WholesaleListingContractTest {
     }
 
     // ==================================================================
+    // Who completes a delivery
+    // ==================================================================
+
+    private fun order(pickupOnly: Boolean, riderAt: String?) = gson.fromJson(
+        """
+        {
+          "id": 5, "status": "ready", "payment_status": "paid",
+          "pickup_only": ${if (pickupOnly) 1 else 0},
+          "rider_assigned_at": ${riderAt?.let { "\"$it\"" } ?: "null"}
+        }
+        """.trimIndent(),
+        BulkOrder::class.java
+    )
+
+    @Test
+    fun `only a collection order is the seller's to mark delivered`() {
+        // The one case where there is no rider in the flow at all.
+        assertTrue(order(pickupOnly = true, riderAt = null).sellerCompletesDelivery)
+
+        // A delivery order with nobody dispatched: nothing has been delivered
+        // to anyone, and marking it would credit the seller for produce still
+        // in their own store.
+        val undispatched = order(pickupOnly = false, riderAt = null)
+        assertFalse(undispatched.sellerCompletesDelivery)
+        assertTrue(undispatched.awaitingDispatch)
+
+        // A rider holds it — theirs to complete, and the credit rides along.
+        val withRider = order(pickupOnly = false, riderAt = "2026-08-17 10:00:00")
+        assertFalse(withRider.sellerCompletesDelivery)
+        assertFalse(withRider.awaitingDispatch)
+        assertTrue(withRider.hasRider)
+    }
+
+    @Test
+    fun `a dispatched collection order still belongs to the rider`() {
+        // Shouldn't happen — a pickup listing should never be dispatched — but
+        // if an admin does it by mistake, the person physically holding the
+        // goods wins over the flag on the listing.
+        val odd = order(pickupOnly = true, riderAt = "2026-08-17 10:00:00")
+        assertFalse(odd.sellerCompletesDelivery)
+        assertFalse(odd.awaitingDispatch)
+    }
+
+    @Test
+    fun `pickup_only survives the tinyint the server actually sends`() {
+        // PDO returns tinyint columns as the strings "0"/"1", which is the
+        // whole reason afamFreshGson() exists. A pickup order misread as a
+        // delivery would hide the seller's only way to complete it.
+        assertTrue(order(pickupOnly = true, riderAt = null).pickupOnly)
+        assertFalse(order(pickupOnly = false, riderAt = null).pickupOnly)
+    }
+
+    // ==================================================================
     // The seller-type branch the UI keys off
     // ==================================================================
 

@@ -103,7 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($section === 'Bulk_delivery') {
-        $fields = ['base_fee', 'fee_per_kg', 'max_weight_kg', 'free_delivery_threshold'];
+        // min_order_value and min_weight_kg are order LIMITS rather than fee
+        // inputs, but they live on the same row and are read by the same
+        // loader (BulkDeliverySettings), so they are saved together.
+        $fields = ['base_fee', 'fee_per_kg', 'max_weight_kg', 'free_delivery_threshold',
+                   'min_order_value', 'min_weight_kg'];
         $values = [];
         $ok = true;
         foreach ($fields as $name) {
@@ -123,19 +127,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($existing) {
                     $dbh->prepare(
                         "UPDATE Bulk_delivery_settings SET
-                            base_fee = ?, fee_per_kg = ?, max_weight_kg = ?, free_delivery_threshold = ?
+                            base_fee = ?, fee_per_kg = ?, max_weight_kg = ?,
+                            free_delivery_threshold = ?, min_order_value = ?, min_weight_kg = ?
                           WHERE id = ?"
                     )->execute([
                         $values['base_fee'], $values['fee_per_kg'], $values['max_weight_kg'],
-                        $values['free_delivery_threshold'], $existing,
+                        $values['free_delivery_threshold'], $values['min_order_value'],
+                        $values['min_weight_kg'], $existing,
                     ]);
                 } else {
                     $dbh->prepare(
-                        "INSERT INTO Bulk_delivery_settings (base_fee, fee_per_kg, max_weight_kg, free_delivery_threshold)
-                         VALUES (?, ?, ?, ?)"
+                        "INSERT INTO Bulk_delivery_settings
+                            (base_fee, fee_per_kg, max_weight_kg, free_delivery_threshold,
+                             min_order_value, min_weight_kg)
+                         VALUES (?, ?, ?, ?, ?, ?)"
                     )->execute([
                         $values['base_fee'], $values['fee_per_kg'], $values['max_weight_kg'],
-                        $values['free_delivery_threshold'],
+                        $values['free_delivery_threshold'], $values['min_order_value'],
+                        $values['min_weight_kg'],
                     ]);
                 }
                 $success = 'Bulk delivery settings updated.';
@@ -349,6 +358,28 @@ function field($arr, $key, $default = '') {
                             <input type="number" step="0.01" min="0" name="free_delivery_threshold" value="<?= field($BulkSettings, 'free_delivery_threshold', '500000') ?>" class="w-full px-4 py-2 border rounded">
                         </div>
                     </div>
+
+                    <h3 class="text-sm font-bold text-gray-700 mt-6 mb-1">Order limits</h3>
+                    <p class="text-gray-400 text-xs mb-3">
+                        These apply to <strong>surplus</strong> listings only. A wholesale listing
+                        carries the seller's own minimum order, set on the listing, and that is
+                        what is enforced for it — otherwise a wholesaler asking for 5&nbsp;kg would
+                        be overridden by the floor below. The maximum weight applies to every
+                        order, since it is a limit on what can physically be carried.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Minimum order value (UGX)</label>
+                            <input type="number" step="0.01" min="0" name="min_order_value" value="<?= field($BulkSettings, 'min_order_value', '250000') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Surplus orders below this are refused. Was fixed at 250,000 in code.</p>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-bold mb-2">Minimum weight per order (kg)</label>
+                            <input type="number" step="0.001" min="0" name="min_weight_kg" value="<?= field($BulkSettings, 'min_weight_kg', '20') ?>" class="w-full px-4 py-2 border rounded">
+                            <p class="text-gray-400 text-xs mt-1">Applies to weight-based surplus listings only. Was fixed at 20 kg in code.</p>
+                        </div>
+                    </div>
+
                     <button type="submit" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">Save Bulk delivery settings</button>
                 </form>
             </div>

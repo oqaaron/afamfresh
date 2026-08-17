@@ -214,6 +214,15 @@ data class BulkOrder(
      */
     @SerializedName("rider_assigned_at") val riderAssignedAt: String? = null,
 
+    /**
+     * The customer collects this from the seller — no rider is ever involved.
+     *
+     * Joined from the listing (`sl.pickup_only`), not stored on the order.
+     * This is the ONLY case in which completing the delivery is the seller's
+     * to do: they hand the goods over and mark it delivered themselves.
+     */
+    @SerializedName("pickup_only") val pickupOnly: Boolean = false,
+
     @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("delivery_area") val deliveryArea: String? = null,
     @SerializedName("delivery_fee") val deliveryFee: Double = 0.0,
@@ -274,6 +283,28 @@ data class BulkOrder(
 
     /** A rider is carrying this. Completing it is theirs, not the vendor's. */
     val hasRider: Boolean get() = !riderAssignedAt.isNullOrBlank()
+
+    /**
+     * May the SELLER mark this delivered themselves?
+     *
+     * Only on a collection order. Every other order is completed by the rider
+     * who carries it, in the transaction that also credits the seller — so a
+     * seller marking a delivery order delivered would either duplicate that
+     * (harmlessly, since the credit is idempotent) or, worse, claim it while
+     * the goods are still in a rider's hands or before anyone has even been
+     * dispatched.
+     *
+     * The hasRider check is the narrower of the two and comes first: a
+     * collection order should never have a rider, but if one was dispatched by
+     * mistake, the rider holding the goods wins.
+     */
+    val sellerCompletesDelivery: Boolean get() = !hasRider && pickupOnly
+
+    /**
+     * A delivery order with nobody dispatched yet. The seller is waiting on an
+     * admin, and there is nothing for them to do but have it ready.
+     */
+    val awaitingDispatch: Boolean get() = !hasRider && !pickupOnly
 
     /** Whole numbers without a trailing ".0"; decimals to one place. */
     val quantityLabel: String

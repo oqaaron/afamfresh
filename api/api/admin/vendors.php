@@ -20,6 +20,66 @@ if ($action === 'list') {
     exit;
 }
 
+/**
+ * The vendor money ledger, per transaction.
+ *
+ * vendor-payouts.php shows payout REQUESTS and an unpaid total per seller,
+ * which answers "what do we owe?" but never "what was this made of?". There
+ * was no view of vendor_earnings itself anywhere in the admin panel, so a
+ * seller querying their balance could not be answered without a database
+ * client.
+ *
+ * One row per delivered, paid order: what it sold for, what the platform kept,
+ * what the seller is owed, and whether it has been paid out yet.
+ */
+if ($action === 'earnings') {
+    $vendorId = (int)($_GET['vendor_id'] ?? 0);
+    $limit    = min(200, max(1, (int)($_GET['limit'] ?? 100)));
+
+    $sql = "SELECT ve.id, ve.vendor_id, ve.order_id, ve.source,
+                   ve.order_amount, ve.commission_amount, ve.net_earnings,
+                   ve.is_paid, ve.paid_at, ve.created_at,
+                   v.business_name, v.business_type, v.commission_rate,
+                   i.name AS product_name
+              FROM vendor_earnings ve
+              JOIN vendors v ON v.id = ve.vendor_id
+              -- LEFT, and via the listing: an earning outlives the listing it
+              -- came from, and a deleted listing must not drop the money row
+              -- out of the ledger.
+              LEFT JOIN Bulk_orders so ON so.id = ve.order_id AND ve.source = 'Bulk'
+              LEFT JOIN Bulk_listings sl ON sl.id = so.listing_id
+              LEFT JOIN items i ON i.id = sl.product_id";
+    $params = [];
+    if ($vendorId > 0) {
+        $sql .= " WHERE ve.vendor_id = ?";
+        $params[] = $vendorId;
+    }
+    $sql .= " ORDER BY ve.created_at DESC, ve.id DESC LIMIT " . $limit;
+
+    $stmt = $dbh->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Totals over the SAME filter, computed in SQL rather than from $rows —
+    // the LIMIT above would otherwise make them a total of the first page.
+    $totalSql = "SELECT COALESCE(SUM(order_amount), 0)      AS gross,
+                        COALESCE(SUM(commission_amount), 0) AS commission,
+                        COALESCE(SUM(net_earnings), 0)      AS net,
+                        COALESCE(SUM(CASE WHEN is_paid = 0 THEN net_earnings ELSE 0 END), 0) AS unpaid,
+                        COUNT(*) AS transactions
+                   FROM vendor_earnings"
+              . ($vendorId > 0 ? " WHERE vendor_id = ?" : "");
+    $totalStmt = $dbh->prepare($totalSql);
+    $totalStmt->execute($vendorId > 0 ? [$vendorId] : []);
+
+    echo json_encode([
+        'success'  => true,
+        'earnings' => $rows,
+        'totals'   => $totalStmt->fetch(PDO::FETCH_ASSOC),
+    ]);
+    exit;
+}
+
 if ($action === 'toggle_verification' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfHeader();
     $input = json_decode(file_get_contents('php://input'), true);

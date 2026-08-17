@@ -181,6 +181,47 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
                 </table>
             </div>
         </div>
+
+        <!-- ====== VENDOR TRANSACTIONS ======
+             The vendor_earnings ledger itself. vendor-payouts.php answers
+             "what do we owe?" from payout REQUESTS and an unpaid total; this
+             answers "what is that made of?", which nothing in the panel could
+             show before. One row per delivered, paid order. -->
+        <div class="bg-white rounded-xl shadow-md p-6 card">
+            <div class="flex items-center justify-between border-b border-gray-200 pb-3 mb-6">
+                <h2 class="text-xl font-semibold text-green-800">💰 Vendor Transactions</h2>
+                <div class="flex items-center gap-2">
+                    <select id="earningsVendorFilter" onchange="loadVendorEarnings()"
+                            class="border border-gray-300 rounded px-2 py-1 text-xs">
+                        <option value="0">All sellers</option>
+                    </select>
+                    <a href="vendor-payouts.php"
+                       class="text-xs font-semibold text-green-700 hover:underline">Payout requests →</a>
+                </div>
+            </div>
+
+            <div id="earningsTotals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seller</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Goods</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Commission</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Net to seller</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid out</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">When</th>
+                        </tr>
+                    </thead>
+                    <tbody id="earningsTableBody" class="divide-y divide-gray-200">
+                        <tr><td colspan="8" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -426,6 +467,9 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
             tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
             const res = await apiRequest('../api/admin/vendors.php?action=list');
             if (res.success && res.vendors) {
+                // Reuse the same payload for the transactions filter rather
+                // than fetching the seller list twice.
+                fillEarningsVendorFilter(res.vendors);
                 if (res.vendors.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-4 text-center text-gray-500">No vendors registered.</td></tr>';
                     return;
@@ -506,6 +550,83 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
             return div.innerHTML;
         }
 
+        // ---- VENDOR TRANSACTIONS ----
+
+        // UGX with no decimals, matching how money is shown everywhere else
+        // in the panel. Numbers arrive as DECIMAL strings from PDO.
+        function ugx(v) {
+            return 'UGX ' + Number(v || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 });
+        }
+
+        function totalCard(label, value, tone) {
+            return `<div class="rounded-lg border ${tone} px-3 py-2">
+                        <div class="text-xs text-gray-500">${label}</div>
+                        <div class="text-sm font-bold">${value}</div>
+                    </div>`;
+        }
+
+        async function loadVendorEarnings() {
+            const tbody = document.getElementById('earningsTableBody');
+            const vendorId = document.getElementById('earningsVendorFilter').value || '0';
+            tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-4 text-center text-gray-500"><span class="spinner"></span> Loading...</td></tr>';
+
+            const res = await apiRequest('../api/admin/vendors.php?action=earnings&vendor_id=' + encodeURIComponent(vendorId));
+            if (!res.success) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-4 text-center text-red-600">Error: ${escapeHtml(res.error || 'Failed to load')}</td></tr>`;
+                document.getElementById('earningsTotals').innerHTML = '';
+                return;
+            }
+
+            const t = res.totals || {};
+            document.getElementById('earningsTotals').innerHTML =
+                totalCard('Transactions', t.transactions || 0, 'border-gray-200') +
+                totalCard('Goods sold', ugx(t.gross), 'border-gray-200') +
+                totalCard('Commission kept', ugx(t.commission), 'border-green-200 bg-green-50') +
+                totalCard('Unpaid to sellers', ugx(t.unpaid), 'border-yellow-200 bg-yellow-50');
+
+            if (!res.earnings || res.earnings.length === 0) {
+                // Said plainly rather than as an error: an empty ledger is the
+                // normal state until a Bulk order is actually delivered.
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-4 text-center text-gray-500">No vendor transactions yet. A seller is credited when a delivered order has been paid for.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = res.earnings.map(e => `
+                <tr>
+                    <td class="px-4 py-3 text-sm">#${e.order_id}<span class="text-gray-400 text-xs"> ${escapeHtml(e.source || '')}</span></td>
+                    <td class="px-4 py-3 text-sm">
+                        ${escapeHtml(e.business_name || '')}
+                        <span class="text-gray-400 text-xs block">${escapeHtml((e.business_type || '').replace('_',' '))}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">${escapeHtml(e.product_name || '—')}</td>
+                    <td class="px-4 py-3 text-sm text-right">${ugx(e.order_amount)}</td>
+                    <td class="px-4 py-3 text-sm text-right text-gray-500">
+                        ${ugx(e.commission_amount)}
+                        <span class="text-xs block">${Number(e.commission_rate || 0)}%</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-right font-semibold">${ugx(e.net_earnings)}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${Number(e.is_paid) ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                            ${Number(e.is_paid) ? 'Paid' : 'Owed'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${escapeHtml(e.created_at || '')}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Populated from the vendor list that has already been fetched, so the
+        // filter costs no extra request.
+        function fillEarningsVendorFilter(vendors) {
+            const sel = document.getElementById('earningsVendorFilter');
+            if (!sel) return;
+            const current = sel.value;
+            sel.innerHTML = '<option value="0">All sellers</option>' + vendors.map(v =>
+                `<option value="${v.id}">${escapeHtml(v.business_name || ('Vendor #' + v.id))}</option>`
+            ).join('');
+            sel.value = current;
+        }
+
         // ---- INIT ----
         document.addEventListener('DOMContentLoaded', function() {
             loadConfig();
@@ -513,6 +634,7 @@ requireAnyAdminPermission(['Bulk.manage_listings', 'Bulk.manage_refunds', 'vendo
             loadPendingCancellations();
             loadPendingRefunds();
             loadVendors();
+            loadVendorEarnings();
         });
     </script>
 </div><!-- /content -->

@@ -35,12 +35,22 @@
 require_once __DIR__ . '/delivery-fee.php';    // getDeliveryPricingConfig()
 require_once __DIR__ . '/google_routes.php';  // roadDistanceBetween()
 
-/** Falls back to these only if Bulk_delivery_settings is empty. */
+/**
+ * Falls back to these only if Bulk_delivery_settings is empty.
+ *
+ * The last two are order LIMITS rather than fee inputs, and they live here
+ * because they come from the same row and the same loader. They were literals
+ * inside api/api/Bulk-orders.php until the configurable-limits migration; the
+ * values below reproduce them exactly, so an empty settings table behaves as
+ * the code always did.
+ */
 const Bulk_FEE_DEFAULTS = [
     'base_fee'                => 5000.0,
     'fee_per_kg'              => 500.0,
     'free_delivery_threshold' => 500000.0,
     'max_weight_kg'           => 1000.0,
+    'min_order_value'         => 250000.0,
+    'min_weight_kg'           => 20.0,
 ];
 
 /**
