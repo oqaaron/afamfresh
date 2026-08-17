@@ -123,7 +123,6 @@ class VendorViewModel(
     fun saveBusinessDetails(
         businessName: String,
         phone: String,
-        businessType: String,
         location: String?,
         marketStall: String?,
         // Null means "unchanged". The endpoint COALESCEs, so a vendor who edits
@@ -137,7 +136,6 @@ class VendorViewModel(
             UpdateVendorProfileRequest(
                 businessName = businessName.trim(),
                 phone = phone.trim(),
-                businessType = businessType,
                 location = location?.trim()?.ifEmpty { null },
                 marketStall = marketStall?.trim()?.ifEmpty { null },
                 lat = lat,
@@ -330,6 +328,79 @@ class VendorViewModel(
                 // New listings are created as 'pending', so reload that bucket
                 // rather than 'approved' — otherwise the vendor submits a
                 // listing and sees nothing appear.
+                loadListings(status = "pending")
+                onResult(true, null)
+            } else {
+                _error.value = error.userMessage
+                onResult(false, error.userMessage)
+            }
+        }
+    }
+
+    /**
+     * Posts a wholesale listing.
+     *
+     * Kept separate from [createListing] rather than folded into it with a flag:
+     * the two paths share almost no fields. A wholesaler sends a flat price and
+     * a minimum order and no discount or expiry; a surplus vendor sends a
+     * discount off a retail price and a date the produce expires. One function
+     * taking the union would need most arguments nullable and would let a
+     * caller send a combination the server rejects.
+     *
+     * The server does NOT trust listing_type from here — it forces 'wholesale'
+     * after checking the seller's business_type, and rejects the value from a
+     * non-wholesaler. Sending it is for clarity, not authority.
+     *
+     * @param retailReferencePrice optional RRP for a "save X% vs retail" line.
+     *        Must exceed [wholesalePrice] or the server rejects it, since a
+     *        lower reference renders as a negative saving.
+     */
+    fun createWholesaleListing(
+        productId: Int,
+        wholesalePrice: Double,
+        minOrderQuantity: Double,
+        BulkQuantity: Double,
+        retailReferencePrice: Double? = null,
+        description: String = "",
+        pickupOnly: Boolean = false,
+        weightPerUnitKg: Double = 1.0,
+        isWeightBased: Boolean = true,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val uid = userId
+        if (uid == null) {
+            onResult(false, "You need to be signed in to create a listing.")
+            return
+        }
+
+        _isLoading.value = true
+        vendorRepository.createListing(
+            CreateBulkListingRequest(
+                userId = uid,
+                productId = productId,
+                // 0.0, not the RRP: original_price is the optional retail
+                // reference, and the server treats "> 0" as "an RRP was given".
+                originalPrice = retailReferencePrice ?: 0.0,
+                // Wholesale carries no discount. The column defaults to 0.00
+                // as of the wholesale migration, and the server computes a
+                // display percentage itself when an RRP is present.
+                discountPercent = 0.0,
+                BulkQuantity = BulkQuantity,
+                // Omitted entirely — wholesale stock does not expire.
+                expiryDate = null,
+                wholesalePrice = wholesalePrice,
+                minOrderQuantity = minOrderQuantity,
+                listingType = "wholesale",
+                description = description,
+                // No condition rating: that describes how close surplus produce
+                // is to spoiling. The server defaults it.
+                pickupOnly = pickupOnly,
+                weightPerUnitKg = weightPerUnitKg,
+                isWeightBased = isWeightBased
+            )
+        ) { _, error ->
+            _isLoading.value = false
+            if (error == null) {
                 loadListings(status = "pending")
                 onResult(true, null)
             } else {

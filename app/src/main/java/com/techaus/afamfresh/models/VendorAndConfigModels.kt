@@ -44,7 +44,17 @@ data class VendorProfile(
     @SerializedName("user_email") val userEmail: String? = null,
     @SerializedName("fname") val firstName: String? = null,
     @SerializedName("lname") val lastName: String? = null
-)
+) {
+    /**
+     * Which set of vendor screens this account gets, and which rules
+     * api/api/Bulk-listings.php applies to anything it posts.
+     *
+     * Set at role provisioning and changeable only by an admin — the vendor's
+     * own profile update cannot write business_type, so this cannot be
+     * self-assigned to unlock flat wholesale pricing.
+     */
+    val isWholesaler: Boolean get() = businessType == "wholesaler"
+}
 
 /**
  * vendor-profile.php returns the vendor alongside their products, earnings and
@@ -73,8 +83,12 @@ data class VendorProfileResponse(
 data class UpdateVendorProfileRequest(
     @SerializedName("business_name") val businessName: String,
     @SerializedName("phone") val phone: String,
-    /** One of the `vendors.business_type` ENUM values; the server whitelists it. */
-    @SerializedName("business_type") val businessType: String,
+    // No business_type. api/api/vendor-profile.php no longer accepts it, and
+    // sending it anyway would be a field the form appears to control and does
+    // not. It was removed server-side because it decides which listing rules
+    // apply: a vendor could set 'wholesaler' from this very form and unlock
+    // flat wholesale pricing for themselves. It is set at role provisioning
+    // and changed only by an admin (admin/vendors.php, set_business_type).
     @SerializedName("location") val location: String? = null,
     @SerializedName("market_stall") val marketStall: String? = null,
 

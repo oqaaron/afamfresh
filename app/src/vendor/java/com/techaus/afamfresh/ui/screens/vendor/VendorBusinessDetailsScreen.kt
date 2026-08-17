@@ -62,19 +62,24 @@ fun VendorBusinessDetailsScreen(
     // A pin just chosen wins over the stored one; otherwise show what is saved.
     val lat = pickedLat ?: profile?.lat
     val lng = pickedLng ?: profile?.lng
-    var businessType by remember(profile?.id) {
-        mutableStateOf(profile?.businessType ?: "market_vendor")
+    // Read-only. This used to be an editable dropdown, which was a privilege
+    // escalation: business_type decides whether the account posts surplus
+    // markdowns or flat wholesale prices, so any verified vendor could promote
+    // themselves to wholesaler from this form. api/api/vendor-profile.php no
+    // longer accepts the field at all — it is set at role provisioning and
+    // changed only by an admin.
+    //
+    // Shown rather than hidden because it determines which screens the seller
+    // gets, so silently omitting it would leave "why am I seeing this form?"
+    // unanswerable.
+    val businessTypeLabel = when (profile?.businessType) {
+        "wholesaler" -> "Wholesaler"
+        "farmer" -> "Farmer"
+        "market_vendor" -> "Market vendor"
+        null -> "Not set yet"
+        else -> profile?.businessType?.replace('_', ' ')?.replaceFirstChar { it.uppercase() }
+            ?: "Not set yet"
     }
-    var typeMenuOpen by remember { mutableStateOf(false) }
-
-    // Mirrors the ENUM in `vendors.business_type`. The server whitelists these
-    // too — an unknown value would otherwise be stored by MySQL as an empty
-    // string with only a warning.
-    val businessTypes = listOf(
-        "market_vendor" to "Market vendor",
-        "farmer" to "Farmer",
-        "wholesaler" to "Wholesaler",
-    )
 
     val saving = saveState is VendorDetailsSaveState.Saving
     // The two the server requires, and the two an admin needs to verify anyone.
@@ -157,36 +162,21 @@ fun VendorBusinessDetailsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            ExposedDropdownMenuBox(
-                expanded = typeMenuOpen,
-                onExpandedChange = { if (!saving) typeMenuOpen = !typeMenuOpen }
-            ) {
-                OutlinedTextField(
-                    value = businessTypes.firstOrNull { it.first == businessType }?.second
-                        ?: "Market vendor",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Business type") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeMenuOpen) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor()
-                )
-                ExposedDropdownMenu(
-                    expanded = typeMenuOpen,
-                    onDismissRequest = { typeMenuOpen = false }
-                ) {
-                    businessTypes.forEach { (value, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                businessType = value
-                                typeMenuOpen = false
-                            }
-                        )
-                    }
-                }
-            }
+            OutlinedTextField(
+                value = businessTypeLabel,
+                onValueChange = {},
+                readOnly = true,
+                enabled = false,
+                label = { Text("Business type") },
+                supportingText = {
+                    Text(
+                        "Set when your role was approved. Contact support if this " +
+                            "is wrong — it decides how your listings are priced.",
+                        fontSize = 11.sp
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             OutlinedTextField(
                 value = location,
@@ -242,7 +232,6 @@ fun VendorBusinessDetailsScreen(
                     vendorViewModel.saveBusinessDetails(
                         businessName = businessName,
                         phone = phone,
-                        businessType = businessType,
                         location = location,
                         marketStall = marketStall,
                         // Only sent when the vendor picked one this session.

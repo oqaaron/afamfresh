@@ -6,8 +6,10 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.techaus.afamfresh.ui.screens.vendor.NewProductScreen
 import com.techaus.afamfresh.ui.screens.vendor.AddBulkScreen
+import com.techaus.afamfresh.ui.screens.vendor.AddWholesaleListingScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorBusinessDetailsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorDashboardScreen
+import com.techaus.afamfresh.ui.screens.vendor.WholesalerDashboardScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorEarningsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorLocationPickerScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorOrdersScreen
@@ -23,22 +25,61 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
     val nav = deps.navController
     val vm = deps.vendorViewModel
 
+    // A wholesaler is a vendors row with business_type = 'wholesaler', so this
+    // is the same app with two front ends rather than a fourth flavor.
+    //
+    // The branch is HERE, inside the vendor flavor, and not in MainScreen.kt:
+    // that file lives in src/main and compiles into the customer and rider
+    // builds too, so a business_type check there would be shared code changed
+    // for two apps that have no vendors at all. Keeping the route NAMES the
+    // same ("vendor_dashboard", "add_Bulk") also means the bottom bar and the
+    // start destination in MainScreen need no change whatsoever.
+    //
+    // profile is null until VendorViewModel.start() resolves the record, and
+    // isWholesaler is false while it is — so the surplus screens are what an
+    // unresolved profile shows. That is the safe default: it is the existing
+    // behaviour, and it corrects itself on the next recomposition.
     composable("vendor_dashboard") {
         val unread by deps.notificationViewModel.unreadCount.collectAsState()
-        VendorDashboardScreen(
-            vendorViewModel = vm,
-            onNotificationsClick = { nav.navigate("notifications") },
-            unreadNotifications = unread,
-            onAddListing = { nav.navigate("add_Bulk") },
-            onEditListing = { listing -> nav.navigate("edit_Bulk/${listing.id}") },
-            onViewOrders = { nav.navigate("vendor_orders") },
-            onViewProducts = { nav.navigate("vendor_products") },
-            onEditBusinessDetails = { nav.navigate("vendor_business_details") },
-            // popBackStack, not navigate("home"): "home" is the customer
-            // catalogue, still in the shared graph but not somewhere a vendor
-            // should land. This is the top of the vendor app.
-            onBack = { nav.popBackStack() }
-        )
+        val profile by vm.profile.collectAsState()
+
+        val onAddListing = { nav.navigate("add_Bulk") }
+        val onEditListing = { listing: com.techaus.afamfresh.models.BulkListing ->
+            nav.navigate("edit_Bulk/${listing.id}")
+        }
+        val onViewOrders = { nav.navigate("vendor_orders") }
+        val onViewProducts = { nav.navigate("vendor_products") }
+        val onEditBusinessDetails = { nav.navigate("vendor_business_details") }
+        // popBackStack, not navigate("home"): "home" is the customer
+        // catalogue, still in the shared graph but not somewhere a vendor
+        // should land. This is the top of the vendor app.
+        val onBack = { nav.popBackStack(); Unit }
+
+        if (profile?.isWholesaler == true) {
+            WholesalerDashboardScreen(
+                vendorViewModel = vm,
+                onNotificationsClick = { nav.navigate("notifications") },
+                unreadNotifications = unread,
+                onAddListing = onAddListing,
+                onEditListing = onEditListing,
+                onViewOrders = onViewOrders,
+                onViewProducts = onViewProducts,
+                onEditBusinessDetails = onEditBusinessDetails,
+                onBack = onBack
+            )
+        } else {
+            VendorDashboardScreen(
+                vendorViewModel = vm,
+                onNotificationsClick = { nav.navigate("notifications") },
+                unreadNotifications = unread,
+                onAddListing = onAddListing,
+                onEditListing = onEditListing,
+                onViewOrders = onViewOrders,
+                onViewProducts = onViewProducts,
+                onEditBusinessDetails = onEditBusinessDetails,
+                onBack = onBack
+            )
+        }
     }
 
     // The pin travels back through the nav back-stack rather than a shared
@@ -86,13 +127,27 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         )
     }
 
+    // Same branch as the dashboard: a wholesaler quotes a price and a minimum
+    // order, a vendor a discount off a retail price and an expiry date. The
+    // server decides which is acceptable from business_type regardless, so
+    // showing the wrong form would only produce a rejected request.
     composable("add_Bulk") {
-        AddBulkScreen(
-            vendorViewModel = vm,
-            onSave = { nav.navigate("vendor_dashboard") },
-            onAddInventory = { nav.navigate("vendor_new_product") },
-            onCancel = { nav.navigate("vendor_dashboard") }
-        )
+        val profile by vm.profile.collectAsState()
+        if (profile?.isWholesaler == true) {
+            AddWholesaleListingScreen(
+                vendorViewModel = vm,
+                onSave = { nav.navigate("vendor_dashboard") },
+                onAddInventory = { nav.navigate("vendor_new_product") },
+                onCancel = { nav.navigate("vendor_dashboard") }
+            )
+        } else {
+            AddBulkScreen(
+                vendorViewModel = vm,
+                onSave = { nav.navigate("vendor_dashboard") },
+                onAddInventory = { nav.navigate("vendor_new_product") },
+                onCancel = { nav.navigate("vendor_dashboard") }
+            )
+        }
     }
 
     composable("edit_Bulk/{listingId}") { backStackEntry ->
@@ -103,13 +158,29 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         // parsed rather than string-compared against it.
         val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
         val existingListing = listingId?.let { id -> listings.find { it.id == id } }
-        AddBulkScreen(
-            vendorViewModel = vm,
-            existingListing = existingListing,
-            onSave = { nav.navigate("vendor_dashboard") },
-            onAddInventory = { nav.navigate("vendor_new_product") },
-            onCancel = { nav.navigate("vendor_dashboard") }
-        )
+
+        // Branched on the LISTING, not the seller. Both forms reduce to the
+        // remaining quantity in edit mode, but the headings and the "to change
+        // the price, cancel and re-create" wording differ — and a seller whose
+        // type was changed by an admin can still hold listings of the other
+        // kind, which the listing itself is the honest record of.
+        if (existingListing?.isWholesale == true) {
+            AddWholesaleListingScreen(
+                vendorViewModel = vm,
+                existingListing = existingListing,
+                onSave = { nav.navigate("vendor_dashboard") },
+                onAddInventory = { nav.navigate("vendor_new_product") },
+                onCancel = { nav.navigate("vendor_dashboard") }
+            )
+        } else {
+            AddBulkScreen(
+                vendorViewModel = vm,
+                existingListing = existingListing,
+                onSave = { nav.navigate("vendor_dashboard") },
+                onAddInventory = { nav.navigate("vendor_new_product") },
+                onCancel = { nav.navigate("vendor_dashboard") }
+            )
+        }
     }
 
     composable("vendor_orders") {

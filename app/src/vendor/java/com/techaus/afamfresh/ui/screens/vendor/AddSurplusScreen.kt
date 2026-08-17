@@ -614,26 +614,9 @@ fun AddBulkScreen(
     }
 }
 
-/** One unit of sale, and what it means for weight-based delivery pricing. */
-private data class BulkUnit(
-    val label: String,
-    val plural: String,
-    /** True only for kilograms, where the unit IS the weight. */
-    val isWeight: Boolean,
-    val defaultKg: Double
-)
-
-// Ordinary Ugandan market units. Kilogram first because it is both the most
-// common and the only one that needs no weight estimate.
-private val Bulk_UNITS = listOf(
-    BulkUnit("Kilogram", "kilograms", true, 1.0),
-    BulkUnit("Piece", "pieces", false, 0.2),
-    BulkUnit("Bunch", "bunches", false, 1.0),
-    BulkUnit("Tray", "trays", false, 2.0),
-    BulkUnit("Basket", "baskets", false, 10.0),
-    BulkUnit("Crate", "crates", false, 12.0),
-    BulkUnit("Sack", "sacks", false, 50.0)
-)
+// BulkUnit, Bulk_UNITS and StepHeader moved to ListingFormCommon.kt — the
+// wholesale form needs the same units, and two copies of weight_per_unit_kg
+// defaults would be a delivery-pricing bug waiting to happen.
 
 private const val ONE_DAY_MS = 24L * 60 * 60 * 1000
 
@@ -663,27 +646,6 @@ private fun QuickDateChip(label: String, days: Int, onPick: (Int) -> Unit) {
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(label, color = Forest, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-/** Numbered section heading, so a long form reads as a sequence of steps. */
-@Composable
-private fun StepHeader(number: Int, title: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 10.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Forest),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("$number", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(title, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp)
     }
 }
 

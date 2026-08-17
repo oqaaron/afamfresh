@@ -32,10 +32,22 @@ data class BulkListing(
     @SerializedName("Bulk_quantity") val BulkQuantity: Double = 0.0,
     @SerializedName("remaining_quantity") val remainingQuantity: Double = 0.0,
 
-    /** datetime, e.g. "2026-08-04 18:00:00" — NOT an ISO-8601 instant. */
+    /**
+     * Wholesale minimum order, in the listing's unit. DECIMAL(12,3) server-side
+     * and 0 on every surplus listing, which is why it defaults to 0 rather than
+     * 1 — a surplus deal has no minimum and must not display one.
+     */
+    @SerializedName("min_order_quantity") val minOrderQuantity: Double = 0.0,
+
+    /**
+     * datetime, e.g. "2026-08-04 18:00:00" — NOT an ISO-8601 instant.
+     *
+     * NULL for wholesale listings: that stock is not near its end of life, and
+     * the column was made nullable by the wholesale migration.
+     */
     @SerializedName("expiry_date") val expiryDate: String? = null,
 
-    /** goodie_bag | final_days | bulk */
+    /** goodie_bag | final_days | bulk | wholesale */
     @SerializedName("listing_type") val listingType: String? = null,
 
     /** pending | approved | rejected | cancelled */
@@ -74,6 +86,20 @@ data class BulkListing(
 
     val isSoldOut: Boolean get() = remainingQuantity <= 0.0
     val isApproved: Boolean get() = status == "approved"
+
+    /**
+     * A wholesale offer rather than a surplus markdown. The server forces
+     * `listing_type` from the seller's `business_type` on create, so this is
+     * authoritative and not a client-side guess.
+     */
+    val isWholesale: Boolean get() = listingType == "wholesale"
+
+    /**
+     * Only meaningful when the wholesaler supplied an optional retail reference
+     * price. Surplus listings always carry both, so this is true for them too;
+     * callers that care about the wholesale case should check [isWholesale].
+     */
+    val hasRetailReference: Boolean get() = originalPrice > 0.0 && originalPrice > discountedPrice
 }
 
 data class BulkListingsResponse(
@@ -106,8 +132,30 @@ data class CreateBulkListingRequest(
     @SerializedName("original_price") val originalPrice: Double,
     @SerializedName("discount_percent") val discountPercent: Double,
     @SerializedName("Bulk_quantity") val BulkQuantity: Double,
-    /** "YYYY-MM-DD HH:MM:SS" */
-    @SerializedName("expiry_date") val expiryDate: String,
+
+    /**
+     * "YYYY-MM-DD HH:MM:SS", or null for a wholesale listing.
+     *
+     * Nullable because wholesale stock does not expire. Gson omits null
+     * fields, and the endpoint reads it as `$input['expiry_date'] ?? ''`, so
+     * omitting it is the same as sending blank — which is exactly what the
+     * wholesale branch expects.
+     */
+    @SerializedName("expiry_date") val expiryDate: String? = null,
+
+    /**
+     * The flat price a wholesaler charges, which the server stores in
+     * `discounted_price`. Ignored on the surplus path, where the server
+     * derives that price from original_price and discount_percent instead.
+     */
+    @SerializedName("wholesale_price") val wholesalePrice: Double? = null,
+
+    /**
+     * Wholesale minimum order, in the listing's unit. Required by the server
+     * for a wholesaler and rejected if it exceeds Bulk_quantity.
+     */
+    @SerializedName("min_order_quantity") val minOrderQuantity: Double? = null,
+
     @SerializedName("listing_type") val listingType: String = "goodie_bag",
     @SerializedName("description") val description: String = "",
     @SerializedName("condition_rating") val conditionRating: String = "good",
