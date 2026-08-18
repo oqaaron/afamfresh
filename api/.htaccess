@@ -31,7 +31,7 @@
 # Source files that are not pages. An ApiService.kt copied into api/ was
 # served with HTTP 200 and handed the whole endpoint list to anyone who
 # guessed the name; nothing here is meant to be fetched, and the only
-# non-PHP files this app actually serves are admin-dashboard.html and
+# non-PHP file this app still serves is
 # .well-known/assetlinks.json (Android App Links verification — Google's
 # verifier fetches that exact path unauthenticated, so it's carved out of
 # the .json block by name via negative lookahead rather than moved
