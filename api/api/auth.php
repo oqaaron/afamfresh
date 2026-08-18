@@ -18,6 +18,12 @@ header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
 
+// Every place in this file that accepts a new password measures it against
+// this one value. Registration and reset_password each used to decide for
+// themselves, and they disagreed -- reset required 6 characters while
+// register required nothing at all.
+const MIN_PASSWORD_LENGTH = 6;
+
 // Helper: generate a unique token (session ID or random)
 function generateToken() {
     return bin2hex(random_bytes(32));
@@ -99,6 +105,20 @@ if ($action == 'register') {
     $nameParts = explode(' ', $name, 2);
     $fname = $nameParts[0] ?? '';
     $lname = $nameParts[1] ?? '';
+
+    // The password was going straight into password_hash() with nothing
+    // checked, so '' was a valid choice and hashed to a perfectly usable
+    // credential. reset_password has always enforced a floor -- meaning an
+    // account could be created with no password at all and only acquire a
+    // real one if its owner happened to run a reset. Same floor, same
+    // constant, both ends.
+    if (strlen($password) < MIN_PASSWORD_LENGTH) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Password must be at least ' . MIN_PASSWORD_LENGTH . ' characters'
+        ]);
+        exit;
+    }
 
     // Same bucketing as login: by IP and by the submitted email, so this
     // can't be scripted into unlimited account creation, and the "Email
@@ -611,8 +631,11 @@ if ($action == 'reset_password') {
         exit;
     }
     
-    if (strlen($newPassword) < 6) {
-        echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters']);
+    if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Password must be at least ' . MIN_PASSWORD_LENGTH . ' characters'
+        ]);
         exit;
     }
 
