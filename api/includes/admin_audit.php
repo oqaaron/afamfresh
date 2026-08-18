@@ -32,6 +32,21 @@ function logAdminAction(
             $_SERVER['REMOTE_ADDR'] ?? null,
         ]);
     } catch (Throwable $e) {
-        error_log("logAdminAction failed for action '$action': " . $e->getMessage());
+        // Deliberately swallowed -- an audit write must never fail the action
+        // it describes -- but not quietly. Every line this catch emits is an
+        // admin action that happened and left no record, so the log is the
+        // only remaining evidence it occurred at all. Tagged CRITICAL and
+        // carrying who/what/which so it can be alerted on and reconstructed;
+        // a bare "failed" tells whoever reads it nothing they can act on.
+        error_log(sprintf(
+            "CRITICAL: admin action NOT audited — action=%s target=%s/%s admin_id=%s admin_name=%s ip=%s error=%s",
+            $action,
+            $targetType ?? '-',
+            $targetId !== null ? (string)$targetId : '-',
+            (string)($_SESSION['admin_id'] ?? '-'),
+            (string)($_SESSION['admin_name'] ?? 'unknown'),
+            $_SERVER['REMOTE_ADDR'] ?? '-',
+            $e->getMessage()
+        ));
     }
 }
