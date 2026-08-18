@@ -10,12 +10,17 @@
 // =============================================================
 header('Content-Type: application/json');
 require_once '../admin/includes/config.php'; // This already has Pesapal constants
+require_once __DIR__ . '/../../includes/csrf.php';
+require_once __DIR__ . '/../../includes/admin_permissions.php';
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'error' => 'Not logged in']);
-    exit;
-}
+// Was a bare admin_logged_in check, which is a weaker gate than it looks:
+// 'configuration.manage' is a permission the dispatcher role is *deliberately*
+// denied (see the role table in admin_permissions.php), and every admin page
+// that edits settings enforces it. This endpoint edits the same app_config
+// rows -- including is_maintenance_mode, which takes the whole app down -- so
+// any logged-in dispatcher could do here exactly what the role table says they
+// may not do there.
+requireAdminPermissionApi('configuration.manage');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -27,6 +32,12 @@ if ($method === 'GET') {
     }
     echo json_encode(['success' => true, 'config' => $config]);
 } elseif ($method === 'PUT') {
+    // The wildcard CORS that used to sit in admin/includes/config.php was the
+    // only reason a cross-origin write here was impractical, and that is not a
+    // control this endpoint should ever have depended on. Same header check
+    // its siblings vendors.php and Bulk-approval.php already do.
+    verifyCsrfHeader();
+
     $input = json_decode(file_get_contents('php://input'), true);
     if (empty($input)) {
         echo json_encode(['success' => false, 'error' => 'No data provided']);

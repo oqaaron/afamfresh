@@ -273,8 +273,19 @@ function cancelBulkOrder(
             // Never trust the locally-stored payment_status for this —
             // same discipline applyBulkPaymentStatus() already enforces.
             $liveStatus = $pesapal->getTransactionStatus($order['pesapal_tracking_id']);
-            if ($pesapal->mapStatus($liveStatus) !== 'paid') {
-                throw new PesapalException('Pesapal no longer shows this payment as completed.');
+
+            // Checked against the order total, not just the status code. The
+            // refund below sends back BulkPayableTotal($order) — the full price
+            // of the order — so if less than that was ever collected, paying it
+            // out returns money that was never taken. Settlement now refuses to
+            // mark an underpaid order 'paid' in the first place, but rows
+            // settled before that check existed can still reach here.
+            if ($pesapal->mapStatusForOrder(
+                    $liveStatus, BulkPayableTotal($order), "Bulk order $orderId (refund)"
+                ) !== 'paid') {
+                throw new PesapalException(
+                    'Pesapal no longer shows this payment as completed for the full order amount.'
+                );
             }
 
             $confirmationCode = trim((string)($liveStatus['confirmation_code'] ?? ''));

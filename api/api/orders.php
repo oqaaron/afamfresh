@@ -289,8 +289,13 @@ switch ($action) {
         $dropoffLng = floatval(getParam('dropoff_lng', 0));
         $pointsToRedeem = intval(getParam('points_redeem', 0));
 
-        // Log extracted values
-        error_log("Extracted: fname=$fname, lname=$lname, mobile=$mobile, area=$area, address=$address");
+        // Behind APP_ENV for the same reason the raw-request logging at the top
+        // of this file is: a customer's name, phone number and home address in
+        // the server log on every single order is a standing pile of PII that
+        // buys nothing in normal operation.
+        if (defined('APP_ENV') && APP_ENV !== 'production') {
+            error_log("Extracted: fname=$fname, lname=$lname, mobile=$mobile, area=$area, address=$address");
+        }
 
         // Validate
         if (empty($fname) || empty($lname) || empty($mobile) || empty($area) || empty($address)) {

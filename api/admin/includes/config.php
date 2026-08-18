@@ -330,15 +330,31 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
 $_SESSION['last_activity'] = time();
 
 // =============================================================
-// CORS HEADERS (for API access from mobile app)
+// CORS HEADERS
 // =============================================================
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Access-Control-Allow-Credentials: true');
+// There are no cross-origin browser callers. The admin panel is served from
+// this same host, and the Android clients use OkHttp, which is not a browser
+// and does not apply the same-origin policy at all -- CORS headers have never
+// been what let the app talk to this API.
+//
+// What was here before was `Allow-Origin: *` together with
+// `Allow-Credentials: true`, in a file required by nearly every admin and API
+// endpoint. That pairing is invalid per the Fetch spec, so browsers refuse to
+// hand a credentialed response to a wildcard origin -- which meant the only
+// thing standing between any website on the internet and these
+// session-cookie-authenticated endpoints was other people's browsers
+// implementing the spec correctly. Sending no CORS headers is strictly
+// stronger: the same-origin policy then blocks cross-origin reads outright,
+// on the server's terms rather than the client's.
+//
+// If a web frontend on another domain is ever added, reflect its specific
+// origin here after checking it against an allow-list. Never reintroduce the
+// wildcard alongside credentials.
 
+// Preflights are still answered, so a cross-origin caller gets a clean
+// "not allowed" from the missing headers rather than a confusing 405.
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit();
 }
 

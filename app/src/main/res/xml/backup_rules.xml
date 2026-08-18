@@ -8,4 +8,6 @@
     <exclude domain="sharedpref" path="cookie_prefs_secure.xml" />
     <exclude domain="sharedpref" path="auth_prefs.xml" />
     <exclude domain="sharedpref" path="cookie_prefs.xml" />
+    <exclude domain="sharedpref" path="fcm_prefs_secure.xml" />
+    <exclude domain="sharedpref" path="fcm_prefs.xml" />
 </full-backup-content>

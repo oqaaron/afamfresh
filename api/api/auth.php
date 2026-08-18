@@ -1,8 +1,10 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
+// No display_errors here. admin/includes/config.php sets it from APP_ENV a few
+// lines below, and forcing it on first meant anything that went wrong before
+// that require -- in session_start(), or while env.php was loading -- printed
+// its file paths into the response of an endpoint anyone can reach without
+// logging in. profile.php, rider.php and roles.php each carry a note saying
+// they deliberately leave this alone; this file was the last one that didn't.
 session_start();
 require_once '../admin/includes/config.php';
 // getUserRolesData() and buildUserPayload() live here so profile.php can use
@@ -17,6 +19,12 @@ require_once __DIR__ . '/../includes/rate_limit.php';
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
+
+// Every place in this file that accepts a new password measures it against
+// this one value. Registration and reset_password each used to decide for
+// themselves, and they disagreed -- reset required 6 characters while
+// register required nothing at all.
+const MIN_PASSWORD_LENGTH = 6;
 
 // Helper: generate a unique token (session ID or random)
 function generateToken() {
@@ -99,6 +107,20 @@ if ($action == 'register') {
     $nameParts = explode(' ', $name, 2);
     $fname = $nameParts[0] ?? '';
     $lname = $nameParts[1] ?? '';
+
+    // The password was going straight into password_hash() with nothing
+    // checked, so '' was a valid choice and hashed to a perfectly usable
+    // credential. reset_password has always enforced a floor -- meaning an
+    // account could be created with no password at all and only acquire a
+    // real one if its owner happened to run a reset. Same floor, same
+    // constant, both ends.
+    if (strlen($password) < MIN_PASSWORD_LENGTH) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Password must be at least ' . MIN_PASSWORD_LENGTH . ' characters'
+        ]);
+        exit;
+    }
 
     // Same bucketing as login: by IP and by the submitted email, so this
     // can't be scripted into unlimited account creation, and the "Email
@@ -611,8 +633,11 @@ if ($action == 'reset_password') {
         exit;
     }
     
-    if (strlen($newPassword) < 6) {
-        echo json_encode(['success' => false, 'message' => 'Password must be at least 6 characters']);
+    if (strlen($newPassword) < MIN_PASSWORD_LENGTH) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Password must be at least ' . MIN_PASSWORD_LENGTH . ' characters'
+        ]);
         exit;
     }
 

@@ -1,6 +1,7 @@
 package com.techaus.afamfresh.utils
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import com.techaus.afamfresh.api.ApiClient
@@ -22,7 +23,21 @@ object FirebaseTokenManager {
 
     private var appContext: Context? = null
 
-    private fun prefs() = appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    // Keystore-backed, like auth_prefs and cookie_prefs. The FCM registration
+    // token was the one identifier still sitting in a plaintext SharedPrefs
+    // file: it is not a credential on its own, but it names this install and
+    // is readable from a rooted device or an extracted backup. SecurePrefs
+    // migrates the existing fcm_prefs.xml on first open, so tokens already on
+    // devices move over without re-registering.
+    //
+    // Held lazily and cached: create() does Keystore work that should happen
+    // once, not on every preference read.
+    private var securePrefs: SharedPreferences? = null
+
+    private fun prefs(): SharedPreferences? {
+        val ctx = appContext ?: return null
+        return securePrefs ?: SecurePrefs.create(ctx, PREFS).also { securePrefs = it }
+    }
 
     /**
      * The user's push-notification preference, controlled from Settings.

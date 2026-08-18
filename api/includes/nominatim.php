@@ -18,13 +18,28 @@ static $requestDelay = 0.5;
  * Make HTTP GET request
  */
 function httpGet($url) {
+    // TLS verification stays ON. This used to pass verify_peer => false and
+    // verify_peer_name => false, which accepts any certificate from anyone --
+    // so whoever sat on the network path could answer for the geocoding
+    // provider and choose the address and area this function returns. That
+    // output feeds delivery-area detection and the service-area check, so a
+    // forged reply is not cosmetic: it moves where an order is allowed to go.
+    //
+    // The same bug was already fixed for Google token verification in
+    // auth.php; this was the last caller still opting out. The image installs
+    // ca-certificates, so the system trust store resolves without naming a
+    // bundle path here.
     $options = [
         'http' => [
             'method' => 'GET',
             'header' => "User-Agent: AfamFresh/1.0 (https://afamfresh-backend.onrender.com)\r\n",
             'timeout' => 10
         ],
-        'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+            'allow_self_signed' => false,
+        ]
     ];
     $context = stream_context_create($options);
     return @file_get_contents($url, false, $context);

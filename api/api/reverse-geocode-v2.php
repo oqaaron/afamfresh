@@ -14,14 +14,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+require_once dirname(__DIR__) . '/admin/includes/config.php';
 require_once dirname(__DIR__) . '/includes/nominatim.php';
+require_once dirname(__DIR__) . '/includes/rate_limit.php';
+
+// Unauthenticated and billed upstream per call — see the note in
+// reverse-geocode.php. Same bucket as that endpoint on purpose: the two are
+// interchangeable to a caller, so throttling them separately would just double
+// the allowance.
+if (rateLimited($dbh, 'geocode:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 30, 60)) {
+    failRateLimited();
+}
 
 // Get input
 $input = json_decode(file_get_contents('php://input'), true);
 $lat = isset($input['lat']) ? floatval($input['lat']) : 0;
 $lng = isset($input['lng']) ? floatval($input['lng']) : 0;
 
-if ($lat == 0 || $lng == 0) {
+if ($lat == 0 || $lng == 0 || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
     echo json_encode(['success' => false, 'error' => 'Valid coordinates required']);
     exit;
 }
