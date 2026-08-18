@@ -69,10 +69,15 @@ if ($trackingId === '') {
 
 // NOTE: any `payment_status` in the request is ignored on purpose. See above.
 
+// $mapped is NOT resolved here. Deciding 'paid' requires knowing what the
+// order costs, and which order this even is has not been established yet --
+// it could be a Bulk order or a regular one, in different tables with
+// different total columns. Each branch below calls mapStatusForOrder() once it
+// has the row, so the amount Pesapal reports is checked against that order's
+// own total rather than accepted on the strength of a status code alone.
 try {
     $pesapal = new PesapalClient();
     $status = $pesapal->getTransactionStatus($trackingId);
-    $mapped = $pesapal->mapStatus($status);
 } catch (Throwable $e) {
     error_log("Pesapal IPN status lookup failed for $trackingId: " . $e->getMessage());
     // 200 so Pesapal stops retrying; the order stays unreconciled and the app's
@@ -89,14 +94,18 @@ try {
     // because the two id spaces overlap and a bare id would be ambiguous.
     $looksBulk = stripos($merchantRef, 'SUR-') === 0;
 
-    $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM Bulk_orders WHERE pesapal_tracking_id = ?");
+    $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed,
+                                  total_price, delivery_fee, loyalty_discount
+                             FROM Bulk_orders WHERE pesapal_tracking_id = ?");
     $Bulk->execute([$trackingId]);
     $BulkOrder = $Bulk->fetch(PDO::FETCH_ASSOC);
 
     if (!$BulkOrder && $looksBulk) {
         $idFromRef = (int)(explode('-', $merchantRef)[1] ?? 0);
         if ($idFromRef > 0) {
-            $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed FROM Bulk_orders WHERE id = ?");
+            $Bulk = $dbh->prepare("SELECT id, payment_status, user_id, points_redeemed,
+                                          total_price, delivery_fee, loyalty_discount
+                                     FROM Bulk_orders WHERE id = ?");
             $Bulk->execute([$idFromRef]);
             $BulkOrder = $Bulk->fetch(PDO::FETCH_ASSOC);
         }
@@ -107,6 +116,10 @@ try {
         if (strcasecmp((string)$BulkOrder['payment_status'], 'paid') === 0) {
             ipnDone('already paid', ['Bulk_order_id' => $BulkId]);
         }
+
+        $mapped = $pesapal->mapStatusForOrder(
+            $status, BulkPayableTotal($BulkOrder), "Bulk order $BulkId (IPN)"
+        );
         applyBulkPaymentStatus($dbh, $BulkId, $mapped, $trackingId);
 
         if ($mapped === 'paid' && (int)($BulkOrder['points_redeemed'] ?? 0) > 0) {
@@ -135,14 +148,14 @@ try {
         ipnDone('processed', ['Bulk_order_id' => $BulkId, 'payment_status' => $mapped]);
     }
 
-    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed, total_amount FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $orderIdFromRef = (int)explode('-', $merchantRef)[0];
         if ($orderIdFromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed, total_amount FROM orders WHERE orderid = ?");
             $stmt->execute([$orderIdFromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -160,6 +173,10 @@ try {
     if (strcasecmp((string)$order['payment_status'], 'paid') === 0) {
         ipnDone('already paid', ['order_id' => $orderId]);
     }
+
+    $mapped = $pesapal->mapStatusForOrder(
+        $status, (float)$order['total_amount'], "order $orderId (IPN)"
+    );
 
     if ($mapped === 'paid') {
         $stmt = $dbh->prepare("

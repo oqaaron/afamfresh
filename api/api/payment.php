@@ -447,7 +447,9 @@ switch ($action) {
                      502, 'VERIFY_UNAVAILABLE');
             }
 
-            $mapped = $pesapal->mapStatus($status);
+            $mapped = $pesapal->mapStatusForOrder(
+                $status, BulkPayableTotal($order), "Bulk order $orderId"
+            );
             applyBulkPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
             if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0) {
@@ -551,7 +553,9 @@ switch ($action) {
                  502, 'VERIFY_UNAVAILABLE');
         }
 
-        $mapped = $pesapal->mapStatus($status);
+        $mapped = $pesapal->mapStatusForOrder(
+            $status, (float)$order['total_amount'], "order $orderId"
+        );
         applyPaymentStatus($dbh, $orderId, $mapped, $trackingId);
 
         if ($mapped === 'paid' && (int)($order['points_redeemed'] ?? 0) > 0) {

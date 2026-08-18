@@ -318,6 +318,80 @@ class PesapalClient
         return 'pending';
     }
 
+    /**
+     * Does the money Pesapal reports actually match what the order costs?
+     *
+     * Returns null when there is no objection, or a human-readable reason when
+     * there is one.
+     *
+     * Deliberately fails OPEN on a missing or unusable amount. Pesapal is not
+     * contractually obliged to return this field on every channel, and refusing
+     * to settle whenever it is absent would strand real payments -- customers
+     * charged, orders never confirmed. The job here is to catch a figure that
+     * is present and wrong, not to insist one exists.
+     */
+    public function amountObjection(array $status, float $expected): ?string
+    {
+        if (!isset($status['amount']) || !is_numeric($status['amount'])) {
+            return null;
+        }
+
+        $paid = round((float)$status['amount'], 2);
+        $want = round($expected, 2);
+
+        if ($paid <= 0 || $want <= 0) {
+            return null;
+        }
+
+        // Tolerance, not equality: the amount makes a float round-trip through
+        // JSON on the way out and back, and an exact === would occasionally
+        // reject a correct payment for a rounding artefact.
+        if (abs($paid - $want) > 0.01) {
+            return sprintf('amount mismatch — Pesapal reports %.2f, order total is %.2f', $paid, $want);
+        }
+
+        $expectedCurrency = defined('CURRENCY') ? CURRENCY : 'UGX';
+        $currency = strtoupper(trim((string)($status['currency'] ?? '')));
+        if ($currency !== '' && $currency !== $expectedCurrency) {
+            return sprintf('currency mismatch — Pesapal reports %s, expected %s', $currency, $expectedCurrency);
+        }
+
+        return null;
+    }
+
+    /**
+     * mapStatus(), plus the question mapStatus cannot answer: was the right
+     * amount paid?
+     *
+     * mapStatus() reads only status_code/payment_status_description, so an
+     * order settled for a fraction of its total still came back 'paid' and was
+     * written to the database as paid in full. Nothing compared the figure in
+     * the very same response against what the order actually costs.
+     *
+     * On an objection this returns 'pending' rather than 'failed'. 'pending' is
+     * the one value every caller already treats as "leave the row alone": the
+     * order does not auto-complete, and the customer is not told the payment
+     * failed -- which would invite them to pay a second time for something that
+     * may well have gone through. It lands in the log for a human instead.
+     *
+     * Anything that settles an order must call this, not mapStatus().
+     */
+    public function mapStatusForOrder(array $status, float $expected, string $context): string
+    {
+        $mapped = $this->mapStatus($status);
+        if ($mapped !== 'paid') {
+            return $mapped;
+        }
+
+        $objection = $this->amountObjection($status, $expected);
+        if ($objection === null) {
+            return 'paid';
+        }
+
+        error_log("Pesapal settlement REFUSED for $context: $objection. Needs manual review.");
+        return 'pending';
+    }
+
     // ------------------------------------------------------------------
     // Refunds
     // ------------------------------------------------------------------

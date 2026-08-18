@@ -75,6 +75,13 @@ if ($trackingId === '') {
 try {
     $pesapal = new PesapalClient();
     $status  = $pesapal->getTransactionStatus($trackingId);
+    // Display-only, and only until the order is loaded. This value decides
+    // what the page at the bottom of this file says; it must never be what
+    // settles an order, because it has not been checked against any amount.
+    // Once the order row is in hand it is replaced by mapStatusForOrder(),
+    // which does check. The two paths that leave it unreplaced -- no matching
+    // order, and a DB error -- write nothing at all, so an unverified value
+    // there costs nothing beyond the wording shown to the customer.
     $mapped  = $pesapal->mapStatus($status);
 } catch (Throwable $e) {
     error_log("Pesapal callback status lookup failed for $trackingId: " . $e->getMessage());
@@ -87,14 +94,14 @@ try {
 
 $orderId = null;
 try {
-    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE pesapal_tracking_id = ?");
+    $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed, total_amount FROM orders WHERE pesapal_tracking_id = ?");
     $stmt->execute([$trackingId]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order && $merchantRef !== '') {
         $fromRef = (int)explode('-', $merchantRef)[0];
         if ($fromRef > 0) {
-            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed FROM orders WHERE orderid = ?");
+            $stmt = $dbh->prepare("SELECT orderid, payment_status, user_id, points_redeemed, total_amount FROM orders WHERE orderid = ?");
             $stmt->execute([$fromRef]);
             $order = $stmt->fetch(PDO::FETCH_ASSOC);
         }
@@ -103,6 +110,10 @@ try {
     if ($order) {
         $orderId = (int)$order['orderid'];
         $alreadyPaid = strcasecmp((string)$order['payment_status'], 'paid') === 0;
+
+        $mapped = $pesapal->mapStatusForOrder(
+            $status, (float)$order['total_amount'], "order $orderId (callback)"
+        );
 
         // Idempotent, same rule as the IPN handler.
         if (!$alreadyPaid) {
