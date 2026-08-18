@@ -1,24 +1,41 @@
-version: '3.8'
+# LOCAL DEVELOPMENT ONLY. This is not a deploy path and must never become one:
+# production builds the Dockerfile directly and is described by render.yaml,
+# against a managed database reached over TLS (DB_SSL_CA).
+#
+# What used to be here ran MySQL with a blank root password and published 3306
+# on every interface, which is an unauthenticated database to anyone who can
+# reach the host -- a coffee-shop network, a LAN, a misconfigured firewall.
+# Both halves are fixed below: a non-empty password, and ports bound to the
+# loopback address so nothing off this machine can connect either way.
 services:
   web:
     build: .
     ports:
-      - "8080:80"
+      # 127.0.0.1: reachable from this machine, not from the network.
+      - "127.0.0.1:8080:80"
     environment:
       - DB_HOST=db
       - DB_NAME=kitchen
       - DB_USER=root
-      - DB_PASSWORD=
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD:-afamfresh-local-dev}
     depends_on:
       - db
 
   db:
+    # NOTE: mysql:5.7 reached end of life in October 2023 and no longer gets
+    # security patches. Left pinned because changing engine version is a local
+    # -environment decision with its own compatibility questions, not a
+    # security fix to slip into an unrelated change -- but it should be moved
+    # to 8.0 when someone has time to confirm the schema loads cleanly.
     image: mysql:5.7
     environment:
-      MYSQL_ROOT_PASSWORD:
+      # Overridable, but never blank. The old value was empty, which the mysql
+      # image only accepts alongside MYSQL_ALLOW_EMPTY_PASSWORD -- so this
+      # compose file could not actually have started as written.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-afamfresh-local-dev}
       MYSQL_DATABASE: kitchen
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - db_data:/var/lib/mysql
 
