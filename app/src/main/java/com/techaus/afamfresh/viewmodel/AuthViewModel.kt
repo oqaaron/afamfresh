@@ -219,6 +219,44 @@ class AuthViewModel(
         }
     }
 
+    fun requestMobileSignupOtp(mobile: String, role: String = BuildConfig.APP_ROLE, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
+        _isLoading.value = true
+        _error.value = null
+        authRepository.requestMobileSignupOtp(mobile, role) { success, message ->
+            _isLoading.value = false
+            if (!success) _error.value = message
+            onResult(success, message)
+        }
+    }
+
+    fun verifyMobileSignupOtp(mobile: String, otp: String, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
+        _isLoading.value = true
+        _error.value = null
+        authRepository.verifyMobileSignupOtp(mobile, otp) { success, message ->
+            _isLoading.value = false
+            if (!success) _error.value = message
+            onResult(success, message)
+        }
+    }
+
+    fun registerWithMobileOtp(fname: String, lname: String, mobile: String, otp: String, password: String, role: String = BuildConfig.APP_ROLE) {
+        _isLoading.value = true
+        _error.value = null
+        _registerSuccess.value = false
+
+        val fullName = "$fname $lname"
+        authRepository.registerMobile(fullName, mobile, otp, password, role) { response, error ->
+            _isLoading.value = false
+            if (response?.success == true) {
+                _registerSuccess.value = true
+                response.user?.let { _user.value = it }
+                login(response.user?.email ?: mobile, password) { _ -> }
+            } else {
+                _error.value = error?.userMessage ?: response?.error ?: "Registration failed"
+            }
+        }
+    }
+
     // ===== LOGOUT =====
     fun logout() {
         authRepository.logout { success ->

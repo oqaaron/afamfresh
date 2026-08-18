@@ -27,6 +27,24 @@ interface ApiService {
         @Body body: RegisterRequest
     ): Call<RegisterResponse>
 
+    @POST("auth.php")
+    fun requestMobileSignupOtp(
+        @Query("action") action: String = "request_mobile_signup_otp",
+        @Body body: MobileSignupOtpRequest
+    ): Call<BaseResponse>
+
+    @POST("auth.php")
+    fun verifyMobileSignupOtp(
+        @Query("action") action: String = "verify_mobile_signup_otp",
+        @Body body: MobileSignupOtpVerifyRequest
+    ): Call<BaseResponse>
+
+    @POST("auth.php")
+    fun registerMobile(
+        @Query("action") action: String = "register_mobile",
+        @Body body: MobileRegisterRequest
+    ): Call<RegisterResponse>
+
     @GET("auth.php")
     fun getCurrentUser(
         @Query("action") action: String = "me"

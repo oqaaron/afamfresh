@@ -34,8 +34,11 @@ fun RegisterScreen(
     var lname by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var otpCode by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var usePhoneOtp by remember { mutableStateOf(false) }
+    var otpVerified by remember { mutableStateOf(false) }
     // The account type comes from the build, not the person registering.
     val role = BuildConfig.APP_ROLE
     var localError by remember { mutableStateOf<String?>(null) }
@@ -104,6 +107,73 @@ fun RegisterScreen(
                 shape = RoundedCornerShape(12.dp), singleLine = true
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Use mobile OTP sign-up", color = InkMuted, fontSize = 14.sp)
+                Switch(checked = usePhoneOtp, onCheckedChange = { usePhoneOtp = it; otpVerified = false })
+            }
+
+            if (usePhoneOtp) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            localError = null
+                            if (phone.isBlank()) {
+                                localError = "Enter a mobile number first"
+                            } else {
+                                authViewModel.requestMobileSignupOtp(phone) { success, message ->
+                                    if (success) {
+                                        otpVerified = false
+                                        localError = "Verification code sent. Enter the SMS OTP below."
+                                    } else {
+                                        localError = message ?: "Could not send the OTP"
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Send OTP")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            localError = null
+                            if (otpCode.isBlank()) {
+                                localError = "Enter the 6-digit OTP"
+                            } else {
+                                authViewModel.verifyMobileSignupOtp(phone, otpCode) { success, message ->
+                                    if (success) {
+                                        otpVerified = true
+                                        localError = "Mobile number verified"
+                                    } else {
+                                        otpVerified = false
+                                        localError = message ?: "OTP verification failed"
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Verify OTP")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = otpCode, onValueChange = { otpCode = it.filter { ch -> ch.isDigit() }.take(6) },
+                    label = { Text("OTP code") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp), singleLine = true
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = password, onValueChange = { password = it },
@@ -138,9 +208,14 @@ fun RegisterScreen(
                     localError = null
                     when {
                         fname.isBlank() || lname.isBlank() -> localError = "Please enter your full name"
-                        email.isBlank() -> localError = "Please enter your email"
                         password.length < 6 -> localError = "Password must be at least 6 characters"
                         password != confirmPassword -> localError = "Passwords do not match"
+                        usePhoneOtp -> {
+                            if (phone.isBlank()) localError = "Please enter your mobile number"
+                            else if (!otpVerified) localError = "Please verify your mobile number with the OTP"
+                            else authViewModel.registerWithMobileOtp(fname, lname, phone, otpCode, password, role)
+                        }
+                        email.isBlank() -> localError = "Please enter your email"
                         else -> onRegister(fname, lname, email, password, role, phone)
                     }
                 },

@@ -143,6 +143,24 @@ data class RegisterRequest(
     @SerializedName("role") val role: String = BuildConfig.APP_ROLE
 )
 
+data class MobileSignupOtpRequest(
+    @SerializedName("mobile") val mobile: String,
+    @SerializedName("role") val role: String = BuildConfig.APP_ROLE
+)
+
+data class MobileSignupOtpVerifyRequest(
+    @SerializedName("mobile") val mobile: String,
+    @SerializedName("otp") val otp: String
+)
+
+data class MobileRegisterRequest(
+    @SerializedName("name") val name: String,
+    @SerializedName("mobile") val mobile: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("otp") val otp: String,
+    @SerializedName("role") val role: String = BuildConfig.APP_ROLE
+)
+
 data class RegisterResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("user") val user: User? = null,

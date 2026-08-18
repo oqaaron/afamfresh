@@ -12,6 +12,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
+import com.techaus.afamfresh.BuildConfig
 import com.techaus.afamfresh.R
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.api.ApiService
@@ -444,6 +445,43 @@ class AuthRepository(
                     // The server's wording matters most here — "that email is
                     // already registered" is far more useful than a generic
                     // failure, and only the backend knows it.
+                    else -> callback(null, ApiError.reported(body?.error))
+                }
+            }
+    }
+
+    fun requestMobileSignupOtp(mobile: String, role: String = BuildConfig.APP_ROLE, callback: (Boolean, String?) -> Unit) {
+        apiService.requestMobileSignupOtp(body = MobileSignupOtpRequest(mobile = mobile, role = role))
+            .enqueueApi<BaseResponse>("AuthRepo", "requestMobileSignupOtp") { body, error ->
+                when {
+                    error != null -> callback(false, error.userMessage)
+                    body?.success == true -> callback(true, null)
+                    else -> callback(false, body?.error ?: "Could not send the verification code.")
+                }
+            }
+    }
+
+    fun verifyMobileSignupOtp(mobile: String, otp: String, callback: (Boolean, String?) -> Unit) {
+        apiService.verifyMobileSignupOtp(body = MobileSignupOtpVerifyRequest(mobile = mobile, otp = otp))
+            .enqueueApi<BaseResponse>("AuthRepo", "verifyMobileSignupOtp") { body, error ->
+                when {
+                    error != null -> callback(false, error.userMessage)
+                    body?.success == true -> callback(true, null)
+                    else -> callback(false, body?.error ?: "OTP verification failed.")
+                }
+            }
+    }
+
+    fun registerMobile(name: String, mobile: String, otp: String, password: String, role: String = BuildConfig.APP_ROLE, callback: (RegisterResponse?, ApiError?) -> Unit) {
+        apiService.registerMobile(body = MobileRegisterRequest(name = name, mobile = mobile, otp = otp, password = password, role = role))
+            .enqueueApi<RegisterResponse>("AuthRepo", "registerMobile") { body, error ->
+                when {
+                    error != null -> callback(null, error)
+                    body?.success == true && body.user != null -> {
+                        saveToken(body.token ?: "")
+                        saveUser(body.user)
+                        callback(body, null)
+                    }
                     else -> callback(null, ApiError.reported(body?.error))
                 }
             }

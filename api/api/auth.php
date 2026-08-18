@@ -23,27 +23,266 @@ function generateToken() {
     return bin2hex(random_bytes(32));
 }
 
+function normaliseMobileForAuth($mobile) {
+    $digits = preg_replace('/\D+/', '', (string)$mobile);
+    if ($digits === '') {
+        return null;
+    }
+
+    if (strlen($digits) === 10 && $digits[0] === '0') {
+        return '256' . substr($digits, 1);
+    }
+    if (strlen($digits) === 9 && $digits[0] === '7') {
+        return '256' . $digits;
+    }
+    if (strlen($digits) === 12 && str_starts_with($digits, '256')) {
+        return $digits;
+    }
+
+    return null;
+}
+
+function generateOtpCode() {
+    return str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+}
+
+require_once __DIR__ . '/../includes/brevo-sms.php';
+
+// ============================================================
+// ACTION: REQUEST MOBILE SIGN-UP OTP
+// ============================================================
+if ($action == 'request_mobile_signup_otp') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mobile = trim((string)($input['mobile'] ?? $_POST['mobile'] ?? ''));
+    $role = trim((string)($input['role'] ?? $input['app_role'] ?? $_POST['role'] ?? $_POST['app_role'] ?? 'user'));
+
+    if ($mobile === '') {
+        echo json_encode(['success' => false, 'error' => 'Mobile number is required']);
+        exit;
+    }
+
+    $normalisedMobile = normaliseMobileForAuth($mobile);
+    if ($normalisedMobile === null) {
+        echo json_encode(['success' => false, 'error' => 'That mobile number is not valid']);
+        exit;
+    }
+
+    $appType = accountTypeForAppRole($role) ?? 'customer';
+    if (rateLimited($dbh, 'mobile_otp:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)) {
+        failRateLimited();
+    }
+
+    try {
+        $existing = $dbh->prepare('SELECT id FROM users WHERE mobile = ? LIMIT 1');
+        $existing->execute([$normalisedMobile]);
+        if ($existing->fetch()) {
+            echo json_encode(['success' => false, 'error' => 'This mobile number is already registered']);
+            exit;
+        }
+
+        $otp = generateOtpCode();
+        $expiry = date('Y-m-d H:i:s', time() + 600);
+        $otpHash = hash('sha256', $otp);
+
+        $stmt = $dbh->prepare(
+            'INSERT INTO user_otp_verifications (mobile, purpose, otp_hash, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE otp_hash = VALUES(otp_hash), purpose = VALUES(purpose), expires_at = VALUES(expires_at), verified_at = NULL, attempt_count = 0, updated_at = NOW()'
+        );
+        $stmt->execute([$normalisedMobile, 'signup', $otpHash, $expiry]);
+
+        $smsResult = sendSmsWithBrevo($normalisedMobile, 'Your AfamFresh verification code is ' . $otp . '. It expires in 10 minutes.');
+        if (!$smsResult['success']) {
+            error_log('Mobile sign-up OTP SMS failed for ' . $normalisedMobile . ': ' . ($smsResult['error'] ?? 'unknown'));
+            echo json_encode(['success' => false, 'error' => 'Unable to send OTP SMS. Please try again.']);
+            exit;
+        }
+
+        echo json_encode(['success' => true, 'message' => 'Verification code sent to your phone.']);
+    } catch (PDOException $e) {
+        error_log('Mobile OTP request DB error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: VERIFY MOBILE SIGN-UP OTP
+// ============================================================
+if ($action == 'verify_mobile_signup_otp') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mobile = trim((string)($input['mobile'] ?? $_POST['mobile'] ?? ''));
+    $otp = trim((string)($input['otp'] ?? $_POST['otp'] ?? ''));
+
+    if ($mobile === '' || $otp === '') {
+        echo json_encode(['success' => false, 'error' => 'Mobile number and OTP are required']);
+        exit;
+    }
+
+    $normalisedMobile = normaliseMobileForAuth($mobile);
+    if ($normalisedMobile === null) {
+        echo json_encode(['success' => false, 'error' => 'That mobile number is not valid']);
+        exit;
+    }
+
+    try {
+        $stmt = $dbh->prepare(
+            'SELECT * FROM user_otp_verifications WHERE mobile = ? AND purpose = ? ORDER BY created_at DESC LIMIT 1'
+        );
+        $stmt->execute([$normalisedMobile, 'signup']);
+        $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$record) {
+            echo json_encode(['success' => false, 'error' => 'No verification code was requested for this number']);
+            exit;
+        }
+
+        if ($record['verified_at'] !== null) {
+            echo json_encode(['success' => true, 'verified' => true, 'message' => 'This number is already verified.']);
+            exit;
+        }
+
+        if (time() > strtotime($record['expires_at'])) {
+            echo json_encode(['success' => false, 'error' => 'The verification code has expired. Please request a new one.']);
+            exit;
+        }
+
+        $attempts = (int)($record['attempt_count'] ?? 0);
+        if ($attempts >= 5) {
+            echo json_encode(['success' => false, 'error' => 'Too many failed attempts. Please request a new OTP.']);
+            exit;
+        }
+
+        if (hash('sha256', $otp) !== $record['otp_hash']) {
+            $dbh->prepare('UPDATE user_otp_verifications SET attempt_count = attempt_count + 1, updated_at = NOW() WHERE id = ?')->execute([$record['id']]);
+            echo json_encode(['success' => false, 'error' => 'The OTP is incorrect.']);
+            exit;
+        }
+
+        $dbh->prepare('UPDATE user_otp_verifications SET verified_at = NOW(), attempt_count = 0, updated_at = NOW() WHERE id = ?')->execute([$record['id']]);
+        echo json_encode(['success' => true, 'verified' => true, 'message' => 'Mobile number verified successfully.']);
+    } catch (PDOException $e) {
+        error_log('Mobile OTP verification DB error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: REGISTER WITH MOBILE + OTP
+// ============================================================
+if ($action == 'register_mobile') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $name = trim((string)($input['name'] ?? ''));
+    $mobile = trim((string)($input['mobile'] ?? ''));
+    $otp = trim((string)($input['otp'] ?? ''));
+    $password = (string)($input['password'] ?? '');
+    $role = trim((string)($input['role'] ?? $_POST['role'] ?? 'user'));
+
+    if ($name === '' || $mobile === '' || $password === '' || $otp === '') {
+        echo json_encode(['success' => false, 'error' => 'Name, mobile number, password and OTP are required']);
+        exit;
+    }
+
+    $normalisedMobile = normaliseMobileForAuth($mobile);
+    if ($normalisedMobile === null) {
+        echo json_encode(['success' => false, 'error' => 'That mobile number is not valid']);
+        exit;
+    }
+
+    if (strlen($password) < 6) {
+        echo json_encode(['success' => false, 'error' => 'Password must be at least 6 characters']);
+        exit;
+    }
+
+    try {
+        $verification = $dbh->prepare(
+            'SELECT * FROM user_otp_verifications WHERE mobile = ? AND purpose = ? AND verified_at IS NOT NULL ORDER BY created_at DESC LIMIT 1'
+        );
+        $verification->execute([$normalisedMobile, 'signup']);
+        $otpRecord = $verification->fetch(PDO::FETCH_ASSOC);
+
+        if (!$otpRecord || time() > strtotime($otpRecord['expires_at'])) {
+            echo json_encode(['success' => false, 'error' => 'Please verify your mobile number before creating the account']);
+            exit;
+        }
+
+        $existingUser = $dbh->prepare('SELECT id FROM users WHERE mobile = ? LIMIT 1');
+        $existingUser->execute([$normalisedMobile]);
+        if ($existingUser->fetch()) {
+            echo json_encode(['success' => false, 'error' => 'This mobile number is already registered']);
+            exit;
+        }
+
+        $nameParts = preg_split('/\s+/', trim($name), 2);
+        $fname = $nameParts[0] ?? '';
+        $lname = $nameParts[1] ?? '';
+        $accountType = accountTypeForAppRole($role) ?? 'customer';
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+        $stmt = $dbh->prepare(
+            'INSERT INTO users (fname, lname, email, password, mobile, area, address, account_type, `current_role`) VALUES (?, ?, NULL, ?, ?, "Not specified", "Not specified", ?, ?)' 
+        );
+        $result = $stmt->execute([$fname, $lname, $hashedPassword, $normalisedMobile, $accountType, $accountType === 'customer' ? 'user' : $accountType]);
+
+        if (!$result) {
+            echo json_encode(['success' => false, 'error' => 'Registration failed']);
+            exit;
+        }
+
+        $userId = $dbh->lastInsertId();
+        if ($accountType === 'customer') {
+            $dbh->prepare(
+                "INSERT INTO user_roles (user_id, role, status) VALUES (?, 'user', 'active') ON DUPLICATE KEY UPDATE status = 'active'"
+            )->execute([$userId]);
+        }
+
+        require_once __DIR__ . '/../includes/notifications.php';
+        notifyWelcome($userId, $fname, $accountType);
+
+        $token = generateToken();
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['user_name'] = $name;
+        $_SESSION['user_email'] = '';
+        $_SESSION['auth_token'] = $token;
+
+        echo json_encode([
+            'success' => true,
+            'token' => $token,
+            'message' => 'Registration successful',
+            'user' => buildUserPayload($dbh, $userId),
+        ]);
+    } catch (PDOException $e) {
+        error_log('Mobile registration DB error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error occurred']);
+    }
+    exit;
+}
+
 // ============================================================
 // ACTION: LOGIN
 // ============================================================
 if ($action == 'login') {
     $input = json_decode(file_get_contents('php://input'), true);
-    $email = trim($input['email'] ?? '');
-    $password = $input['password'] ?? '';
+    $email = trim((string)($input['email'] ?? ''));
+    $mobile = trim((string)($input['mobile'] ?? ''));
+    $password = (string)($input['password'] ?? '');
     // Which app is asking. Absent for installs that predate the split, which
     // are all Customer installs — hence the default.
     $appType = accountTypeForAppRole($input['app_role'] ?? 'customer') ?? 'customer';
+    $loginKey = $email !== '' ? $email : $mobile;
+    $normalisedMobile = $mobile !== '' ? normaliseMobileForAuth($mobile) : null;
 
-    // Bucketed by IP AND by the submitted email, so both "one IP hammering
+    // Bucketed by IP AND by the submitted credential, so both "one IP hammering
     // many accounts" and "many IPs hammering one account" are caught.
     if (rateLimited($dbh, 'login:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
-        || ($email !== '' && rateLimited($dbh, 'login:id:' . strtolower($email), 5, 300))) {
+        || ($loginKey !== '' && rateLimited($dbh, 'login:id:' . strtolower($loginKey), 5, 300))) {
         failRateLimited();
     }
 
     try {
-        $stmt = $dbh->prepare("SELECT id, fname, lname, email, mobile, password, account_type FROM users WHERE email = ?");
-        $stmt->execute([$email]);
+        $stmt = $dbh->prepare("SELECT id, fname, lname, email, mobile, password, account_type FROM users WHERE email = ? OR mobile = ?");
+        $stmt->execute([$email, $normalisedMobile ?? $mobile]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($password, $user['password'])) {
