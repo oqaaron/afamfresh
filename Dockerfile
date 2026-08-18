@@ -13,6 +13,25 @@ RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
 
 RUN a2enmod rewrite
 
+# Upload ceilings, set here rather than left at the interpreter's defaults.
+#
+# saveUploadedImage() rejects anything over 5MB, but that check runs only after
+# PHP has already read and spooled the whole request -- so the app-level limit
+# bounds what gets stored, not what a caller can make the server chew through.
+# These are the limits that apply before any of this application's code runs.
+#
+# 8M against a 5MB app limit leaves room for multipart overhead without
+# inviting anything the app would refuse anyway. memory_limit stays well above
+# both because GD decodes an image into memory: a 5MB JPEG is far more than
+# 5MB once it is a bitmap, and an OOM here is a 500, not a rejection.
+RUN { \
+      echo 'upload_max_filesize = 8M'; \
+      echo 'post_max_size = 10M'; \
+      echo 'memory_limit = 256M'; \
+      echo 'max_file_uploads = 10'; \
+      echo 'expose_php = Off'; \
+    } > /usr/local/etc/php/conf.d/afamfresh-uploads.ini
+
 # .htaccess carries the rules that deny env.yaml, *.sql, source files and
 # dotfiles. Without AllowOverride they are silently ignored and every one of
 # those becomes downloadable — the same trap the file itself warns about.
