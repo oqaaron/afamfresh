@@ -9,7 +9,16 @@ if ($action == 'update') {
     $input = json_decode(file_get_contents('php://input'), true);
     $lat = floatval($input['lat'] ?? 0);
     $lng = floatval($input['lng'] ?? 0);
-    
+
+    // Same bounds rider.php's ?action=location already enforces. This endpoint
+    // writes to the same riders.current_lat/lng columns that one does, so
+    // without the check the fuller endpoint's validation could be sidestepped
+    // by posting here instead.
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        echo json_encode(['success' => false, 'error' => 'Invalid coordinates']);
+        exit;
+    }
+
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
         $stmt = $dbh->prepare("UPDATE users SET last_lat = ?, last_lng = ?, last_location_update = NOW() WHERE id = ?");
