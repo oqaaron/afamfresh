@@ -34,8 +34,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // 2. If not, check MD5 (legacy)
-        if (!$valid && md5($password) === $admin['Password']) {
+        //
+        // hash_equals, not ===, so the comparison does not leak how much of the
+        // digest matched through its own running time.
+        if (!$valid && hash_equals((string)$admin['Password'], md5($password))) {
             $valid = true;
+            // Logged so this branch's remaining lifetime is observable. It is a
+            // migration path, and a migration path nobody can see the end of is
+            // one that stays open forever: when this line stops appearing, the
+            // whole MD5 branch can be deleted.
+            error_log("admin login: MD5 password upgraded to bcrypt for admin id {$admin['id']}");
             // Upgraded on the next successful login, not removed outright:
             // this only fires for a row still in the old format, so every
             // legacy admin silently moves to password_hash() the first time
@@ -87,7 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?= csrfField() ?>
             <div class="mb-4">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
-                <input type="text" name="username" value="admin" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600" required>
+                <!-- No value="admin". Pre-filling it told anyone who loaded the
+                     login page the name of an account that almost certainly
+                     exists, turning a guess-both-halves problem into a
+                     guess-the-password one. -->
+                <input type="text" name="username" placeholder="Username" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600" required>
             </div>
             <div class="mb-6">
                 <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
