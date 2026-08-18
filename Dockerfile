@@ -1,7 +1,12 @@
 FROM php:8.2-apache
 
+# ca-certificates is listed explicitly rather than left to arrive as a
+# transitive dependency of curl: the outbound HTTPS calls in nominatim.php and
+# auth.php verify peer certificates, and that verification needs a system trust
+# store to resolve against. Dropping curl from this line should not silently
+# disarm it.
 RUN apt-get update && apt-get install -y \
-    git curl libpng-dev libonig-dev libxml2-dev zip unzip \
+    git curl ca-certificates libpng-dev libonig-dev libxml2-dev zip unzip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
