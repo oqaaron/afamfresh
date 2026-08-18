@@ -1,8 +1,10 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
+// No display_errors here. admin/includes/config.php sets it from APP_ENV a few
+// lines below, and forcing it on first meant anything that went wrong before
+// that require -- in session_start(), or while env.php was loading -- printed
+// its file paths into the response of an endpoint anyone can reach without
+// logging in. profile.php, rider.php and roles.php each carry a note saying
+// they deliberately leave this alone; this file was the last one that didn't.
 session_start();
 require_once '../admin/includes/config.php';
 // getUserRolesData() and buildUserPayload() live here so profile.php can use
