@@ -341,7 +341,7 @@ DROP TABLE IF EXISTS `notification_queue`;
 CREATE TABLE `notification_queue` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `notification_id` int(11) NOT NULL,
-  `channel` enum('email','push','both') NOT NULL,
+  `channel` enum('email','push','both','sms') NOT NULL,
   `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`payload`)),
   `status` enum('pending','processing','sent','failed') DEFAULT 'pending',
   `retries` tinyint(4) DEFAULT 0,
@@ -898,6 +898,8 @@ CREATE TABLE `user_notifications` (
   `email_error` text DEFAULT NULL,
   `push_sent_at` datetime DEFAULT NULL,
   `push_error` text DEFAULT NULL,
+  `sms_sent_at` datetime DEFAULT NULL,
+  `sms_error` text DEFAULT NULL,
   `retry_count` tinyint(4) DEFAULT 0,
   `max_retries` tinyint(4) DEFAULT 3,
   `last_attempt_at` datetime DEFAULT NULL,

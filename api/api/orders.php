@@ -525,39 +525,25 @@ switch ($action) {
 
             $dbh->commit();
 
-            // After the commit, never inside the transaction: an SMS cannot be
-            // rolled back, and a provider timeout would hold rows locked on the
-            // way to failing anyway.
-            //
-            // Failure is logged, not surfaced. The order exists and is paid
-            // for; telling the customer it failed because a text message did
-            // would be a lie with consequences.
+            // After the commit, never inside the transaction: a provider call
+            // cannot be rolled back, and a timeout would hold rows locked while
+            // the order is already real. Route the customer message through the
+            // queue so SMS + push are processed consistently by the same
+            // notification worker and are auditable in one place.
             require_once __DIR__ . '/../includes/order_number.php';
             $orderNumber = formatOrderNumber($dbh, $orderId);
 
-            try {
-                require_once __DIR__ . '/../includes/brevo-sms.php';
-                sendSmsWithBrevo(
-                    $mobile,
-                    "AfamFresh: order #{$orderNumber} received. We'll text you again when it's out for delivery."
-                );
-            } catch (Throwable $e) {
-                error_log("Order $orderId placed but the order-placed SMS failed: " . $e->getMessage());
-            }
-
-            // Push alongside the SMS. Bulk orders have had this since they
-            // were built; shop orders only ever got the text.
             try {
                 require_once __DIR__ . '/../includes/notifications.php';
                 addNotification(
                     (int)$user_id,
                     'Order placed',
                     "Your order #{$orderNumber} was received. We'll text you when it's out for delivery.",
-                    'order', null, ['push'],
+                    'order', null, ['push', 'sms'],
                     ['order_id' => (string)$orderId, 'source' => 'order']
                 );
             } catch (Throwable $e) {
-                error_log("Order $orderId placed but the push notification failed: " . $e->getMessage());
+                error_log("Order $orderId placed but the notification queue failed: " . $e->getMessage());
             }
 
             echo json_encode([

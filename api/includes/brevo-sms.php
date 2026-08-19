@@ -57,6 +57,13 @@ function normaliseUgandanMsisdn($phone) {
  * @param string $message body; keep it under 160 characters or it bills as two
  * @return array{success: bool, error: ?string}
  */
+/**
+ * Shared transactional SMS path for all direct sends.
+ *
+ * OTP sends are special: they occur before a user row exists, so they cannot be
+ * queued into user_notifications and must stay a direct send. For all other live
+ * customer messaging, the generic addNotification() path is preferred.
+ */
 function sendSmsWithBrevo($phone, $message) {
     $sender = trim((string)env('BREVO_SMS_SENDER', ''));
     if ($sender === '') {

@@ -80,8 +80,12 @@ foreach ($jobs as $job) {
     $success = false;
     $error = null;
 
+    $emailFailed = false;
+    $pushFailed = false;
     try {
-        // Process based on channel
+        // Process based on channel.
+        // "both" remains the legacy combined-email+push value; "sms" is a
+        // dedicated channel added later and handled separately.
         if ($job['channel'] === 'email' || $job['channel'] === 'both') {
             $emailService = new BrevoEmailService();
             $result = $emailService->send(
@@ -90,10 +94,10 @@ foreach ($jobs as $job) {
                 $payload['htmlContent']
             );
             if ($result['success']) {
-                // Update user_notifications
                 $dbh->prepare("UPDATE user_notifications SET email_sent_at = NOW() WHERE id = ?")
                    ->execute([$job['notification_id']]);
             } else {
+                $emailFailed = true;
                 throw new Exception($result['error'] ?? 'Email delivery failed');
             }
         }
@@ -110,6 +114,7 @@ foreach ($jobs as $job) {
                 $dbh->prepare("UPDATE user_notifications SET push_sent_at = NOW() WHERE id = ?")
                    ->execute([$job['notification_id']]);
             } else {
+                $pushFailed = true;
                 throw new Exception('Push delivery failed');
             }
         }
@@ -146,14 +151,17 @@ foreach ($jobs as $job) {
     ");
     $update->execute([$status, $retries, $nextAttempt, $job['id']]);
 
-    // If failed, log error to the notification record
+    // If failed, log error to the notification record.
+    // "both" is a combined email+push job, so the error must map to the
+    // channel that actually failed rather than always landing in email_error.
     if (!$success && $error) {
-        // Was a two-way choice, so an SMS failure would have been filed under
-        // push_error and looked like a broken device token.
-        $errField = match ($job['channel']) {
-            'email', 'both' => 'email_error',
-            'sms'           => 'sms_error',
-            default         => 'push_error',
+        $errField = match (true) {
+            $job['channel'] === 'email' => 'email_error',
+            $job['channel'] === 'push' => 'push_error',
+            $job['channel'] === 'sms' => 'sms_error',
+            $job['channel'] === 'both' && $emailFailed => 'email_error',
+            $job['channel'] === 'both' && !$emailFailed => 'push_error',
+            default => 'push_error',
         };
         $dbh->prepare("UPDATE user_notifications SET $errField = ? WHERE id = ?")
            ->execute([$error, $job['notification_id']]);

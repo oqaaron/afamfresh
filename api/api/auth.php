@@ -46,6 +46,31 @@ function generateOtpCode() {
     return str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
 }
 
+function pruneExpiredOtpRecords(PDO $dbh, ?string $mobile = null, string $purpose = 'signup'): void {
+    $clauses = ['purpose = :purpose'];
+    $params = [':purpose' => $purpose];
+
+    if ($mobile !== null) {
+        $clauses[] = 'mobile = :mobile';
+        $params[':mobile'] = $mobile;
+    }
+
+    $where = implode(' AND ', $clauses);
+    $sql = "DELETE FROM user_otp_verifications
+             WHERE $where
+               AND (
+                    expires_at < NOW()
+                    OR (verified_at IS NOT NULL AND updated_at < DATE_SUB(NOW(), INTERVAL 7 DAY))
+                    OR (status = 'failed' AND updated_at < DATE_SUB(NOW(), INTERVAL 1 DAY))
+               )";
+
+    $stmt = $dbh->prepare($sql);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->execute();
+}
+
 require_once __DIR__ . '/../includes/brevo-sms.php';
 
 // ============================================================
@@ -80,22 +105,45 @@ if ($action == 'request_mobile_signup_otp') {
             exit;
         }
 
+        pruneExpiredOtpRecords($dbh, $normalisedMobile, 'signup');
+
+        $lastRecord = $dbh->prepare(
+            'SELECT id, last_sent_at, status FROM user_otp_verifications WHERE mobile = ? AND purpose = ? ORDER BY created_at DESC LIMIT 1'
+        );
+        $lastRecord->execute([$normalisedMobile, 'signup']);
+        $previous = $lastRecord->fetch(PDO::FETCH_ASSOC);
+        if ($previous && !empty($previous['last_sent_at']) && strtotime($previous['last_sent_at']) > time() - 60) {
+            echo json_encode(['success' => false, 'error' => 'Please wait 60 seconds before requesting a new verification code.']);
+            exit;
+        }
+
         $otp = generateOtpCode();
         $expiry = date('Y-m-d H:i:s', time() + 600);
         $otpHash = hash('sha256', $otp);
 
         $stmt = $dbh->prepare(
-            'INSERT INTO user_otp_verifications (mobile, purpose, otp_hash, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())
-             ON DUPLICATE KEY UPDATE otp_hash = VALUES(otp_hash), purpose = VALUES(purpose), expires_at = VALUES(expires_at), verified_at = NULL, attempt_count = 0, updated_at = NOW()'
+            'INSERT INTO user_otp_verifications (mobile, purpose, otp_hash, expires_at, status, sent_count, last_sent_at, last_error, provider_response, created_at, updated_at)
+             VALUES (?, ?, ?, ?, "pending", 0, NULL, NULL, NULL, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE otp_hash = VALUES(otp_hash), purpose = VALUES(purpose), expires_at = VALUES(expires_at), verified_at = NULL, attempt_count = 0, status = "pending", sent_count = 0, last_sent_at = NULL, last_error = NULL, provider_response = NULL, updated_at = NOW()'
         );
         $stmt->execute([$normalisedMobile, 'signup', $otpHash, $expiry]);
 
+        // OTP sends are intentionally direct: the user does not exist yet, so
+        // there is no user_notifications row to attach a queued channel to.
         $smsResult = sendSmsWithBrevo($normalisedMobile, 'Your AfamFresh verification code is ' . $otp . '. It expires in 10 minutes.');
         if (!$smsResult['success']) {
-            error_log('Mobile sign-up OTP SMS failed for ' . $normalisedMobile . ': ' . ($smsResult['error'] ?? 'unknown'));
+            $errorText = $smsResult['error'] ?? 'unknown';
+            $dbh->prepare(
+                'UPDATE user_otp_verifications SET status = "failed", last_error = ?, provider_response = ?, updated_at = NOW() WHERE mobile = ? AND purpose = ?'
+            )->execute([$errorText, json_encode($smsResult), $normalisedMobile, 'signup']);
+            error_log('Mobile sign-up OTP SMS failed for ' . $normalisedMobile . ': ' . $errorText);
             echo json_encode(['success' => false, 'error' => 'Unable to send OTP SMS. Please try again.']);
             exit;
         }
+
+        $dbh->prepare(
+            'UPDATE user_otp_verifications SET status = "sent", sent_count = sent_count + 1, last_sent_at = NOW(), last_error = NULL, provider_response = ?, updated_at = NOW() WHERE mobile = ? AND purpose = ?'
+        )->execute([json_encode(['status' => 'success']), $normalisedMobile, 'signup']);
 
         echo json_encode(['success' => true, 'message' => 'Verification code sent to your phone.']);
     } catch (PDOException $e) {
@@ -136,12 +184,18 @@ if ($action == 'verify_mobile_signup_otp') {
             exit;
         }
 
+        if ($record['status'] === 'failed') {
+            echo json_encode(['success' => false, 'error' => 'The verification SMS failed to send. Please request a new code.']);
+            exit;
+        }
+
         if ($record['verified_at'] !== null) {
             echo json_encode(['success' => true, 'verified' => true, 'message' => 'This number is already verified.']);
             exit;
         }
 
         if (time() > strtotime($record['expires_at'])) {
+            $dbh->prepare('UPDATE user_otp_verifications SET status = "expired", updated_at = NOW() WHERE id = ?')->execute([$record['id']]);
             echo json_encode(['success' => false, 'error' => 'The verification code has expired. Please request a new one.']);
             exit;
         }
@@ -158,7 +212,7 @@ if ($action == 'verify_mobile_signup_otp') {
             exit;
         }
 
-        $dbh->prepare('UPDATE user_otp_verifications SET verified_at = NOW(), attempt_count = 0, updated_at = NOW() WHERE id = ?')->execute([$record['id']]);
+        $dbh->prepare('UPDATE user_otp_verifications SET verified_at = NOW(), status = "verified", attempt_count = 0, updated_at = NOW() WHERE id = ?')->execute([$record['id']]);
         echo json_encode(['success' => true, 'verified' => true, 'message' => 'Mobile number verified successfully.']);
     } catch (PDOException $e) {
         error_log('Mobile OTP verification DB error: ' . $e->getMessage());
@@ -196,7 +250,7 @@ if ($action == 'register_mobile') {
 
     try {
         $verification = $dbh->prepare(
-            'SELECT * FROM user_otp_verifications WHERE mobile = ? AND purpose = ? AND verified_at IS NOT NULL ORDER BY created_at DESC LIMIT 1'
+            'SELECT * FROM user_otp_verifications WHERE mobile = ? AND purpose = ? AND verified_at IS NOT NULL AND status = "verified" ORDER BY created_at DESC LIMIT 1'
         );
         $verification->execute([$normalisedMobile, 'signup']);
         $otpRecord = $verification->fetch(PDO::FETCH_ASSOC);
@@ -235,6 +289,10 @@ if ($action == 'register_mobile') {
                 "INSERT INTO user_roles (user_id, role, status) VALUES (?, 'user', 'active') ON DUPLICATE KEY UPDATE status = 'active'"
             )->execute([$userId]);
         }
+
+        $dbh->prepare(
+            'UPDATE user_otp_verifications SET status = "used", verified_at = COALESCE(verified_at, NOW()), updated_at = NOW() WHERE mobile = ? AND purpose = ?'
+        )->execute([$normalisedMobile, 'signup']);
 
         require_once __DIR__ . '/../includes/notifications.php';
         notifyWelcome($userId, $fname, $accountType);

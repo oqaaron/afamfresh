@@ -525,50 +525,32 @@ if ($action === 'update_status') {
     }
 
     // The second of the two moments a customer is texted: their order has left
-    // for their address. 'picked_up' is that transition -- $STATUS_MAP turns it
-    // into the "Out for Delivery" label.
-    //
-    // Outside the transaction and swallowed on failure, for the same reason as
-    // order placement: the delivery genuinely progressed, and failing the
-    // rider's status update because a text did not send would strand the order.
+    // for their address. This goes through the centralized notification queue so
+    // the same auditable path handles push + SMS, instead of a direct call that
+    // bypasses retries and reporting.
     if ($next === 'picked_up') {
         try {
-            require_once __DIR__ . '/../includes/brevo-sms.php';
-            // Via loadDeliverable so a Bulk customer is texted too. Reading
-            // `orders` directly here would have found nothing for a Bulk
-            // job and silently sent no message.
-            $row = loadDeliverable($dbh, $source, $orderId);
-            if ($row && !empty($row['mobile'])) {
-                sendSmsWithBrevo(
-                    $row['mobile'],
-                    "AfamFresh: order #{$orderId} is out for delivery and on its way to you."
-                );
-            }
-        } catch (Throwable $e) {
-            error_log("Order $orderId marked out for delivery but the SMS failed: " . $e->getMessage());
-        }
-    }
-
-    // Push alongside the text above, for shop orders. loadDeliverable()'s
-    // 'order' branch doesn't carry user_id (it never needed to before this),
-    // so this looks it up directly rather than widening that function for
-    // one caller.
-    if ($next === 'picked_up' && $source === 'order') {
-        try {
             require_once __DIR__ . '/../includes/notifications.php';
-            $ownerId = $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?");
-            $ownerId->execute([$orderId]);
-            if ($userId = $ownerId->fetchColumn()) {
+            $row = loadDeliverable($dbh, $source, $orderId);
+            $userQuery = $source === 'order'
+                ? $dbh->prepare("SELECT user_id FROM orders WHERE orderid = ?")
+                : $dbh->prepare("SELECT user_id FROM Bulk_orders WHERE id = ?");
+            $userQuery->execute([$orderId]);
+            $ownerId = $userQuery->fetchColumn();
+
+            if ($ownerId && $row) {
                 addNotification(
-                    (int)$userId,
+                    (int)$ownerId,
                     'Out for delivery',
                     "Your order #{$orderId} is out for delivery and on its way to you.",
-                    'order', null, ['push'],
-                    ['order_id' => (string)$orderId, 'source' => 'order']
+                    'order',
+                    null,
+                    ['push', 'sms'],
+                    ['order_id' => (string)$orderId, 'source' => $source]
                 );
             }
         } catch (Throwable $e) {
-            error_log("Order $orderId marked out for delivery but the push notification failed: " . $e->getMessage());
+            error_log("Order $orderId marked out for delivery but the notification queue failed: " . $e->getMessage());
         }
     }
 
