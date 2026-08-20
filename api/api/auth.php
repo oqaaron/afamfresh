@@ -381,6 +381,36 @@ if ($action == 'google_login') {
         exit;
     }
     
+    // --- Security Check: the email must be one Google has verified ---
+    //
+    // The lookup below is `WHERE google_id = ? OR email = ?`, so a token whose
+    // email matches an existing account links to it and logs straight in. That
+    // is the intended behaviour for someone who registered with a password and
+    // later uses the Google button — but it means the email address alone is
+    // enough to take over an account, so Google has to have proved the holder
+    // owns it.
+    //
+    // email_verified is NOT always true. Google Workspace domains and some
+    // federated setups issue tokens with it false, and an attacker who can set
+    // an arbitrary unverified address on an account they control could
+    // otherwise claim any user here by their email address.
+    //
+    // tokeninfo returns this as the STRING "true", not a boolean — a truthy
+    // check like `if (!$userInfo['email_verified'])` passes on the string
+    // "false", which is the whole vulnerability restated. Compare exactly.
+    //
+    // Absent is treated as unverified: this endpoint refuses what it cannot
+    // confirm rather than assuming Google meant to vouch for it.
+    if (($userInfo['email_verified'] ?? 'false') !== 'true') {
+        error_log("Google Sign-In: refusing unverified email $email (email_verified="
+            . var_export($userInfo['email_verified'] ?? null, true) . ")");
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Your Google account email is not verified. Verify it with Google, then try again.',
+        ]);
+        exit;
+    }
+
     if (!$google_id || !$email) {
         error_log("Google Sign-In: Missing google_id or email from token info");
         echo json_encode(['success' => false, 'error' => 'Failed to extract user info']);
