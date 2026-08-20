@@ -34,3 +34,8 @@ deps.log
 # --- OS ---
 .DS_Store
 Thumbs.db
+
+app/*.json
+cloud_sql_proxy
+cloud_sql_proxy.log
+backups/
