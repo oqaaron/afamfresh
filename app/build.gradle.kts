@@ -57,8 +57,8 @@ android {
         // ~/afamfresh-release.jks is irreplaceable: lose it and these three
         // apps can never be updated again, only republished under new package
         // names, with every existing install stranded.
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
