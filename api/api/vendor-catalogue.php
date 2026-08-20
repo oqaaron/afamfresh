@@ -94,6 +94,29 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $price       = $field('price');
     $quantityType = $field('quantitytype') ?: 'kg';
 
+    // Validated here for the same reason admin/add-product.php validates it:
+    // the app's category chips are a convenience, and a raw POST bypasses
+    // them entirely. A category outside the `category` table means the
+    // product vanishes from the customer app's home-screen bubbles and shows
+    // up as a phantom tile of its own in Browse -- with no error raised
+    // anywhere, so nobody finds out until a vendor asks why their product is
+    // unbuyable.
+    //
+    // This endpoint previously inserted $category raw. It was the ONLY write
+    // path to items.category that skipped the check.
+    require_once __DIR__ . '/../includes/categories.php';
+
+    if ($category !== '' && !isKnownCategory($dbh, $category)) {
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Unknown category "' . $category . '". Pick one from the list.',
+        ]);
+        exit;
+    }
+    // Store the table's exact spelling, so a value differing only by case or
+    // spacing lands as one category rather than two.
+    $category = canonicalCategory($dbh, $category);
+
     if ($name === '' || $category === '' || $price === '') {
         echo json_encode([
             'success' => false,

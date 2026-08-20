@@ -73,9 +73,24 @@ fun NewProductScreen(
 
     // Matches the categories already in `items`, so a vendor product files
     // alongside the catalogue rather than inventing a category of one.
+    // The canonical list, matching the `category` table. Keep the two in step:
+    // api/vendor-catalogue.php now rejects anything off the table server-side,
+    // so a stale entry here shows the vendor an error they cannot act on.
+    //
+    // Not a free choice. The customer app filters on exact names
+    // (HomeScreen.kt's FRESH_FOOD_CATEGORIES, BrowseScreen.kt's derived
+    // tiles), so a category outside the table makes the product invisible in
+    // Fresh Food and renders a phantom Browse tile of its own.
+    //
+    // The previous list claimed to match `items` and did not: six of its ten
+    // entries -- Tubers, Legumes, Herbs, Dairy, Meat, Others -- existed in no
+    // category table anywhere. "Dairy" and "Meat" were the dangerous ones,
+    // because the real names are "Dairy Products" and "Meats" and the
+    // truncated forms look entirely plausible in the picker.
     val categories = listOf(
-        "Vegetables", "Fruits", "Grains", "Tubers", "Legumes",
-        "Herbs", "Dairy", "Meat", "Fish Products", "Others"
+        "Fruits", "Juice", "Vegetables", "Oils", "Meats",
+        "Dairy Products", "Chicken Products", "Dry Ratio", "Groceries",
+        "Grains", "Fish Products", "Meal Plans", "Condiments", "Beverages"
     )
     val units = listOf("kg", "piece", "bunch", "tray", "basket", "crate", "sack")
 
