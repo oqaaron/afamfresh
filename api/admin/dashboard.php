@@ -48,7 +48,7 @@ if ($fullAccess) {
         // Paid orders with no rider assigned — most time-critical
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM orders o
-            LEFT JOIN rider_assignments ra ON ra.order_id = o.id AND ra.source = 'Shop'
+            LEFT JOIN rider_assignments ra ON ra.order_id = o.id AND ra.source = 'order'
             WHERE o.payment_status IN ('paid', 'pending_cash')
             AND o.status NOT IN ('delivered', 'cancelled', 'refunded')
             AND ra.id IS NULL
