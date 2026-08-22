@@ -43,6 +43,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'assign_rider') {
         $riderId = intval($_POST['rider_id'] ?? 0);
         if ($riderId) {
+            // Same guard as orders.php's assign_rider action: refuse to
+            // dispatch a rider to an order that has not actually been paid
+            // for (e.g. payment_status = 'authorization_pending', a Pesapal
+            // payment started but never confirmed).
+            $payCheck = $dbh->prepare("SELECT payment_status FROM orders WHERE orderid = ?");
+            $payCheck->execute([$orderId]);
+            $paymentStatus = $payCheck->fetchColumn();
+
+            if (!in_array($paymentStatus, ['paid', 'pending_cash'], true)) {
+                header("Location: order-detail.php?id=$orderId&assign_failed=1&reason=unpaid");
+                exit;
+            }
+
             try {
                 $dbh->beginTransaction();
 
@@ -204,7 +217,13 @@ function money($v) { return 'UGX ' . number_format((float)$v, 0); }
             <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">Order updated successfully.</div>
         <?php endif; ?>
         <?php if (isset($_GET['assign_failed'])): ?>
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">Could not assign that rider. Nothing was changed.</div>
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <?php if (($_GET['reason'] ?? '') === 'unpaid'): ?>
+                    That order has not been paid for yet — nothing to dispatch until it is.
+                <?php else: ?>
+                    Could not assign that rider. Nothing was changed.
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

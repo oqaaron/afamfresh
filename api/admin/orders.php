@@ -24,6 +24,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($orderId && $action === 'assign_rider') {
         $riderId = intval($_POST['rider_id'] ?? 0);
         if ($riderId) {
+            // Refuse to dispatch a rider to an order that has not actually
+            // been paid for. Bulk-orders.php's assign_rider action already
+            // has this guard; shop orders never did, so an order still sitting
+            // at e.g. payment_status = 'authorization_pending' — a Pesapal
+            // payment that was started but never confirmed — could be handed
+            // to a rider anyway, with nothing actually collected from the
+            // customer.
+            $payCheck = $dbh->prepare("SELECT payment_status FROM orders WHERE orderid = ?");
+            $payCheck->execute([$orderId]);
+            $paymentStatus = $payCheck->fetchColumn();
+
+            if (!in_array($paymentStatus, ['paid', 'pending_cash'], true)) {
+                header('Location: orders.php?assign_failed=1&reason=unpaid');
+                exit;
+            }
+
             try {
                 $dbh->beginTransaction();
 
@@ -157,7 +173,13 @@ $riders = $dbh->query("SELECT id, name FROM riders")->fetchAll(PDO::FETCH_ASSOC)
             <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">Order updated successfully.</div>
         <?php endif; ?>
         <?php if (isset($_GET['assign_failed'])): ?>
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">Could not assign that rider. Nothing was changed.</div>
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <?php if (($_GET['reason'] ?? '') === 'unpaid'): ?>
+                    That order has not been paid for yet — nothing to dispatch until it is.
+                <?php else: ?>
+                    Could not assign that rider. Nothing was changed.
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
 
         <!-- Search -->
