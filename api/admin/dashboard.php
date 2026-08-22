@@ -37,32 +37,46 @@ if ($fullAccess) {
         $stats = [];
     }
 } else {
-    // Dispatcher dashboard: action-focused queues
-    try {
-        $dispatcherQueues = [
-            'orders_needing_rider' => 0,
-            'pending_orders' => 0,
-            'pending_Bulk' => 0,
-        ];
+    // Dispatcher dashboard: action-focused queues.
+    //
+    // Each query gets its own try/catch. These used to share one block, so a
+    // single failing query (e.g. a bad column reference) would reset every
+    // count back to 0 — including ones that had already succeeded — and the
+    // dashboard would silently show three zeros with only one real problem
+    // behind them.
+    $dispatcherQueues = [
+        'orders_needing_rider' => 0,
+        'pending_orders' => 0,
+        'pending_Bulk' => 0,
+    ];
 
-        // Paid orders with no rider assigned — most time-critical
+    // Paid orders with no rider assigned — most time-critical
+    try {
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM orders o
-            LEFT JOIN rider_assignments ra ON ra.order_id = o.id AND ra.source = 'order'
+            LEFT JOIN rider_assignments ra ON ra.order_id = o.orderid AND ra.source = 'order'
             WHERE o.payment_status IN ('paid', 'pending_cash')
             AND o.status NOT IN ('delivered', 'cancelled', 'refunded')
             AND ra.id IS NULL
         ");
-        $dispatcherQueues['orders_needing_rider'] = (int)$stmt->fetchColumn();
+        $dispatcherQueues['orders_needing_rider'] += (int)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        error_log('admin dashboard dispatcher queues (orders needing rider): ' . $e->getMessage());
+    }
 
-        // Orders awaiting status confirmation
+    // Orders awaiting status confirmation
+    try {
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM orders
             WHERE status IN ('Received', 'Pending')
         ");
         $dispatcherQueues['pending_orders'] = (int)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        error_log('admin dashboard dispatcher queues (pending orders): ' . $e->getMessage());
+    }
 
-        // Bulk orders awaiting dispatch
+    // Bulk orders awaiting dispatch
+    try {
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM Bulk_orders so
             JOIN Bulk_listings sl ON sl.id = so.listing_id
@@ -73,17 +87,16 @@ if ($fullAccess) {
             AND ra.id IS NULL
         ");
         $dispatcherQueues['orders_needing_rider'] += (int)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        error_log('admin dashboard dispatcher queues (Bulk needing rider): ' . $e->getMessage());
+    }
 
-        // Bulk listings pending approval
+    // Bulk listings pending approval
+    try {
         $stmt = $dbh->query("SELECT COUNT(*) FROM Bulk_listings WHERE status = 'pending'");
         $dispatcherQueues['pending_Bulk'] = (int)$stmt->fetchColumn();
     } catch (Exception $e) {
-        error_log('admin dashboard dispatcher queues: ' . $e->getMessage());
-        $dispatcherQueues = [
-            'orders_needing_rider' => 0,
-            'pending_orders' => 0,
-            'pending_Bulk' => 0,
-        ];
+        error_log('admin dashboard dispatcher queues (pending Bulk): ' . $e->getMessage());
     }
 }
 ?>
