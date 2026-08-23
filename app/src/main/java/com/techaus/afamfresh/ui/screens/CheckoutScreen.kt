@@ -33,6 +33,13 @@ import com.techaus.afamfresh.viewmodel.PaymentViewModel
 // ApiService.createOrder already has a paymentMethod field defaulting to
 // "mobile_money" — cash-on-delivery skips the Pesapal redirect and completes
 // the order immediately via onOrderComplete.
+//
+// SCHEDULE SECTION: same toggle/date-picker/slot-rows shape as
+// EditOrderScreen.kt's reschedule section, wired to placeOrder() instead of
+// updateOrder(). Slot labels are still hardcoded to delivery_slots' current
+// seed data for the same reason noted there — replace with a live
+// get-slots.php call once OrderRepository exposes one.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckoutScreen(
     cartItems: List<CartItem>,
@@ -70,6 +77,13 @@ fun CheckoutScreen(
     var area by rememberSaveable { mutableStateOf("") }
     var address by rememberSaveable(deliveryResult) { mutableStateOf(deliveryResult?.dropoffAddress ?: "") }
     var paymentMethod by rememberSaveable { mutableStateOf("mobile_money") }
+
+    // Off by default — an order with no schedule is "as soon as possible",
+    // which is the existing behavior this screen has always had.
+    var wantsSchedule by rememberSaveable { mutableStateOf(false) }
+    var scheduledDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var scheduledSlot by rememberSaveable { mutableStateOf<String?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     /** Fills the form from a saved address so nothing has to be retyped. */
     fun applyAddress(saved: com.techaus.afamfresh.models.Address) {
@@ -121,7 +135,9 @@ fun CheckoutScreen(
             address = address,
             email = email,
             deliveryResult = deliveryResult,
-            pointsRedeem = loyaltyPreview?.pointsApplied ?: 0
+            pointsRedeem = loyaltyPreview?.pointsApplied ?: 0,
+            scheduledDeliveryDate = if (wantsSchedule) scheduledDate else null,
+            scheduledDeliverySlot = if (wantsSchedule) scheduledSlot else null
         ) { placed ->
             if (placed == null) return@placeOrder
 
@@ -173,7 +189,8 @@ fun CheckoutScreen(
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Forest),
-                        enabled = !isBusy && cartItems.isNotEmpty()
+                        enabled = !isBusy && cartItems.isNotEmpty() &&
+                            (!wantsSchedule || (scheduledDate != null && scheduledSlot != null))
                     ) {
                         if (isBusy) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
@@ -272,6 +289,68 @@ fun CheckoutScreen(
                         }
                     }
                     Text("Change", color = Forest, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SectionCard(title = "Delivery schedule") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = wantsSchedule,
+                        onCheckedChange = { checked ->
+                            wantsSchedule = checked
+                            if (!checked) {
+                                scheduledDate = null
+                                scheduledSlot = null
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Forest)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        if (wantsSchedule) "Scheduled" else "As soon as possible",
+                        color = Ink,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                if (wantsSchedule) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ForestSurface)
+                            .clickable { showDatePicker = true }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            scheduledDate ?: "Choose a delivery date",
+                            color = if (scheduledDate != null) Ink else InkMuted,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    DELIVERY_SLOT_LABELS.forEach { label ->
+                        CheckoutSlotOptionRow(
+                            label = label,
+                            selected = scheduledSlot == label,
+                            onSelect = { scheduledSlot = label }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (scheduledDate == null || scheduledSlot == null) {
+                        Text(
+                            "Pick both a date and a time slot to continue.",
+                            fontSize = 12.sp,
+                            color = InkMuted
+                        )
+                    }
                 }
             }
 
@@ -381,6 +460,34 @@ fun CheckoutScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    if (showDatePicker) {
+        // Same today..+7-day window orders.php's create action and
+        // get-slots.php both enforce server-side.
+        val today = remember { System.currentTimeMillis() }
+        val maxDate = remember { today + 7L * 24 * 60 * 60 * 1000 }
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = today,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) =
+                    utcTimeMillis in today..maxDate
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { scheduledDate = isoDateFor(it) }
+                    showDatePicker = false
+                }) { Text("Choose") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }
 
 @Composable
@@ -430,4 +537,49 @@ fun PaymentOptionRow(label: String, selected: Boolean, onSelect: () -> Unit) {
         Spacer(modifier = Modifier.width(6.dp))
         Text(label, color = Ink)
     }
+}
+
+/**
+ * Hardcoded to delivery_slots' current seed data — same limitation as
+ * EditOrderScreen.kt's identical list. admin/configuration.php can add more
+ * slots; this won't know if it does. Replace with a live call to
+ * get-slots.php once OrderRepository exposes one.
+ */
+private val DELIVERY_SLOT_LABELS = listOf(
+    "Morning (8AM-12PM)",
+    "Afternoon (12PM-4PM)",
+    "Evening (4PM-8PM)"
+)
+
+/** Same shape as PaymentOptionRow above — kept separate since radio-group
+ *  semantics differ (payment method vs. delivery slot), not worth sharing
+ *  a single generic component for two call sites. */
+@Composable
+private fun CheckoutSlotOptionRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) ForestSurface else PillGray)
+            .clickable { onSelect() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onSelect, colors = RadioButtonDefaults.colors(selectedColor = Forest))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label, color = Ink)
+    }
+}
+
+/**
+ * "YYYY-MM-DD" — the format orders.php's create action expects verbatim.
+ * Same UTC-read reasoning as EditOrderScreen.kt's identical function and
+ * AddSurplusScreen.kt's endOfDayFor(): the picker reports UTC midnight for
+ * the chosen day, so formatting locally would land on the wrong day
+ * depending on time of day.
+ */
+private fun isoDateFor(millis: Long): String {
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+    return fmt.format(java.util.Date(millis))
 }

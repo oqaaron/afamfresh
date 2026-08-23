@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -20,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -148,18 +148,44 @@ fun CartScreen(
                 SummaryRow(
                     label = if (deliveryFee == null) "Subtotal so far" else "Total",
                     display = formatUgx(total),
-                    bold = true
+                    bold = true,
+                    accent = true
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = onCheckout,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        // Mockup uses a green-tinted glow (shadow colored to match
+                        // the button, not plain black) via Modifier.shadow's
+                        // ambientColor/spotColor params — only available on
+                        // Compose UI 1.6+. Uncomment if your BOM supports it;
+                        // ButtonDefaults.buttonElevation below is the safe
+                        // fallback that works on any version.
+                        // .shadow(
+                        //     elevation = 12.dp,
+                        //     shape = RoundedCornerShape(16.dp),
+                        //     ambientColor = Forest.copy(alpha = 0.30f),
+                        //     spotColor = Forest.copy(alpha = 0.30f)
+                        // )
+                        ,
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Forest)
+                    colors = ButtonDefaults.buttonColors(containerColor = Forest),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 8.dp,
+                        pressedElevation = 2.dp
+                    )
                 ) {
-                    Text("CHECKOUT", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "CHECKOUT",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        letterSpacing = 1.5.sp
+                    )
                 }
             }
         }
@@ -199,7 +225,7 @@ private fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(formatUgx(item.product.price), fontSize = 13.sp, color = InkMuted)
+                Text(formatUgx(item.product.price), fontSize = 13.sp, color = InkMuted, fontFamily = FontFamily.Monospace)
             }
         }
 
@@ -210,26 +236,33 @@ private fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onDecrease,
-                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
-                ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(14.dp))
+            // One continuous pill, not two separate circular buttons — matches
+            // the mockup's compact stepper (bg-[#F0F7F1] rounded-full,
+            // overflow-hidden) more closely than the previous black-circle pair.
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(ForestSurface),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDecrease, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Forest, modifier = Modifier.size(16.dp))
                 }
                 Text(
                     "%02d".format(item.quantity),
-                    modifier = Modifier.padding(horizontal = 10.dp),
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    color = Ink
                 )
-                IconButton(
-                    onClick = onIncrease,
-                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Ink)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(14.dp))
+                IconButton(onClick = onIncrease, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = Forest, modifier = Modifier.size(16.dp))
                 }
             }
-            Text(formatUgx(item.lineTotal), fontWeight = FontWeight.Bold, color = Ink)
+            Text(
+                formatUgx(item.lineTotal),
+                fontWeight = FontWeight.Bold,
+                color = Ink,
+                fontFamily = FontFamily.Monospace
+            )
         }
     }
 }
@@ -239,7 +272,7 @@ private fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -
  * say "Calculated at checkout" when no location has been chosen yet.
  */
 @Composable
-private fun SummaryRow(label: String, display: String, bold: Boolean = false) {
+private fun SummaryRow(label: String, display: String, bold: Boolean = false, accent: Boolean = false) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(
             label,
@@ -251,7 +284,8 @@ private fun SummaryRow(label: String, display: String, bold: Boolean = false) {
             display,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             fontSize = if (bold) 16.sp else 14.sp,
-            color = Ink
+            color = if (accent) Forest else Ink,
+            fontFamily = FontFamily.Monospace
         )
     }
 }

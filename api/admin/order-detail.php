@@ -47,12 +47,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // dispatch a rider to an order that has not actually been paid
             // for (e.g. payment_status = 'authorization_pending', a Pesapal
             // payment started but never confirmed).
-            $payCheck = $dbh->prepare("SELECT payment_status FROM orders WHERE orderid = ?");
+            $payCheck = $dbh->prepare("SELECT payment_status, scheduled_delivery_date FROM orders WHERE orderid = ?");
             $payCheck->execute([$orderId]);
-            $paymentStatus = $payCheck->fetchColumn();
+            $orderCheck = $payCheck->fetch(PDO::FETCH_ASSOC);
+            $paymentStatus = $orderCheck['payment_status'] ?? null;
 
             if (!in_array($paymentStatus, ['paid', 'pending_cash'], true)) {
                 header("Location: order-detail.php?id=$orderId&assign_failed=1&reason=unpaid");
+                exit;
+            }
+
+            // Same future-schedule guard as orders.php's assign_rider action.
+            $scheduledDate = $orderCheck['scheduled_delivery_date'] ?? null;
+            if ($scheduledDate !== null && $scheduledDate > date('Y-m-d')) {
+                header("Location: order-detail.php?id=$orderId&assign_failed=1&reason=scheduled");
                 exit;
             }
 
@@ -220,6 +228,8 @@ function money($v) { return 'UGX ' . number_format((float)$v, 0); }
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
                 <?php if (($_GET['reason'] ?? '') === 'unpaid'): ?>
                     That order has not been paid for yet — nothing to dispatch until it is.
+                <?php elseif (($_GET['reason'] ?? '') === 'scheduled'): ?>
+                    That order is scheduled for a future date — it isn't due for dispatch yet.
                 <?php else: ?>
                     Could not assign that rider. Nothing was changed.
                 <?php endif; ?>

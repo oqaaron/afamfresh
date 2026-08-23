@@ -288,6 +288,8 @@ switch ($action) {
         $dropoffLat = floatval(getParam('dropoff_lat', 0));
         $dropoffLng = floatval(getParam('dropoff_lng', 0));
         $pointsToRedeem = intval(getParam('points_redeem', 0));
+        $scheduledDate = trim((string)getParam('scheduled_delivery_date', ''));
+        $scheduledSlot = trim((string)getParam('scheduled_delivery_slot', ''));
 
         // Behind APP_ENV for the same reason the raw-request logging at the top
         // of this file is: a customer's name, phone number and home address in
@@ -336,6 +338,18 @@ switch ($action) {
             exit;
         }
 
+        // Validate the requested delivery date/slot, if any, up front — a
+        // bad slot should never spend a stock lock or a delivery-fee lookup
+        // before failing. Actual capacity is reserved later, inside the
+        // transaction (see reserveDeliverySlot() below); this only checks
+        // that the pair is well-formed and in range.
+        require_once __DIR__ . '/../includes/delivery_slots.php';
+        $scheduleCheck = validateScheduledSlot($dbh, $scheduledDate, $scheduledSlot);
+        if (!$scheduleCheck['ok']) {
+            echo json_encode(['success' => false, 'error' => $scheduleCheck['error']]);
+            exit;
+        }
+
         $items = json_decode($itemsJson, true);
         if (empty($items) || !is_array($items)) {
             echo json_encode(['success' => false, 'error' => 'Invalid items data']);
@@ -351,6 +365,23 @@ switch ($action) {
 
         try {
             $dbh->beginTransaction();
+
+            // Capacity is checked here, inside the transaction, not in the
+            // validateScheduledSlot() call above — a plain COUNT before the
+            // transaction opens would let two concurrent requests for the
+            // last remaining spot in a slot both pass the check and both
+            // get inserted. reserveDeliverySlot() locks the delivery_slots
+            // row itself so the second request serializes behind the first.
+            if ($scheduleCheck['slot'] !== null) {
+                $reserved = reserveDeliverySlot(
+                    $dbh, (int)$scheduleCheck['slot']['id'], $scheduleCheck['date'], $scheduleCheck['label']
+                );
+                if (!$reserved['ok']) {
+                    $dbh->rollBack();
+                    echo json_encode(['success' => false, 'error' => $reserved['error']]);
+                    exit;
+                }
+            }
 
             // ------------------------------------------------------------
             // Price every line from the database, not the request. Only
@@ -480,14 +511,14 @@ switch ($action) {
                 delivery_lat, delivery_lng, delivery_address,
                 dest_lat, dest_lng,
                 delivery_fee, mileage_fee, service_fee, insurance_fee, processing_fee, small_order_surcharge,
-                points_redeemed
+                points_redeemed, scheduled_delivery_date, scheduled_delivery_slot
             ) VALUES (
                 ?, ?, ?, ?, ?, ?,
                 NOW(), ?, ?, ?,
                 ?, ?, ?,
                 ?, ?,
                 ?, ?, ?, ?, ?, ?,
-                ?
+                ?, ?, ?
             )";
 
             $stmt = $dbh->prepare($sql);
@@ -509,7 +540,9 @@ switch ($action) {
                 $deliveryCost,
                 $mileageFee,
                 $serviceFee, $insuranceFee, $processingFee, $smallOrderSurcharge,
-                $redeemQuote['points_applied']
+                $redeemQuote['points_applied'],
+                $scheduleCheck['slot'] !== null ? $scheduleCheck['date'] : null,
+                $scheduleCheck['slot'] !== null ? $scheduleCheck['label'] : null
             ]);
 
             if (!$result) {
@@ -590,7 +623,7 @@ switch ($action) {
             exit;
         }
         try {
-            $own = $dbh->prepare("SELECT status FROM orders WHERE orderid = ? AND user_id = ?");
+            $own = $dbh->prepare("SELECT status, scheduled_delivery_date, scheduled_delivery_slot FROM orders WHERE orderid = ? AND user_id = ?");
             $own->execute([$orderId, $user_id]);
             $existing = $own->fetch(PDO::FETCH_ASSOC);
             if (!$existing) {
@@ -606,15 +639,11 @@ switch ($action) {
                 exit;
             }
 
-            // Only these five are editable by the customer. Notably NOT the
-            // items or the total — letting the client rewrite those would let it
-            // set its own price.
+            // address/area/mobile are simple field-by-field edits.
             $editable = [
                 'address' => 'address',
                 'area' => 'area',
                 'mobile' => 'mobile',
-                'scheduled_delivery_date' => 'scheduled_delivery_date',
-                'scheduled_delivery_slot' => 'scheduled_delivery_slot',
             ];
 
             $set = [];
@@ -623,18 +652,76 @@ switch ($action) {
                 $value = getParam($field, null);
                 if ($value === null) continue;
                 $value = trim($value);
-                // An empty date/slot means "clear it"; empty address/mobile is
-                // rejected because those columns are NOT NULL and required.
-                if ($value === '' && in_array($column, ['address', 'area', 'mobile'], true)) {
-                    continue;
-                }
+                // Empty address/mobile/area is rejected because those columns
+                // are NOT NULL and required.
+                if ($value === '') continue;
                 $set[] = "$column = ?";
-                $params[] = ($value === '') ? null : $value;
+                $params[] = $value;
+            }
+
+            // scheduled_delivery_date / scheduled_delivery_slot are handled
+            // together, not field-by-field like the three above:
+            // get-slots.php quotes availability for a (date, slot) PAIR, so
+            // validating them independently could accept a date with no
+            // matching slot or vice versa, and reserveDeliverySlot() needs
+            // both to check capacity. Previously this endpoint wrote
+            // whatever the client sent for either column with no validation
+            // at all — not the date range or 7-day cap get-slots.php
+            // enforces for display, and no capacity check against
+            // delivery_slots.max_orders.
+            $validatedSchedule = null;
+            $dateProvided = getParam('scheduled_delivery_date', null);
+            $slotProvided = getParam('scheduled_delivery_slot', null);
+            if ($dateProvided !== null || $slotProvided !== null) {
+                $newDate = $dateProvided !== null ? trim($dateProvided) : (string)($existing['scheduled_delivery_date'] ?? '');
+                $newSlot = $slotProvided !== null ? trim($slotProvided) : (string)($existing['scheduled_delivery_slot'] ?? '');
+
+                require_once __DIR__ . '/../includes/delivery_slots.php';
+                $validatedSchedule = validateScheduledSlot($dbh, $newDate, $newSlot);
+                if (!$validatedSchedule['ok']) {
+                    echo json_encode(['success' => false, 'error' => $validatedSchedule['error']]);
+                    exit;
+                }
+
+                $set[] = "scheduled_delivery_date = ?";
+                $set[] = "scheduled_delivery_slot = ?";
+                if ($validatedSchedule['slot'] === null) {
+                    // Both empty together — clearing the schedule.
+                    $params[] = null;
+                    $params[] = null;
+                } else {
+                    $params[] = $validatedSchedule['date'];
+                    $params[] = $validatedSchedule['label'];
+                }
             }
 
             if (empty($set)) {
                 echo json_encode(['success' => false, 'error' => 'Nothing to update']);
                 exit;
+            }
+
+            $dbh->beginTransaction();
+
+            // Same atomic capacity reservation as order creation, and for
+            // the same reason: without the row lock, two customers
+            // rescheduling into the same last-open slot at the same moment
+            // could both pass a plain COUNT check. Excludes this order's own
+            // existing booking so rescheduling within the same slot (e.g.
+            // just changing the address, with the schedule fields resent
+            // unchanged) never fails against itself.
+            if ($validatedSchedule !== null && $validatedSchedule['slot'] !== null) {
+                $reserved = reserveDeliverySlot(
+                    $dbh,
+                    (int)$validatedSchedule['slot']['id'],
+                    $validatedSchedule['date'],
+                    $validatedSchedule['label'],
+                    $orderId
+                );
+                if (!$reserved['ok']) {
+                    $dbh->rollBack();
+                    echo json_encode(['success' => false, 'error' => $reserved['error']]);
+                    exit;
+                }
             }
 
             $params[] = $orderId;
@@ -644,8 +731,11 @@ switch ($action) {
             );
             $stmt->execute($params);
 
+            $dbh->commit();
+
             echo json_encode(['success' => true, 'message' => 'Order updated']);
         } catch (Exception $e) {
+            if ($dbh->inTransaction()) $dbh->rollBack();
             error_log("Update order error: " . $e->getMessage());
             echo json_encode(['success' => false, 'error' => 'Could not update the order']);
         }

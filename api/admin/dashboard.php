@@ -50,7 +50,12 @@ if ($fullAccess) {
         'pending_Bulk' => 0,
     ];
 
-    // Paid orders with no rider assigned — most time-critical
+    // Paid orders with no rider assigned — most time-critical.
+    //
+    // scheduled_delivery_date IS NULL means "as soon as possible", which
+    // does belong here; a date in the future does not — an order scheduled
+    // for three days out is not something a rider should be sent out for
+    // today just because it happens to be paid already.
     try {
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM orders o
@@ -58,6 +63,7 @@ if ($fullAccess) {
             WHERE o.payment_status IN ('paid', 'pending_cash')
             AND o.status NOT IN ('delivered', 'cancelled', 'refunded')
             AND ra.id IS NULL
+            AND (o.scheduled_delivery_date IS NULL OR o.scheduled_delivery_date <= CURDATE())
         ");
         $dispatcherQueues['orders_needing_rider'] += (int)$stmt->fetchColumn();
     } catch (Exception $e) {
@@ -75,7 +81,7 @@ if ($fullAccess) {
         error_log('admin dashboard dispatcher queues (pending orders): ' . $e->getMessage());
     }
 
-    // Bulk orders awaiting dispatch
+    // Bulk orders awaiting dispatch — same future-schedule exclusion as shop orders above.
     try {
         $stmt = $dbh->query("
             SELECT COUNT(*) FROM Bulk_orders so
@@ -85,6 +91,7 @@ if ($fullAccess) {
             AND sl.pickup_only = 0
             AND so.status NOT IN ('delivered', 'cancelled', 'refunded')
             AND ra.id IS NULL
+            AND (so.scheduled_delivery_date IS NULL OR so.scheduled_delivery_date <= CURDATE())
         ");
         $dispatcherQueues['orders_needing_rider'] += (int)$stmt->fetchColumn();
     } catch (Exception $e) {

@@ -79,6 +79,8 @@ class CheckoutViewModel(
         email: String,
         deliveryResult: DeliveryResult?,
         pointsRedeem: Int = 0,
+        scheduledDeliveryDate: String? = null,
+        scheduledDeliverySlot: String? = null,
         onResult: (OrderPlaced?) -> Unit
     ) {
         if (cartItems.isEmpty()) {
@@ -88,6 +90,14 @@ class CheckoutViewModel(
         }
         if (fname.isBlank() || mobile.isBlank() || area.isBlank() || address.isBlank()) {
             _error.value = "Please fill in your name, mobile, area, and address"
+            onResult(null)
+            return
+        }
+        // Same rule orders.php's create action enforces server-side (a date
+        // needs a slot and vice versa) — caught here too so a request that
+        // will definitely be refused never leaves the device.
+        if ((scheduledDeliveryDate == null) != (scheduledDeliverySlot == null)) {
+            _error.value = "Pick both a delivery date and a time slot, or neither"
             onResult(null)
             return
         }
@@ -119,7 +129,9 @@ class CheckoutViewModel(
             dropoffLng = deliveryResult?.dropoffLng ?: 0.0,
             distanceKm = deliveryResult?.distanceKm ?: 0.0,
             deliveryCost = deliveryCost,
-            pointsRedeem = pointsRedeem
+            pointsRedeem = pointsRedeem,
+            scheduledDeliveryDate = scheduledDeliveryDate,
+            scheduledDeliverySlot = scheduledDeliverySlot
         ) { response, error ->
             _isLoading.value = false
             if (response?.success == true && response.orderId != null) {

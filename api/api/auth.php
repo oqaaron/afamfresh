@@ -518,6 +518,290 @@ if ($action == 'google_login') {
 }
 
 // ============================================================
+// ACTION: SEND PHONE OTP
+// ============================================================
+// Third sign-in mechanism alongside password and Google. Reuses
+// normaliseUgandanMsisdn() and sendSmsWithBrevo() from includes/brevo-sms.php
+// — the SMS sending path this app already has working for order
+// notifications — rather than standing up a second one via the Twilio helper
+// that has never had a caller.
+if ($action == 'send_phone_otp') {
+    require_once __DIR__ . '/../includes/brevo-sms.php';
+
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mobileRaw = trim($input['mobile'] ?? $_POST['mobile'] ?? '');
+
+    $mobile = normaliseUgandanMsisdn($mobileRaw);
+    if ($mobile === null) {
+        echo json_encode(['success' => false, 'error' => 'Enter a valid mobile number.']);
+        exit;
+    }
+
+    // Tighter than login/register's 5-per-5-minutes: each of these sends
+    // costs real SMS credit, where a failed password guess costs nothing.
+    // Bucketed by mobile AND by IP, same reasoning as every other action
+    // here — one number getting bombed, and one IP working through many
+    // numbers, are different attacks and both need catching.
+    if (rateLimited($dbh, 'phone_otp:mobile:' . $mobile, 3, 300)
+        || rateLimited($dbh, 'phone_otp:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 10, 300)) {
+        failRateLimited();
+    }
+
+    try {
+        // One live code per number. A second request invalidates whatever
+        // code is currently outstanding rather than leaving two valid codes
+        // for the same number to be checked against.
+        $dbh->prepare("DELETE FROM phone_verifications WHERE mobile = ?")->execute([$mobile]);
+
+        $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $codeHash = password_hash($code, PASSWORD_DEFAULT);
+        $expiresAt = date('Y-m-d H:i:s', time() + 600); // 10 minutes
+
+        $stmt = $dbh->prepare(
+            "INSERT INTO phone_verifications (mobile, code_hash, expires_at) VALUES (?, ?, ?)"
+        );
+        $stmt->execute([$mobile, $codeHash, $expiresAt]);
+
+        $sendResult = sendSmsWithBrevo(
+            $mobile,
+            "Your AfamFresh verification code is $code. It expires in 10 minutes."
+        );
+
+        if (!$sendResult['success']) {
+            // The row stays rather than being deleted here. A resend within
+            // the cooldown above reuses/replaces it on the next attempt, and
+            // a Brevo failure shouldn't also reset the rate limit's effect.
+            echo json_encode([
+                'success' => false,
+                'error' => $sendResult['error'] ?? 'Could not send the verification code.',
+            ]);
+            exit;
+        }
+
+        echo json_encode(['success' => true]);
+    } catch (PDOException $e) {
+        error_log("send_phone_otp DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Could not send the verification code.']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: VERIFY PHONE OTP
+// ============================================================
+if ($action == 'verify_phone_otp') {
+    require_once __DIR__ . '/../includes/brevo-sms.php';
+
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mobileRaw = trim($input['mobile'] ?? $_POST['mobile'] ?? '');
+    $code = trim($input['code'] ?? $_POST['code'] ?? '');
+    $appType = accountTypeForAppRole($input['app_role'] ?? $_POST['app_role'] ?? 'customer') ?? 'customer';
+
+    $mobile = normaliseUgandanMsisdn($mobileRaw);
+    if ($mobile === null || $code === '') {
+        echo json_encode(['success' => false, 'error' => 'Enter the code that was sent to you.']);
+        exit;
+    }
+
+    try {
+        $stmt = $dbh->prepare("SELECT * FROM phone_verifications WHERE mobile = ? ORDER BY id DESC LIMIT 1");
+        $stmt->execute([$mobile]);
+        $verification = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$verification || strtotime($verification['expires_at']) < time()) {
+            echo json_encode(['success' => false, 'error' => 'That code has expired. Please request a new one.']);
+            exit;
+        }
+
+        // A 6-digit code is only ~1M possibilities — brute-forceable without
+        // a server-side attempt cap, unlike a real password.
+        if ((int)$verification['attempts'] >= 5) {
+            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+            echo json_encode(['success' => false, 'error' => 'Too many incorrect attempts. Please request a new code.']);
+            exit;
+        }
+
+        if (!password_verify($code, $verification['code_hash'])) {
+            $dbh->prepare("UPDATE phone_verifications SET attempts = attempts + 1 WHERE id = ?")
+                ->execute([$verification['id']]);
+            echo json_encode(['success' => false, 'error' => 'Incorrect code. Please try again.']);
+            exit;
+        }
+
+        // Correct code. An account with this number already existing means
+        // this is a login; otherwise it's the first half of a signup.
+        $userStmt = $dbh->prepare("SELECT * FROM users WHERE mobile = ?");
+        $userStmt->execute([$mobile]);
+        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user) {
+            // Same "right account, wrong app" guard login/google_login use —
+            // without it, verifying a rider's number in the Customer app
+            // would log the rider's account straight in here.
+            if ($user['account_type'] !== $appType) {
+                $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+                echo json_encode([
+                    'success' => false,
+                    'error'   => 'This is ' . accountTypeLabel($user['account_type'])
+                               . ", so it can't be used in this app. "
+                               . 'Please use the AfamFresh app for that account.',
+                ]);
+                exit;
+            }
+
+            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+
+            $token = generateToken();
+            session_regenerate_id(true);
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['fname'] . ' ' . $user['lname'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['auth_token'] = $token;
+
+            echo json_encode([
+                'success' => true,
+                'is_new_user' => false,
+                'token' => $token,
+                'user' => buildUserPayload($dbh, $user['id']),
+            ]);
+        } else {
+            // No account yet. users.fname and users.lname are NOT NULL and
+            // this endpoint has no name to put in them, so the account isn't
+            // created here — this row is repurposed into proof that this
+            // number was verified, and complete_phone_signup (below) is what
+            // actually creates the account once it has a name to use.
+            //
+            // proof_token, not the (now-spent) code itself: it stops
+            // complete_phone_signup being callable for a phone nobody
+            // verified, without making the original code reusable.
+            $proofToken = bin2hex(random_bytes(16));
+            $dbh->prepare(
+                "UPDATE phone_verifications SET verified_at = NOW(), proof_token = ?, expires_at = ? WHERE id = ?"
+            )->execute([$proofToken, date('Y-m-d H:i:s', time() + 900), $verification['id']]); // 15 minutes to finish signup
+
+            echo json_encode([
+                'success' => true,
+                'is_new_user' => true,
+                'mobile' => $mobile,
+                'proof_token' => $proofToken,
+            ]);
+        }
+    } catch (PDOException $e) {
+        error_log("verify_phone_otp DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Something went wrong. Please try again.']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: COMPLETE PHONE SIGNUP
+// ============================================================
+// The second half of a new-number signup — only reachable with a
+// proof_token verify_phone_otp just issued, so this can't be called for a
+// phone number nobody actually verified.
+if ($action == 'complete_phone_signup') {
+    require_once __DIR__ . '/../includes/brevo-sms.php';
+
+    $input = json_decode(file_get_contents('php://input'), true);
+    $mobileRaw = trim($input['mobile'] ?? $_POST['mobile'] ?? '');
+    $proofToken = trim($input['proof_token'] ?? $_POST['proof_token'] ?? '');
+    $fname = trim($input['fname'] ?? $_POST['fname'] ?? '');
+    $lname = trim($input['lname'] ?? $_POST['lname'] ?? '');
+    $appType = accountTypeForAppRole($input['app_role'] ?? $_POST['app_role'] ?? 'customer') ?? 'customer';
+
+    $mobile = normaliseUgandanMsisdn($mobileRaw);
+    if ($mobile === null || $proofToken === '') {
+        echo json_encode(['success' => false, 'error' => 'Verification expired. Please start again.']);
+        exit;
+    }
+    if ($fname === '' || $lname === '') {
+        echo json_encode(['success' => false, 'error' => 'Enter your first and last name.']);
+        exit;
+    }
+
+    try {
+        $stmt = $dbh->prepare(
+            "SELECT * FROM phone_verifications WHERE mobile = ? AND proof_token = ? AND verified_at IS NOT NULL"
+        );
+        $stmt->execute([$mobile, $proofToken]);
+        $verification = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$verification || strtotime($verification['expires_at']) < time()) {
+            echo json_encode(['success' => false, 'error' => 'Verification expired. Please start again.']);
+            exit;
+        }
+
+        // Someone could have registered this number by another route
+        // (password registration or Google Sign-In both accept mobile as a
+        // profile field) between verify and now — re-check rather than
+        // trust the lookup verify_phone_otp already did.
+        $dupe = $dbh->prepare("SELECT id FROM users WHERE mobile = ?");
+        $dupe->execute([$mobile]);
+        if ($dupe->fetch()) {
+            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+            echo json_encode(['success' => false, 'error' => 'That number is already registered. Please log in instead.']);
+            exit;
+        }
+
+        // Same 'Not specified' placeholders register and google_login use
+        // for fields this flow doesn't collect yet — filled in later from
+        // the profile screen, same as every other account.
+        $insertStmt = $dbh->prepare(
+            "INSERT INTO users (fname, lname, mobile, area, address, account_type, `current_role`)
+             VALUES (?, ?, ?, 'Not specified', 'Not specified', ?, ?)"
+        );
+        $result = $insertStmt->execute([
+            $fname, $lname, $mobile,
+            $appType,
+            $appType === 'customer' ? 'user' : $appType,
+        ]);
+
+        if (!$result) {
+            $errorInfo = $insertStmt->errorInfo();
+            error_log("complete_phone_signup INSERT failed: " . print_r($errorInfo, true));
+            echo json_encode(['success' => false, 'error' => 'Could not create your account.']);
+            exit;
+        }
+
+        $userId = $dbh->lastInsertId();
+
+        // Same pattern as register/google_login: a customer is usable
+        // immediately, a rider or vendor needs admin approval first.
+        if ($appType === 'customer') {
+            $dbh->prepare(
+                "INSERT INTO user_roles (user_id, role, status) VALUES (?, 'user', 'active')
+                 ON DUPLICATE KEY UPDATE status = 'active'"
+            )->execute([$userId]);
+        }
+
+        require_once __DIR__ . '/../includes/notifications.php';
+        notifyWelcome($userId, $fname, $appType);
+
+        $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+
+        $token = generateToken();
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = $userId;
+        $_SESSION['user_name'] = $fname . ' ' . $lname;
+        // No email collected by this flow — NULL here matches the column
+        // (nullable) and buildUserPayload's own handling of a Google-only
+        // account, which has no email-backed session value either.
+        $_SESSION['user_email'] = null;
+        $_SESSION['auth_token'] = $token;
+
+        echo json_encode([
+            'success' => true,
+            'token' => $token,
+            'user' => buildUserPayload($dbh, $userId),
+        ]);
+    } catch (PDOException $e) {
+        error_log("complete_phone_signup DB error: " . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Could not create your account.']);
+    }
+    exit;
+}
+
+// ============================================================
 // ACTION: FORGOT PASSWORD (REQUEST RESET)
 // ============================================================
 if ($action == 'forgot_password') {

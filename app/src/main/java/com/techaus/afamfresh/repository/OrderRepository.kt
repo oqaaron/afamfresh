@@ -39,6 +39,8 @@ class OrderRepository(
         distanceKm: Double = 0.0,
         deliveryCost: Double = 0.0,
         pointsRedeem: Int = 0,
+        scheduledDeliveryDate: String? = null,
+        scheduledDeliverySlot: String? = null,
         callback: (OrderCreateResponse?, ApiError?) -> Unit
     ) {
         try {
@@ -60,7 +62,9 @@ class OrderRepository(
                 dropoffLng = dropoffLng,
                 distanceKm = distanceKm,
                 deliveryCost = deliveryCost,
-                pointsRedeem = pointsRedeem
+                pointsRedeem = pointsRedeem,
+                scheduledDeliveryDate = scheduledDeliveryDate,
+                scheduledDeliverySlot = scheduledDeliverySlot
             ).enqueueApi<OrderCreateResponse>("OrderRepo", "createOrder") { body, error ->
                 when {
                     error != null -> callback(null, error)

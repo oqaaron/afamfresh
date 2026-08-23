@@ -15,6 +15,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.NavHost
@@ -28,12 +29,14 @@ import com.techaus.afamfresh.ui.screens.ForgotPasswordScreen
 import com.techaus.afamfresh.ui.screens.LoginScreen
 import com.techaus.afamfresh.ui.screens.MainScreen
 import com.techaus.afamfresh.ui.screens.MaintenanceScreen
+import com.techaus.afamfresh.ui.screens.OnboardingScreen
 import com.techaus.afamfresh.ui.screens.RegisterScreen
 import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
 import com.techaus.afamfresh.utils.FirebaseTokenManager
+import com.techaus.afamfresh.utils.OnboardingPrefs
 import com.techaus.afamfresh.utils.SessionTracker
 import com.techaus.afamfresh.viewmodel.*
 
@@ -99,6 +102,7 @@ class MainActivity : ComponentActivity() {
             handleIntent(intent)
 
             setContent {
+                val context = LocalContext.current
                 var isLoggedIn by remember { mutableStateOf(authRepository.isLoggedIn()) }
                 // Must agree with isLoggedIn above. getUser() ignores session
                 // validity, so pairing it with isLoggedIn() gave a signed-out
@@ -112,6 +116,21 @@ class MainActivity : ComponentActivity() {
                 var shouldProceed by rememberSaveable { mutableStateOf(true) }
                 var maintenanceMessage by rememberSaveable { mutableStateOf<String?>(null) }
                 var forceUpdateRequired by rememberSaveable { mutableStateOf(false) }
+                // Read once at cold start, not on every recomposition — the
+                // in-memory value then tracks the user's progress through the
+                // slides until markOnboardingSeen() persists it for good.
+                //
+                // Customer-only: the copy ("Fresh produce delivered", etc.) is
+                // written for someone browsing groceries, not a rider or
+                // vendor. Gated the same way location permissions already are
+                // above (BuildConfig.APP_ROLE), not via FlavorRoutes — that
+                // seam is for screens registered inside the NavHost, and this
+                // is shown before the NavHost exists at all.
+                var showOnboarding by rememberSaveable {
+                    mutableStateOf(
+                        BuildConfig.APP_ROLE == "user" && !OnboardingPrefs.hasSeenOnboarding(context)
+                    )
+                }
 
                 LaunchedEffect(Unit) {
                     authViewModel.user.collect { user ->
@@ -208,6 +227,22 @@ class MainActivity : ComponentActivity() {
                                         forceUpdateRequired = false
                                         shouldProceed = true
                                         showSplash = true
+                                    }
+                                )
+                            }
+
+                            // First launch only — OnboardingPrefs persists this
+                            // so it never shows again on this device once
+                            // completed or skipped. Sits after the maintenance
+                            // gate (no point onboarding someone into a blocked
+                            // app) and before login/home, independent of
+                            // whether they end up logging in or registering.
+                            showOnboarding -> {
+                                OnboardingScreen(
+                                    productViewModel = productViewModel,
+                                    onDone = {
+                                        OnboardingPrefs.markOnboardingSeen(context)
+                                        showOnboarding = false
                                     }
                                 )
                             }

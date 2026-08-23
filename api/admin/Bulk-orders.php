@@ -74,6 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flashError = 'Choose a rider first.';
         } elseif (!in_array($order['payment_status'], ['paid', 'pending_cash'], true)) {
             $flashError = 'That order has not been paid for. Nothing to collect yet.';
+        } elseif ($order['scheduled_delivery_date'] !== null && $order['scheduled_delivery_date'] > date('Y-m-d')) {
+            $flashError = 'That order is scheduled for a future date — it isn\'t due for dispatch yet.';
         } elseif ((int)$order['pickup_only'] === 1) {
             $flashError = 'That listing is collection-only — the customer picks it up themselves.';
         } elseif (in_array($order['status'], ['delivered', 'cancelled', 'refunded'], true)) {
@@ -342,10 +344,17 @@ switch ($filter) {
         // Paid, deliverable, still open, and nobody sent yet. This is the
         // working queue — the default view because it is the only one that
         // represents an action someone has to take.
+        //
+        // scheduled_delivery_date in the future is excluded: an order
+        // scheduled for a later date isn't due for dispatch today just
+        // because it's paid. See the same exclusion in dashboard.php's
+        // Awaiting Riders count and the future-schedule check in this
+        // file's own assign_rider handler above.
         $where[] = "so.payment_status IN ('paid','pending_cash')";
         $where[] = "sl.pickup_only = 0";
         $where[] = "so.status NOT IN ('delivered','cancelled','refunded')";
         $where[] = "ra.id IS NULL";
+        $where[] = "(so.scheduled_delivery_date IS NULL OR so.scheduled_delivery_date <= CURDATE())";
         break;
     case 'dispatched':
         $where[] = "ra.id IS NOT NULL";
@@ -400,7 +409,8 @@ $needsRider = (int)$dbh->query(
       WHERE so.payment_status IN ('paid','pending_cash')
         AND sl.pickup_only = 0
         AND so.status NOT IN ('delivered','cancelled','refunded')
-        AND ra.id IS NULL"
+        AND ra.id IS NULL
+        AND (so.scheduled_delivery_date IS NULL OR so.scheduled_delivery_date <= CURDATE())"
 )->fetchColumn();
 
 $cancellationRequestCount = (int)$dbh->query(

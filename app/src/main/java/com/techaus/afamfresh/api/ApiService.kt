@@ -171,7 +171,14 @@ interface ApiService {
         @Field("dropoff_lng") dropoffLng: Double = 0.0,
         @Field("distance_km") distanceKm: Double = 0.0,
         @Field("delivery_cost") deliveryCost: Double = 0.0,
-        @Field("points_redeem") pointsRedeem: Int = 0
+        @Field("points_redeem") pointsRedeem: Int = 0,
+        // Same fields, same "omitted means no schedule requested" contract as
+        // updateOrder() below — orders.php's create action defaults both to
+        // "" server-side when absent, which validateScheduledSlot() treats
+        // as "as soon as possible", identically to updateOrder()'s null
+        // meaning "don't touch".
+        @Field("scheduled_delivery_date") scheduledDeliveryDate: String? = null,
+        @Field("scheduled_delivery_slot") scheduledDeliverySlot: String? = null
     ): Call<OrderCreateResponse>
 
     /**
