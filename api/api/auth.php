@@ -548,29 +548,52 @@ if ($action == 'send_phone_otp') {
     }
 
     try {
-        // One live code per number. A second request invalidates whatever
-        // code is currently outstanding rather than leaving two valid codes
-        // for the same number to be checked against.
-        $dbh->prepare("DELETE FROM phone_verifications WHERE mobile = ?")->execute([$mobile]);
-
         $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $codeHash = password_hash($code, PASSWORD_DEFAULT);
         $expiresAt = date('Y-m-d H:i:s', time() + 600); // 10 minutes
 
-        $stmt = $dbh->prepare(
-            "INSERT INTO phone_verifications (mobile, code_hash, expires_at) VALUES (?, ?, ?)"
-        );
-        $stmt->execute([$mobile, $codeHash, $expiresAt]);
-
+        // Sent before the row is written, not after, so status/last_error
+        // reflect the real outcome of this attempt in a single write rather
+        // than an insert-as-pending followed by a second update.
         $sendResult = sendSmsWithBrevo(
             $mobile,
             "Your AfamFresh verification code is $code. It expires in 10 minutes."
         );
 
+        // UNIQUE KEY (mobile, purpose) means a second request for the same
+        // number upserts the existing row rather than colliding with it.
+        // Every column resets to describe THIS attempt, not the previous
+        // one — including clearing proof_token/verified_at, so a stale
+        // verified state from an earlier code can't leak into a fresh send.
+        // provider_response is intentionally left out here: sendSmsWithBrevo
+        // returns success/error, not a captured raw response body, so
+        // there's nothing honest to put in that column yet.
+        $stmt = $dbh->prepare(
+            "INSERT INTO user_otp_verifications
+                (mobile, purpose, otp_hash, status, sent_count, last_sent_at, last_error,
+                 expires_at, verified_at, attempt_count, proof_token)
+             VALUES
+                (?, 'signup', ?, ?, 1, NOW(), ?, ?, NULL, 0, NULL)
+             ON DUPLICATE KEY UPDATE
+                otp_hash = VALUES(otp_hash),
+                status = VALUES(status),
+                sent_count = sent_count + 1,
+                last_sent_at = NOW(),
+                last_error = VALUES(last_error),
+                expires_at = VALUES(expires_at),
+                verified_at = NULL,
+                attempt_count = 0,
+                proof_token = NULL"
+        );
+        $stmt->execute([
+            $mobile,
+            $codeHash,
+            $sendResult['success'] ? 'sent' : 'failed',
+            $sendResult['error'] ?? null,
+            $expiresAt,
+        ]);
+
         if (!$sendResult['success']) {
-            // The row stays rather than being deleted here. A resend within
-            // the cooldown above reuses/replaces it on the next attempt, and
-            // a Brevo failure shouldn't also reset the rate limit's effect.
             echo json_encode([
                 'success' => false,
                 'error' => $sendResult['error'] ?? 'Could not send the verification code.',
@@ -604,25 +627,31 @@ if ($action == 'verify_phone_otp') {
     }
 
     try {
-        $stmt = $dbh->prepare("SELECT * FROM phone_verifications WHERE mobile = ? ORDER BY id DESC LIMIT 1");
+        $stmt = $dbh->prepare(
+            "SELECT * FROM user_otp_verifications WHERE mobile = ? AND purpose = 'signup'"
+        );
         $stmt->execute([$mobile]);
         $verification = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$verification || strtotime($verification['expires_at']) < time()) {
+        $isExpired = $verification && strtotime($verification['expires_at']) < time();
+        if (!$verification || $verification['status'] === 'used' || $isExpired) {
+            if ($isExpired && $verification['status'] !== 'expired') {
+                $dbh->prepare("UPDATE user_otp_verifications SET status = 'expired' WHERE id = ?")
+                    ->execute([$verification['id']]);
+            }
             echo json_encode(['success' => false, 'error' => 'That code has expired. Please request a new one.']);
             exit;
         }
 
         // A 6-digit code is only ~1M possibilities — brute-forceable without
         // a server-side attempt cap, unlike a real password.
-        if ((int)$verification['attempts'] >= 5) {
-            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+        if ((int)$verification['attempt_count'] >= 5) {
             echo json_encode(['success' => false, 'error' => 'Too many incorrect attempts. Please request a new code.']);
             exit;
         }
 
-        if (!password_verify($code, $verification['code_hash'])) {
-            $dbh->prepare("UPDATE phone_verifications SET attempts = attempts + 1 WHERE id = ?")
+        if (!password_verify($code, $verification['otp_hash'])) {
+            $dbh->prepare("UPDATE user_otp_verifications SET attempt_count = attempt_count + 1 WHERE id = ?")
                 ->execute([$verification['id']]);
             echo json_encode(['success' => false, 'error' => 'Incorrect code. Please try again.']);
             exit;
@@ -639,7 +668,6 @@ if ($action == 'verify_phone_otp') {
             // without it, verifying a rider's number in the Customer app
             // would log the rider's account straight in here.
             if ($user['account_type'] !== $appType) {
-                $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
                 echo json_encode([
                     'success' => false,
                     'error'   => 'This is ' . accountTypeLabel($user['account_type'])
@@ -649,7 +677,13 @@ if ($action == 'verify_phone_otp') {
                 exit;
             }
 
-            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+            // 'used', not 'verified' — this row's job is fully done in this
+            // one request (an existing account was logged into). Contrast
+            // with the new-number branch below, which stops at 'verified'
+            // because a second request still has to happen.
+            $dbh->prepare(
+                "UPDATE user_otp_verifications SET status = 'used', verified_at = NOW() WHERE id = ?"
+            )->execute([$verification['id']]);
 
             $token = generateToken();
             session_regenerate_id(true);
@@ -667,16 +701,20 @@ if ($action == 'verify_phone_otp') {
         } else {
             // No account yet. users.fname and users.lname are NOT NULL and
             // this endpoint has no name to put in them, so the account isn't
-            // created here — this row is repurposed into proof that this
-            // number was verified, and complete_phone_signup (below) is what
-            // actually creates the account once it has a name to use.
+            // created here — status stops at 'verified', and
+            // complete_phone_signup (below) is what advances it to 'used'
+            // once it actually has a name to work with.
             //
-            // proof_token, not the (now-spent) code itself: it stops
-            // complete_phone_signup being callable for a phone nobody
-            // verified, without making the original code reusable.
+            // proof_token — added on top of the original design, which had
+            // no column for this — is what stops complete_phone_signup being
+            // callable by anyone who simply knows a number currently sitting
+            // at status = 'verified'. Knowing the number isn't proof you're
+            // the one who received the code.
             $proofToken = bin2hex(random_bytes(16));
             $dbh->prepare(
-                "UPDATE phone_verifications SET verified_at = NOW(), proof_token = ?, expires_at = ? WHERE id = ?"
+                "UPDATE user_otp_verifications
+                    SET status = 'verified', verified_at = NOW(), proof_token = ?, expires_at = ?
+                  WHERE id = ?"
             )->execute([$proofToken, date('Y-m-d H:i:s', time() + 900), $verification['id']]); // 15 minutes to finish signup
 
             echo json_encode([
@@ -721,7 +759,8 @@ if ($action == 'complete_phone_signup') {
 
     try {
         $stmt = $dbh->prepare(
-            "SELECT * FROM phone_verifications WHERE mobile = ? AND proof_token = ? AND verified_at IS NOT NULL"
+            "SELECT * FROM user_otp_verifications
+              WHERE mobile = ? AND purpose = 'signup' AND proof_token = ? AND status = 'verified'"
         );
         $stmt->execute([$mobile, $proofToken]);
         $verification = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -738,7 +777,6 @@ if ($action == 'complete_phone_signup') {
         $dupe = $dbh->prepare("SELECT id FROM users WHERE mobile = ?");
         $dupe->execute([$mobile]);
         if ($dupe->fetch()) {
-            $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
             echo json_encode(['success' => false, 'error' => 'That number is already registered. Please log in instead.']);
             exit;
         }
@@ -777,7 +815,13 @@ if ($action == 'complete_phone_signup') {
         require_once __DIR__ . '/../includes/notifications.php';
         notifyWelcome($userId, $fname, $appType);
 
-        $dbh->prepare("DELETE FROM phone_verifications WHERE id = ?")->execute([$verification['id']]);
+        // Row's job is fully done — account created and about to be logged
+        // into. 'used' closes out the lifecycle this table's status column
+        // tracks; unlike the phone_verifications table this replaced, rows
+        // here are a permanent record of every OTP ever issued, not
+        // transient working memory to delete once spent.
+        $dbh->prepare("UPDATE user_otp_verifications SET status = 'used' WHERE id = ?")
+            ->execute([$verification['id']]);
 
         $token = generateToken();
         session_regenerate_id(true);
