@@ -1,5 +1,7 @@
 package com.techaus.afamfresh.ui.nav
 
+import androidx.navigation.NavHostController
+import com.techaus.afamfresh.repository.AuthRepository
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
@@ -14,6 +16,11 @@ import com.techaus.afamfresh.ui.screens.vendor.VendorEarningsScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorLocationPickerScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorOrdersScreen
 import com.techaus.afamfresh.ui.screens.vendor.VendorProductsScreen
+
+fun androidx.navigation.NavGraphBuilder.flavorAuthRoutes(
+    nav: NavHostController,
+    authRepository: AuthRepository
+) = Unit
 
 /**
  * Routes that exist only in the Vendor app.

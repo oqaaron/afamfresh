@@ -115,13 +115,12 @@ fun ForgotPasswordScreen(
                     onClick = {
                         isSending = true
                         errorMessage = null
-                        authRepository.requestPasswordReset(email.trim()) { success, _ ->
+                        authRepository.requestPasswordReset(email.trim()) { success, error ->
                             isSending = false
                             if (success) {
                                 sent = true
                             } else {
-                                errorMessage =
-                                    "Couldn't reach the server. Check your connection and try again."
+                                errorMessage = error
                             }
                         }
                     },

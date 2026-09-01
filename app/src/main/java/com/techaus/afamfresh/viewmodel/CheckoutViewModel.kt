@@ -76,6 +76,7 @@ class CheckoutViewModel(
         mobile: String,
         area: String,
         address: String,
+        landmarkNotes: String = "",
         email: String,
         deliveryResult: DeliveryResult?,
         pointsRedeem: Int = 0,
@@ -118,6 +119,7 @@ class CheckoutViewModel(
             mobile = mobile,
             area = area,
             address = address,
+            landmarkNotes = landmarkNotes,
             itemsJson = itemsJson,
             total = total,
             email = email,
@@ -146,6 +148,10 @@ class CheckoutViewModel(
                 onResult(null)
             }
         }
+    }
+
+    fun setError(message: String) {
+        _error.value = message
     }
 
     fun clearError() {

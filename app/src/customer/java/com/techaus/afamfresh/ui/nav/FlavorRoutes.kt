@@ -1,5 +1,6 @@
 package com.techaus.afamfresh.ui.nav
 
+import androidx.navigation.NavHostController
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.NavGraphBuilder
@@ -8,6 +9,12 @@ import com.techaus.afamfresh.models.DeliveryResult
 import com.techaus.afamfresh.ui.screens.DeliveryMapScreen
 import com.techaus.afamfresh.ui.screens.OrderTrackingScreen
 import com.techaus.afamfresh.utils.OrderCalc
+import com.techaus.afamfresh.repository.AuthRepository
+
+fun androidx.navigation.NavGraphBuilder.flavorAuthRoutes(
+    nav: NavHostController,
+    authRepository: AuthRepository
+) = Unit
 
 /**
  * Routes that exist only in the Customer app.

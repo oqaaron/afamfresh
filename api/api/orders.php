@@ -278,6 +278,7 @@ switch ($action) {
         $mobile = trim(getParam('mobile', ''));
         $area = trim(getParam('area', ''));
         $address = trim(getParam('address', ''));
+        $landmarkNotes = trim((string)getParam('landmark_notes', ''));
         $itemsJson = getParam('items', '[]');
         $paymentMethod = getParam('payment_method', 'mobile_money');
         $email = trim(getParam('email', ''));
@@ -505,10 +506,12 @@ switch ($action) {
             // orderid is AUTO_INCREMENT — let the database assign it and
             // read it back, instead of guessing a random value and retrying
             // on collision.
+            $deliveryOtp = str_pad((string)random_int(0, 9999), 4, '0', STR_PAD_LEFT);
             $sql = "INSERT INTO orders (
                 user_id, fname, lname, mobile, area, address,
                 ordertime, total_amount, payment_status, status,
                 delivery_lat, delivery_lng, delivery_address,
+                landmark_notes, delivery_otp,
                 dest_lat, dest_lng,
                 delivery_fee, mileage_fee, service_fee, insurance_fee, processing_fee, small_order_surcharge,
                 points_redeemed, scheduled_delivery_date, scheduled_delivery_slot
@@ -516,6 +519,7 @@ switch ($action) {
                 ?, ?, ?, ?, ?, ?,
                 NOW(), ?, ?, ?,
                 ?, ?, ?,
+                ?, ?,
                 ?, ?,
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?
@@ -535,6 +539,8 @@ switch ($action) {
                 $pickupLat,
                 $pickupLng,
                 $dropoffAddress,
+                $landmarkNotes !== '' ? $landmarkNotes : null,
+                $deliveryOtp,
                 $dropoffLat,
                 $dropoffLng,
                 $deliveryCost,

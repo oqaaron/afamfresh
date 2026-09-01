@@ -40,12 +40,25 @@ layout.buildDirectory.set(file("${rootDir}/build-temp"))
 
 android {
     namespace = "com.techaus.afamfresh"
-    compileSdk = 34
+    // Bumped from 34 -> 36: Google Play requires new app submissions to
+    // target Android 16 (API 36) starting Aug 31, 2026. compileSdk has to
+    // rise with targetSdk (Android requires compileSdk >= targetSdk) — see
+    // the matching comment on targetSdk below for what else this touches.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.techaus.afamfresh"
         minSdk = 24
-        targetSdk = 34
+        // Bumped from 34 -> 36 for the Play submission deadline above. This
+        // is NOT a safe drop-in change on its own:
+        //   - Requires an AGP version that recognises SDK 36 (check the root
+        //     build.gradle.kts / libs.versions.toml — not in this file).
+        //   - Requires Android SDK Platform 36 installed via SDK Manager.
+        //   - Android 15/16 changed real runtime behavior (predictive back,
+        //     edge-to-edge enforced by default, notification permission
+        //     changes) — this needs a full test pass across all three
+        //     flavors after bumping, not just a successful build.
+        targetSdk = 36
         // MUST increase for every build handed to anyone. Android treats a
         // lower versionCode as a downgrade and refuses to install it, and Play
         // rejects a re-used one outright.
@@ -404,8 +417,23 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-messaging")
 
-    // Google Sign‑In
+    // Google Sign‑In — legacy API, kept for now (see note below)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+
+    // Credential Manager — the actual sign-in path as of the Google-mandated
+    // migration off com.google.android.gms.auth.api.signin. play-services-auth
+    // above is left in place rather than removed: nothing in the four files
+    // I have visibility into needs it after this migration, but I can't
+    // verify it's unused across a codebase I've only seen pieces of, and an
+    // unused dependency is a much smaller risk than a wrongly-removed one.
+    // Safe to trim later once you've confirmed nothing else references it.
+    //
+    // Version numbers below are current as of my own knowledge, not verified
+    // against Maven Central at the moment you're reading this — worth a
+    // quick check for newer releases before building.
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")

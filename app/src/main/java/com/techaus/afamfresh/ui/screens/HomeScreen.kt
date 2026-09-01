@@ -444,12 +444,12 @@ fun HomeScreen(
                     // Same 8 entries as before — Bulk Deals/Promos/Flash Sales
                     // are real, separate features (not folded into a generic
                     // "Categories" grab-bag), so nothing here was dropped to
-                    // match the mockup's simpler 4-icon example. Only the
-                    // GlovoBubble visual style changed (flat circle, no
-                    // shadow — the new reference shows no elevation, unlike
-                    // the previous lifted-shadow pass).
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                    // match the mockup's simpler 4-icon example. Single
+                    // scrollable row now, not a 3-row wrapped grid — matches
+                    // the mockup's one-line layout, scroll for the rest
+                    // rather than wrapping to new lines.
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        item {
                             GlovoBubble(
                                 drawableRes = R.drawable.groceries,
                                 title = "Groceries",
@@ -461,12 +461,16 @@ fun HomeScreen(
                                         HomeFilter.Category(GROCERIES_CATEGORY)
                                 }
                             )
+                        }
+                        item {
                             GlovoBubble(
                                 drawableRes = R.drawable.bulkdeals,
                                 title = "Bulk Deals",
                                 isSelected = false,
                                 onClick = onBulkClick
                             )
+                        }
+                        item {
                             GlovoBubble(
                                 drawableRes = R.drawable.hotsales,
                                 title = "Hot Sale",
@@ -476,7 +480,7 @@ fun HomeScreen(
                                 }
                             )
                         }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                        item {
                             GlovoBubble(
                                 drawableRes = R.drawable.promos,
                                 title = "Promos",
@@ -485,6 +489,8 @@ fun HomeScreen(
                                     selectedFilter = if (selectedFilter == HomeFilter.Promos) HomeFilter.All else HomeFilter.Promos
                                 }
                             )
+                        }
+                        item {
                             GlovoBubble(
                                 drawableRes = R.drawable.flashsales,
                                 title = "Flash Sales",
@@ -493,6 +499,8 @@ fun HomeScreen(
                                     selectedFilter = if (selectedFilter == HomeFilter.FlashSales) HomeFilter.All else HomeFilter.FlashSales
                                 }
                             )
+                        }
+                        item {
                             GlovoBubble(
                                 icon = Icons.Default.ShoppingCart,
                                 title = "Orders",
@@ -500,11 +508,7 @@ fun HomeScreen(
                                 onClick = onOrdersClick
                             )
                         }
-                        // Two bubbles, so SpaceEvenly rather than SpaceAround:
-                        // it lands them at 1/3 and 2/3 of the width, sitting
-                        // in the gaps of the three-bubble rows above instead
-                        // of hanging off the edges.
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        item {
                             GlovoBubble(
                                 icon = Icons.Default.Spa,
                                 title = "Fresh Food",
@@ -513,6 +517,8 @@ fun HomeScreen(
                                     selectedFilter = if (selectedFilter == HomeFilter.FreshFood) HomeFilter.All else HomeFilter.FreshFood
                                 }
                             )
+                        }
+                        item {
                             GlovoBubble(
                                 icon = Icons.Default.ViewAgenda,
                                 title = "Browse",

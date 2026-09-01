@@ -115,10 +115,13 @@ class RiderViewModel(
         status: String,
         source: String = "order",
         cashCollected: Boolean = false,
+        deliveryOtp: String? = null,
+        lat: Double? = null,
+        lng: Double? = null,
         onDone: (Boolean) -> Unit = {}
     ) {
         _actionState.value = RiderActionState.Working
-        repository.updateDeliveryStatus(orderId, status, source, cashCollected) { ok, message, code ->
+        repository.updateDeliveryStatus(orderId, status, source, cashCollected, deliveryOtp, lat, lng) { ok, message, code ->
             when {
                 ok -> {
                     _actionState.value = RiderActionState.Done

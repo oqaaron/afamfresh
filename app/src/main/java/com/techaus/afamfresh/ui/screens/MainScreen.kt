@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.api.ApiService
+import com.techaus.afamfresh.repository.AuthRepository
 import com.techaus.afamfresh.repository.DeliveryRepository
 import com.techaus.afamfresh.ui.nav.FlavorRouteDeps
 import com.techaus.afamfresh.ui.nav.flavorRoutes
@@ -51,6 +52,7 @@ fun MainScreen(
     favoritesViewModel: FavoritesViewModel,
     trackingViewModel: TrackingViewModel,
     deliveryRepository: DeliveryRepository,
+    authRepository: AuthRepository,
     /** Order id from a tapped push notification, if the app was opened by one. */
     pendingOrderId: String? = null,
     /** "order" or "Bulk" — which table [pendingOrderId] means. The two id
@@ -650,6 +652,7 @@ fun MainScreen(
                     notificationViewModel = notificationViewModel,
                     productViewModel = productViewModel,
                     trackingViewModel = trackingViewModel,
+                    authRepository = authRepository,
                 )
             )
 

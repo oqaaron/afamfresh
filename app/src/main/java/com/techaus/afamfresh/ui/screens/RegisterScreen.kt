@@ -1,7 +1,7 @@
 package com.techaus.afamfresh.ui.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,11 +11,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.techaus.afamfresh.R
 import com.techaus.afamfresh.models.LoginUiState
 import com.techaus.afamfresh.BuildConfig
 import com.techaus.afamfresh.ui.theme.*
@@ -28,8 +32,13 @@ fun RegisterScreen(
     authViewModel: AuthViewModel,
     onRegister: (fname: String, lname: String, email: String, password: String, role: String, phone: String) -> Unit,
     onGoogleSignUpSuccess: () -> Unit,
-    onBackToLogin: () -> Unit
+    onBackToLogin: () -> Unit,
+    onPhoneSignUp: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isRiderApp = context.packageName.contains("rider", ignoreCase = true)
+    val isVendorApp = context.packageName.contains("vendor", ignoreCase = true)
+
     var fname by remember { mutableStateOf("") }
     var lname by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -43,12 +52,6 @@ fun RegisterScreen(
     val isLoading by authViewModel.isLoading.collectAsState()
     val error by authViewModel.error.collectAsState()
     val loginState by authViewModel.loginState.collectAsState()
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        authViewModel.handleGoogleSignInResult(result.data)
-    }
 
     LaunchedEffect(loginState) {
         if (loginState is LoginUiState.Success) {
@@ -65,9 +68,38 @@ fun RegisterScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
         ) {
-            Text("Create Account", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Forest)
+            // Same logo, same rounded-square/Forest treatment as
+            // LoginScreen.kt — this screen had no branding at all before,
+            // which read as inconsistent sitting one tap away from a screen
+            // that does.
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "App Logo",
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Forest)
+                    .padding(14.dp)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Text(
-                "Join AfamFresh for fresh produce delivered to your door",
+                when {
+                    isRiderApp -> "Apply as AfamFresh Courier"
+                    isVendorApp -> "Apply as AfamFresh Vendor"
+                    else -> "Create Account"
+                },
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Forest
+            )
+            Text(
+                when {
+                    isRiderApp -> "Create your courier account to join the delivery team"
+                    isVendorApp -> "Create your vendor account to sell fresh produce"
+                    else -> "Join AfamFresh for fresh produce delivered to your door"
+                },
                 fontSize = 14.sp,
                 color = InkMuted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
@@ -157,12 +189,33 @@ fun RegisterScreen(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Google Sign-In removed from the UI here — not deleted from the
+            // codebase. AuthRepository.signInWithGoogle() and
+            // AuthViewModel's handling of it are both left fully intact;
+            // only this button is gone. Credential Manager's getCredential()
+            // proved unreliable enough in real testing (a documented library
+            // race condition — see android/identity-samples issue #113,
+            // "the suspend function locked and does not proceed, but not
+            // crash and not throw exception") to not ship behind a live
+            // button right now.
+            //
+            // Known, accepted trade-off: existing production accounts
+            // created via Google Sign-In have no password set and have no
+            // way to sign in until this is either fixed and re-enabled, or
+            // those specific accounts are handled directly.
+
+            // Same underlying "phone_entry" route LoginScreen's equivalent
+            // button leads to — the flow is unified (verify_phone_otp itself
+            // decides signup vs login based on whether the number already
+            // has an account), just worded for whichever screen someone
+            // happened to land on first.
             OutlinedButton(
-                onClick = { authViewModel.signInWithGoogle(googleSignInLauncher) },
+                onClick = onPhoneSignUp,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Continue with Google", color = Ink, fontWeight = FontWeight.Medium)
+                Text("Sign up with phone number", color = Ink, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(20.dp))

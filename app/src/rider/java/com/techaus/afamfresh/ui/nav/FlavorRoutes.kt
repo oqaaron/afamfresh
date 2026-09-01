@@ -2,6 +2,8 @@ package com.techaus.afamfresh.ui.nav
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.navigation.NavHostController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.techaus.afamfresh.ui.screens.rider.RiderDashboardScreen
@@ -9,6 +11,52 @@ import com.techaus.afamfresh.ui.screens.rider.RiderDeliveriesScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderDeliveryDetailScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderEarningsScreen
 import com.techaus.afamfresh.ui.screens.rider.RiderNavigationScreen
+import com.techaus.afamfresh.ui.screens.rider.RiderRegisterScreen
+import com.techaus.afamfresh.repository.AuthRepository
+
+fun androidx.navigation.NavGraphBuilder.flavorAuthRoutes(
+    nav: NavHostController,
+    authRepository: AuthRepository
+) {
+    composable("rider_register") {
+        var isSubmitting by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        var registrationError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+        RiderRegisterScreen(
+            onRegisterSuccess = {
+                nav.navigate("login") {
+                    popUpTo("rider_register") { inclusive = true }
+                }
+            },
+            onNavigateToLogin = { nav.popBackStack("login", false) },
+            isSubmitting = isSubmitting,
+            errorMessage = registrationError,
+            onSubmitApplication = { payload ->
+                isSubmitting = true
+                registrationError = null
+                authRepository.registerRider(
+                    com.techaus.afamfresh.models.RiderRegistrationRequest(
+                        firstName = payload.firstName,
+                        lastName = payload.lastName,
+                        email = payload.email,
+                        phone = payload.phone,
+                        password = payload.password,
+                        vehicleType = payload.vehicleType,
+                        vehiclePlate = payload.vehiclePlate
+                    )
+                ) { response, error ->
+                    isSubmitting = false
+                    if (response?.success == true) {
+                        nav.navigate("login") {
+                            popUpTo("rider_register") { inclusive = true }
+                        }
+                    } else {
+                        registrationError = error?.userMessage ?: "Registration failed. Please try again."
+                    }
+                }
+            }
+        )
+    }
+}
 
 /**
  * Routes that exist only in the Rider app.

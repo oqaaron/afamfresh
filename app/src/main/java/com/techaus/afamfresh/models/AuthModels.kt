@@ -127,6 +127,28 @@ data class LoginResponse(
     @SerializedName("error") val error: String? = null
 )
 
+/**
+ * Response for verify_phone_otp — third sign-in mechanism alongside password
+ * (LoginResponse above) and Google. Doesn't fit LoginResponse's shape: an
+ * existing number returns token+user exactly like LoginResponse, but a new
+ * number returns mobile+proof_token instead, since no account exists yet for
+ * complete_phone_signup to log in to. success is non-nullable, matching every
+ * other response class here — every action.php path always includes it.
+ * Everything else stays nullable with a null default: token/user are only
+ * ever present on an existing-number response, mobile/proof_token only ever
+ * on a new-number one, and Gson leaves an absent JSON key as a genuine null
+ * regardless of what default is declared (see the warning above User).
+ */
+data class PhoneVerifyResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("is_new_user") val isNewUser: Boolean? = null,
+    @SerializedName("token") val token: String? = null,
+    @SerializedName("user") val user: User? = null,
+    @SerializedName("mobile") val mobile: String? = null,
+    @SerializedName("proof_token") val proofToken: String? = null,
+    @SerializedName("error") val error: String? = null
+)
+
 data class RegisterRequest(
     @SerializedName("name") val name: String,
     @SerializedName("email") val email: String,
@@ -147,6 +169,16 @@ data class RegisterResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("user") val user: User? = null,
     @SerializedName("error") val error: String? = null
+)
+
+data class RiderRegistrationRequest(
+    @SerializedName("fname") val firstName: String,
+    @SerializedName("lname") val lastName: String,
+    @SerializedName("email") val email: String,
+    @SerializedName("phone") val phone: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("vehicle_type") val vehicleType: String,
+    @SerializedName("vehicle_plate") val vehiclePlate: String
 )
 
 data class UserResponse(

@@ -1,0 +1,751 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.xctest",
+      "packagePath" : "/home/aokwi/Desktop/afamfresh",
+      "productName" : "afamfreshPackageTests"
+    }
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+    "afamfreshPackageDiscoveredTests"
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.afamfresh-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "fileList" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources",
+      "importPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "afamfresh",
+      "moduleOutputPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule",
+      "objects" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "afamfresh_main",
+        "-swift-version",
+        "6",
+        "-Xfrontend",
+        "-experimental-lazy-typecheck",
+        "-Xfrontend",
+        "-experimental-skip-all-function-bodies",
+        "-Xfrontend",
+        "-experimental-allow-module-with-compiler-errors",
+        "-Xfrontend",
+        "-empty-abi-descriptor",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "afamfresh",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : true,
+      "sources" : [
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift",
+        "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift"
+      ],
+      "tempsPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "fileList" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources",
+      "importPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "afamfreshPackageDiscoveredTests",
+      "moduleOutputPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule",
+      "objects" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshTests.swift.o",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/all-discovered-tests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/include/afamfreshPackageDiscoveredTests-Swift.h",
+        "-Xfrontend",
+        "-experimental-lazy-typecheck",
+        "-Xfrontend",
+        "-experimental-skip-all-function-bodies",
+        "-Xfrontend",
+        "-experimental-allow-module-with-compiler-errors",
+        "-Xfrontend",
+        "-empty-abi-descriptor",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "afamfresh",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : true,
+      "sources" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift"
+      ],
+      "tempsPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "fileList" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources",
+      "importPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "afamfreshPackageTests",
+      "moduleOutputPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule",
+      "objects" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/include/afamfreshPackageTests-Swift.h",
+        "-Xfrontend",
+        "-experimental-lazy-typecheck",
+        "-Xfrontend",
+        "-experimental-skip-all-function-bodies",
+        "-Xfrontend",
+        "-experimental-allow-module-with-compiler-errors",
+        "-Xfrontend",
+        "-empty-abi-descriptor",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "afamfresh",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : true,
+      "sources" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.afamfreshTests-x86_64-unknown-linux-gnu-debug.module" : {
+      "executable" : "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "fileList" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources",
+      "importPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "afamfreshTests",
+      "moduleOutputPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule",
+      "objects" : [
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-unknown-linux-gnu",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "6",
+        "-Xfrontend",
+        "-experimental-lazy-typecheck",
+        "-Xfrontend",
+        "-experimental-skip-all-function-bodies",
+        "-Xfrontend",
+        "-experimental-allow-module-with-compiler-errors",
+        "-Xfrontend",
+        "-empty-abi-descriptor",
+        "-g",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "afamfresh",
+        "-Xcc",
+        "-fno-omit-frame-pointer"
+      ],
+      "outputFileMapPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : true,
+      "sources" : [
+        "/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift"
+      ],
+      "tempsPath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "afamfresh" : [
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "-module-name",
+      "afamfresh",
+      "-package-name",
+      "afamfresh",
+      "-c",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift",
+      "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift",
+      "-I",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "afamfresh_main",
+      "-swift-version",
+      "6",
+      "-Xfrontend",
+      "-experimental-lazy-typecheck",
+      "-Xfrontend",
+      "-experimental-skip-all-function-bodies",
+      "-Xfrontend",
+      "-experimental-allow-module-with-compiler-errors",
+      "-Xfrontend",
+      "-empty-abi-descriptor",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "afamfresh",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"
+    ],
+    "afamfreshPackageDiscoveredTests" : [
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "-module-name",
+      "afamfreshPackageDiscoveredTests",
+      "-package-name",
+      "afamfresh",
+      "-c",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift",
+      "-I",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/include/afamfreshPackageDiscoveredTests-Swift.h",
+      "-Xfrontend",
+      "-experimental-lazy-typecheck",
+      "-Xfrontend",
+      "-experimental-skip-all-function-bodies",
+      "-Xfrontend",
+      "-experimental-allow-module-with-compiler-errors",
+      "-Xfrontend",
+      "-empty-abi-descriptor",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "afamfresh",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"
+    ],
+    "afamfreshPackageTests" : [
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "-module-name",
+      "afamfreshPackageTests",
+      "-package-name",
+      "afamfresh",
+      "-c",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift",
+      "-I",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/include/afamfreshPackageTests-Swift.h",
+      "-Xfrontend",
+      "-experimental-lazy-typecheck",
+      "-Xfrontend",
+      "-experimental-skip-all-function-bodies",
+      "-Xfrontend",
+      "-experimental-allow-module-with-compiler-errors",
+      "-Xfrontend",
+      "-empty-abi-descriptor",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "afamfresh",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"
+    ],
+    "afamfreshTests" : [
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc",
+      "-module-name",
+      "afamfreshTests",
+      "-package-name",
+      "afamfresh",
+      "-c",
+      "/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift",
+      "-I",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/Modules",
+      "-target",
+      "x86_64-unknown-linux-gnu",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "6",
+      "-Xfrontend",
+      "-experimental-lazy-typecheck",
+      "-Xfrontend",
+      "-experimental-skip-all-function-bodies",
+      "-Xfrontend",
+      "-experimental-allow-module-with-compiler-errors",
+      "-Xfrontend",
+      "-empty-abi-descriptor",
+      "-g",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "afamfresh",
+      "-Xcc",
+      "-fno-omit-frame-pointer",
+      "-driver-use-frontend-path",
+      "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "afamfresh" : [
+
+    ],
+    "afamfreshPackageDiscoveredTests" : [
+      "afamfreshTests",
+      "afamfresh"
+    ],
+    "afamfreshPackageTests" : [
+      "afamfreshPackageDiscoveredTests",
+      "afamfreshTests",
+      "afamfresh"
+    ],
+    "afamfreshTests" : [
+      "afamfresh"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift"
+        }
+      ],
+      "outputFilePath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources"
+    },
+    "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift"
+        }
+      ],
+      "outputFilePath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources"
+    },
+    "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources"
+    },
+    "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift"
+        }
+      ],
+      "outputFilePath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources"
+    },
+    "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+    }
+  }
+}

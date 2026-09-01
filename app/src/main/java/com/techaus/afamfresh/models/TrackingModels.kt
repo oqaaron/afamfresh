@@ -23,6 +23,8 @@ data class TrackingResponse(
 
     /** The order's own status, which uses a different vocabulary per channel. */
     @SerializedName("order_status") val orderStatus: String? = null,
+    @SerializedName("delivery_otp") val deliveryOtp: String? = null,
+    @SerializedName("landmark_notes") val landmarkNotes: String? = null,
 
     @SerializedName("has_rider") val hasRider: Boolean = false,
     @SerializedName("rider") val rider: TrackedRider? = null,

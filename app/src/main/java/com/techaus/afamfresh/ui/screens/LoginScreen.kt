@@ -1,7 +1,5 @@
 package com.techaus.afamfresh.ui.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -32,12 +31,37 @@ import com.techaus.afamfresh.ui.theme.Tomato
 import com.techaus.afamfresh.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun LoginScreen(
+@Composable
+fun LoginScreen(
     authViewModel: AuthViewModel,
     onLoginSuccess: (String) -> Unit,
     onForgotPassword: () -> Unit,
-    onCreateAccount: () -> Unit
+    onCreateAccount: () -> Unit,
+    onPhoneSignIn: () -> Unit
 ) {
+    val context = LocalContext.current
+    val packageName = context.packageName
+
+    val isRiderApp = packageName.contains("rider", ignoreCase = true)
+    val isVendorApp = packageName.contains("vendor", ignoreCase = true)
+
+    // Each flavor overrides drawable/logo with its own raster brand mark.
+    // Adaptive mipmap icons are XML wrappers and cannot be loaded by
+    // Compose's painterResource.
+    val brandIconRes = R.drawable.logo
+
+    val brandTitle = when {
+        isRiderApp -> "AfamFresh Rider Portal"
+        isVendorApp -> "AfamFresh Merchant Portal"
+        else -> "Welcome to AfamFresh"
+    }
+
+    val brandSubtitle = when {
+        isRiderApp -> "Manage your deliveries, earnings, and routes"
+        isVendorApp -> "Manage catalogue, surplus, and orders"
+        else -> "Fresh produce delivered to your doorstep"
+    }
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -46,16 +70,7 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
     val isLoading by authViewModel.isLoading.collectAsState()
     val error by authViewModel.error.collectAsState()
 
-    // Feeds the result back to the ViewModel, which verifies the id token with
-    // the backend. The existing LaunchedEffect on loginState below then routes
-    // onward, so Google and password sign-in land in exactly the same place.
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        authViewModel.handleGoogleSignInResult(result.data)
-    }
-
-    // ✅ FIX: Call resetLoginState() after handling to prevent re-triggers
+    // Reset login state after handling to prevent re-triggers
     LaunchedEffect(loginState) {
         when (loginState) {
             is LoginUiState.Success -> {
@@ -63,7 +78,6 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                 authViewModel.resetLoginState()
             }
             is LoginUiState.Error -> {
-                // Error already handled in ViewModel
                 authViewModel.resetLoginState()
             }
             else -> {}
@@ -82,32 +96,37 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
             verticalArrangement = Arrangement.Center
         ) {
             Image(
-                painter = painterResource(id = R.drawable.logo),
+                painter = painterResource(id = brandIconRes),
                 contentDescription = "App Logo",
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(96.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Forest)
-                    .padding(16.dp)
+                    .then(
+                        if (!isRiderApp && !isVendorApp) {
+                            Modifier.background(Forest).padding(16.dp)
+                        } else {
+                            Modifier
+                        }
+                    )
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Welcome to AfamFresh",
-                fontSize = 28.sp,
+                text = brandTitle,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = Forest
             )
 
             Text(
-                text = "Fresh produce delivered to your doorstep",
+                text = brandSubtitle,
                 fontSize = 14.sp,
                 color = InkMuted,
                 modifier = Modifier.padding(top = 4.dp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             OutlinedTextField(
                 value = email,
@@ -164,7 +183,7 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             if (error != null) {
                 Card(
@@ -193,7 +212,7 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Forest),
                 enabled = !isLoading
@@ -215,24 +234,15 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Google sign-in was only ever offered on the Create Account
-            // screen, so anyone who signed up with Google had no way back in:
-            // they have no password to type here, and "forgot password" cannot
-            // help an account that never had one. All three of the accounts in
-            // production were created this way.
-            //
-            // Same call as RegisterScreen. The server treats a Google sign-in
-            // for a known address as a login and an unknown one as a
-            // registration, so one button correctly serves both.
             OutlinedButton(
-                onClick = { authViewModel.signInWithGoogle(googleSignInLauncher) },
+                onClick = onPhoneSignIn,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
             ) {
-                Text("Continue with Google", color = Ink, fontWeight = FontWeight.Medium)
+                Text("Sign in with phone number", color = Ink, fontWeight = FontWeight.Medium)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -242,12 +252,12 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Don't have an account?",
+                    text = if (isRiderApp) "Want to ride with us?" else "Don't have an account?",
                     color = InkMuted,
                     fontSize = 14.sp
                 )
                 Text(
-                    text = " Sign Up",
+                    text = if (isRiderApp) " Apply Now" else " Sign Up",
                     color = Forest,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -255,13 +265,14 @@ import com.techaus.afamfresh.viewmodel.AuthViewModel
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Secure payment via Pesapal",
-                fontSize = 12.sp,
-                color = InkMuted
-            )
+            if (!isRiderApp && !isVendorApp) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Secure payment via Pesapal",
+                    fontSize = 12.sp,
+                    color = InkMuted
+                )
+            }
         }
     }
 }

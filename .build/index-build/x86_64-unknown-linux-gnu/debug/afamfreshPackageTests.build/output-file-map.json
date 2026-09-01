@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/primary.swiftdeps"
+  },
+  "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.dia"
+  }
+}

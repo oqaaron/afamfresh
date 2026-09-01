@@ -31,6 +31,7 @@ import com.techaus.afamfresh.models.BulkQuoteResponse
 import com.techaus.afamfresh.api.ApiService
 import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.PaymentPolicy
 import com.techaus.afamfresh.utils.formatQuantity
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.PaymentViewModel
@@ -184,6 +185,7 @@ fun BulkCheckoutScreen(
 
     val loyaltyPreview by BulkViewModel.loyaltyPreview.collectAsState()
     val loyaltyDiscount = loyaltyPreview?.discount ?: 0.0
+    val totalAfterDiscount = (quote?.grandTotal ?: (goodsTotal + (quote?.deliveryFee ?: 0.0))) - loyaltyDiscount
 
     LaunchedEffect(pointsToRedeem, goodsTotal) {
         BulkViewModel.quoteLoyaltyPoints(pointsToRedeem, goodsTotal)
@@ -442,6 +444,8 @@ fun BulkCheckoutScreen(
                 }
             }
 
+            val cashAllowed = PaymentPolicy.cashAllowedFor(totalAfterDiscount)
+
             SectionCard(title = "How you'll pay") {
                 PaymentChoice(
                     label = "Mobile money or card",
@@ -451,11 +455,20 @@ fun BulkCheckoutScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 PaymentChoice(
-                    label = "Cash on delivery",
+                    label = PaymentPolicy.cashOptionLabel(totalAfterDiscount),
                     detail = "Pay the full amount when the order arrives.",
                     selected = payWithCash,
-                    onSelect = { payWithCash = true }
+                    enabled = cashAllowed,
+                    onSelect = { if (cashAllowed) payWithCash = true }
                 )
+                if (!cashAllowed) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Cash payments are limited to UGX 50,000. Please select mobile money or card for this order.",
+                        fontSize = 12.sp,
+                        color = InkMuted
+                    )
+                }
             }
 
             TotalsCard(
@@ -667,6 +680,7 @@ private fun PaymentChoice(
     label: String,
     detail: String,
     selected: Boolean,
+    enabled: Boolean = true,
     onSelect: () -> Unit
 ) {
     Row(
@@ -677,11 +691,20 @@ private fun PaymentChoice(
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
+        RadioButton(
+            selected = selected,
+            onClick = if (enabled) onSelect else null,
+            enabled = enabled
+        )
         Spacer(Modifier.width(6.dp))
         Column {
-            Text(label, fontWeight = FontWeight.Medium, color = Ink, fontSize = 14.sp)
-            Text(detail, fontSize = 12.sp, color = InkMuted)
+            Text(
+                label,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled) Ink else InkMuted,
+                fontSize = 14.sp
+            )
+            Text(detail, fontSize = 12.sp, color = if (enabled) InkMuted else InkMuted.copy(alpha = 0.7f))
         }
     }
 }

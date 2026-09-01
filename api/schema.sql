@@ -559,6 +559,7 @@ CREATE TABLE `riders` (
   `email` varchar(100) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `vehicle_type` varchar(50) DEFAULT NULL,
+  `vehicle_plate` varchar(32) DEFAULT NULL,
   `current_lat` decimal(10,8) DEFAULT NULL,
   `current_lng` decimal(11,8) DEFAULT NULL,
   `status` enum('online','offline') DEFAULT 'offline',

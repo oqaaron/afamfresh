@@ -94,13 +94,19 @@ class RiderRepository(
         status: String,
         source: String = "order",
         cashCollected: Boolean = false,
+        deliveryOtp: String? = null,
+        lat: Double? = null,
+        lng: Double? = null,
         onResult: (Boolean, String?, String?) -> Unit
     ) {
         api.updateDeliveryStatus(
             orderId = orderId,
             status = status,
             source = source,
-            cashCollected = if (cashCollected) "1" else null
+            cashCollected = if (cashCollected) "1" else null,
+            deliveryOtp = deliveryOtp,
+            latitude = lat,
+            longitude = lng
         ).enqueueApi(TAG, "update status") { body, error ->
             when {
                 body?.success == true -> onResult(true, null, null)

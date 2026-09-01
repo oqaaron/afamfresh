@@ -27,6 +27,12 @@ interface ApiService {
         @Body body: RegisterRequest
     ): Call<RegisterResponse>
 
+    @POST("auth.php")
+    fun registerRider(
+        @Query("action") action: String = "register_rider",
+        @Body body: RiderRegistrationRequest
+    ): Call<RegisterResponse>
+
     @GET("auth.php")
     fun getCurrentUser(
         @Query("action") action: String = "me"
@@ -63,6 +69,43 @@ interface ApiService {
          * so "request vendor access" was rejected before it could reach the
          * admin queue.
          */
+        @Field("app_role") appRole: String = BuildConfig.APP_ROLE
+    ): Call<LoginResponse>
+
+    // ============================================================
+    // PHONE / OTP SIGN-IN
+    // ============================================================
+    // Third sign-in mechanism alongside password and Google. Unlike those
+    // two, verifyPhoneOtp's response shape doesn't fit any existing model —
+    // an existing number returns token+user like LoginResponse, but a new
+    // number returns mobile+proof_token instead, so it gets its own type
+    // (PhoneVerifyResponse) rather than forcing one of the others to grow
+    // fields it doesn't otherwise need.
+
+    @POST("auth.php")
+    @FormUrlEncoded
+    fun sendPhoneOtp(
+        @Query("action") action: String = "send_phone_otp",
+        @Field("mobile") mobile: String
+    ): Call<BaseResponse>
+
+    @POST("auth.php")
+    @FormUrlEncoded
+    fun verifyPhoneOtp(
+        @Query("action") action: String = "verify_phone_otp",
+        @Field("mobile") mobile: String,
+        @Field("code") code: String,
+        @Field("app_role") appRole: String = BuildConfig.APP_ROLE
+    ): Call<PhoneVerifyResponse>
+
+    @POST("auth.php")
+    @FormUrlEncoded
+    fun completePhoneSignup(
+        @Query("action") action: String = "complete_phone_signup",
+        @Field("mobile") mobile: String,
+        @Field("proof_token") proofToken: String,
+        @Field("fname") fname: String,
+        @Field("lname") lname: String,
         @Field("app_role") appRole: String = BuildConfig.APP_ROLE
     ): Call<LoginResponse>
 
@@ -159,6 +202,7 @@ interface ApiService {
         @Field("mobile") mobile: String,
         @Field("area") area: String,
         @Field("address") address: String,
+        @Field("landmark_notes") landmarkNotes: String = "",
         @Field("items") items: String,
         @Field("total") total: Double,
         @Field("payment_method") paymentMethod: String = "mobile_money",
@@ -807,7 +851,10 @@ interface ApiService {
         // Only meaningful on the transition to "delivered" for an order that
         // was pending_cash — the server ignores it otherwise. Sent as "1" once
         // the rider has confirmed they physically hold the cash.
-        @Field("cash_collected") cashCollected: String? = null
+        @Field("cash_collected") cashCollected: String? = null,
+        @Field("delivery_otp") deliveryOtp: String? = null,
+        @Field("latitude") latitude: Double? = null,
+        @Field("longitude") longitude: Double? = null
     ): Call<UpdateDeliveryStatusResponse>
 
     @POST("rider.php")

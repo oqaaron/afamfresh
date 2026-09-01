@@ -57,6 +57,46 @@ import com.techaus.afamfresh.viewmodel.TrackingViewModel
  * maps-compose 4.3.0 rasterises once and does not reliably re-render on content
  * change, so anything that must update has to update through MarkerState.
  */
+@Composable
+fun DeliveryPinCard(pin: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Delivery verification code",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pin.padEnd(4, '0').take(4).forEach { digit ->
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(8.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = digit.toString(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(MapsComposeExperimentalApi::class)
 @Composable
 fun OrderTrackingScreen(
@@ -208,6 +248,12 @@ fun OrderTrackingScreen(
 
     Scaffold(containerColor = Cream) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            if (!tracking?.deliveryOtp.isNullOrBlank()) {
+                DeliveryPinCard(
+                    pin = tracking!!.deliveryOtp!!,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                )
+            }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 GoogleMap(

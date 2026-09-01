@@ -2,6 +2,7 @@ package com.techaus.afamfresh
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.api.ApiClient
+import com.techaus.afamfresh.models.LoginUiState
 import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.services.AfamFreshMessagingService
 import com.techaus.afamfresh.models.User
@@ -29,12 +31,16 @@ import com.techaus.afamfresh.ui.screens.ForgotPasswordScreen
 import com.techaus.afamfresh.ui.screens.LoginScreen
 import com.techaus.afamfresh.ui.screens.MainScreen
 import com.techaus.afamfresh.ui.screens.MaintenanceScreen
+import com.techaus.afamfresh.ui.screens.CompletePhoneSignupScreen
 import com.techaus.afamfresh.ui.screens.OnboardingScreen
+import com.techaus.afamfresh.ui.screens.OtpEntryScreen
+import com.techaus.afamfresh.ui.screens.PhoneEntryScreen
 import com.techaus.afamfresh.ui.screens.RegisterScreen
 import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
+import com.techaus.afamfresh.ui.nav.flavorAuthRoutes
 import com.techaus.afamfresh.utils.FirebaseTokenManager
 import com.techaus.afamfresh.utils.OnboardingPrefs
 import com.techaus.afamfresh.utils.SessionTracker
@@ -257,6 +263,33 @@ class MainActivity : ComponentActivity() {
                                     resetToken?.let { navController.navigate("reset_password/$it") }
                                 }
 
+                                // Shared by both phone-auth success paths below
+                                // (existing-number login via otp_entry, and a
+                                // completed new-number signup via
+                                // complete_phone_signup) — same side effect
+                                // LoginScreen's onLoginSuccess already performs
+                                // for password login, just not duplicated
+                                // inline in two places. popUpTo targets the
+                                // graph's start destination rather than a
+                                // specific route name: phone auth's back stack
+                                // is deeper than plain login's (phone_entry ->
+                                // otp_entry -> maybe complete_phone_signup), so
+                                // clearing back to "login" specifically would
+                                // leave earlier phone-auth screens stranded
+                                // under home on the back stack.
+                                fun completeLogin(name: String) {
+                                    isLoggedIn = true
+                                    currentUser = authRepository.getUser()
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Welcome $name!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    navController.navigate("home") {
+                                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                    }
+                                }
+
                                 NavHost(
                                     navController = navController,
                                     startDestination = if (isLoggedIn) "home" else "login"
@@ -280,10 +313,17 @@ class MainActivity : ComponentActivity() {
                                                 navController.navigate("forgot_password")
                                             },
                                             onCreateAccount = {
-                                                navController.navigate("register")
+                                                navController.navigate(
+                                                    if (BuildConfig.APP_ROLE == "rider") "rider_register" else "register"
+                                                )
+                                            },
+                                            onPhoneSignIn = {
+                                                navController.navigate("phone_entry")
                                             }
                                         )
                                     }
+
+                                    flavorAuthRoutes(navController, authRepository)
 
                                     composable("forgot_password") {
                                         ForgotPasswordScreen(
@@ -322,7 +362,124 @@ class MainActivity : ComponentActivity() {
                                                 navController.navigate("login") {
                                                     popUpTo("register") { inclusive = true }
                                                 }
+                                            },
+                                            onPhoneSignUp = {
+                                                navController.navigate("phone_entry")
                                             }
+                                        )
+                                    }
+
+                                    // ===== PHONE / OTP SIGN-IN =====
+                                    // Third sign-in mechanism alongside password
+                                    // (login/register above) and Google. No
+                                    // route navigates here yet — LoginScreen
+                                    // needs its own new button/callback to
+                                    // actually call navController.navigate
+                                    // ("phone_entry"), which needs editing
+                                    // LoginScreen.kt itself. These three routes
+                                    // are fully wired and reachable once
+                                    // something calls that.
+
+                                    composable("phone_entry") {
+                                        val phoneAuthState by authViewModel.phoneAuthState.collectAsState()
+                                        var pendingMobile by remember { mutableStateOf("") }
+
+                                        LaunchedEffect(phoneAuthState) {
+                                            if (phoneAuthState is PhoneAuthState.CodeSent) {
+                                                navController.navigate("otp_entry/${Uri.encode(pendingMobile)}")
+                                            }
+                                        }
+
+                                        PhoneEntryScreen(
+                                            onBack = {
+                                                authViewModel.resetPhoneAuthState()
+                                                navController.popBackStack()
+                                            },
+                                            onContinue = { fullNumber ->
+                                                pendingMobile = fullNumber
+                                                authViewModel.sendPhoneOtp(fullNumber)
+                                            },
+                                            // No terms-of-service screen or URL
+                                            // known — left as a no-op rather
+                                            // than invented. Same open item as
+                                            // the "By clicking Continue..." line
+                                            // this screen already flags inline.
+                                            onTermsClick = { },
+                                            isLoading = phoneAuthState is PhoneAuthState.SendingCode,
+                                            errorMessage = (phoneAuthState as? PhoneAuthState.Error)?.message
+                                        )
+                                    }
+
+                                    composable("otp_entry/{mobile}") { backStackEntry ->
+                                        val mobile = backStackEntry.arguments?.getString("mobile").orEmpty()
+                                        val phoneAuthState by authViewModel.phoneAuthState.collectAsState()
+                                        val loginState by authViewModel.loginState.collectAsState()
+
+                                        // Existing-number branch: verifyPhoneOtp
+                                        // wrote straight into loginState, same
+                                        // shared surface password login uses.
+                                        // resetLoginState() after, matching
+                                        // LoginScreen's own LaunchedEffect —
+                                        // without it, a stale Success value
+                                        // could re-fire completeLogin() if this
+                                        // composable re-enters composition
+                                        // later without a fresh state change.
+                                        LaunchedEffect(loginState) {
+                                            val state = loginState
+                                            if (state is LoginUiState.Success) {
+                                                completeLogin(state.user.name)
+                                                authViewModel.resetLoginState()
+                                            }
+                                        }
+
+                                        // New-number branch: no account yet,
+                                        // move on to name collection.
+                                        LaunchedEffect(phoneAuthState) {
+                                            val state = phoneAuthState
+                                            if (state is PhoneAuthState.NeedsSignup) {
+                                                navController.navigate(
+                                                    "complete_phone_signup/${Uri.encode(state.mobile)}/${Uri.encode(state.proofToken)}"
+                                                )
+                                            }
+                                        }
+
+                                        OtpEntryScreen(
+                                            mobileDisplay = mobile,
+                                            onBack = {
+                                                authViewModel.resetPhoneAuthState()
+                                                navController.popBackStack()
+                                            },
+                                            onVerify = { code -> authViewModel.verifyPhoneOtp(mobile, code) },
+                                            onResend = { authViewModel.sendPhoneOtp(mobile) },
+                                            isLoading = phoneAuthState is PhoneAuthState.Verifying,
+                                            errorMessage = (phoneAuthState as? PhoneAuthState.Error)?.message
+                                        )
+                                    }
+
+                                    composable("complete_phone_signup/{mobile}/{proofToken}") { backStackEntry ->
+                                        val mobile = backStackEntry.arguments?.getString("mobile").orEmpty()
+                                        val proofToken = backStackEntry.arguments?.getString("proofToken").orEmpty()
+                                        val phoneAuthState by authViewModel.phoneAuthState.collectAsState()
+                                        val loginState by authViewModel.loginState.collectAsState()
+
+                                        LaunchedEffect(loginState) {
+                                            val state = loginState
+                                            if (state is LoginUiState.Success) {
+                                                completeLogin(state.user.name)
+                                                authViewModel.resetLoginState()
+                                            }
+                                        }
+
+                                        CompletePhoneSignupScreen(
+                                            onBack = {
+                                                authViewModel.resetPhoneAuthState()
+                                                navController.popBackStack()
+                                            },
+                                            onComplete = { fname, lname ->
+                                                authViewModel.completePhoneSignup(mobile, proofToken, fname, lname)
+                                            },
+                                            isLoading = phoneAuthState is PhoneAuthState.Completing,
+                                            errorMessage = (phoneAuthState as? PhoneAuthState.Error)?.message
                                         )
                                     }
 
@@ -345,6 +502,7 @@ class MainActivity : ComponentActivity() {
                                             favoritesViewModel = favoritesViewModel,
                                             trackingViewModel = trackingViewModel,
                                             deliveryRepository = viewModelFactory.deliveryRepository,
+                                            authRepository = authRepository,
                                             pendingOrderId = pendingOrderId.value,
                                             pendingOrderSource = pendingOrderSource.value,
                                             onPendingOrderHandled = {

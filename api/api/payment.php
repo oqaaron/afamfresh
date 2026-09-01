@@ -112,6 +112,13 @@ function loadUserEmail(PDO $dbh, int $userId): string {
     return (string)($stmt->fetchColumn() ?: '');
 }
 
+function enforceCashLimit(float $amount, string $paymentMethod): void {
+    $maxCash = 50000.0;
+    if (strtolower($paymentMethod) === 'cash' && $amount > $maxCash) {
+        fail('Cash payments are limited to UGX 50,000. Please use mobile money or card.', 400, 'CASH_LIMIT_EXCEEDED');
+    }
+}
+
 /**
  * Applies a resolved Pesapal status to the order, once.
  *
@@ -186,6 +193,7 @@ switch ($action) {
             if ($amount <= 0) fail('This order has no payable total.', 409, 'INVALID_AMOUNT');
 
             $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
+            enforceCashLimit((float)$amount, $paymentMethod);
 
             if ($paymentMethod === 'cash') {
                 // payment_method is recorded now, not inferred later. Until
@@ -293,6 +301,7 @@ switch ($action) {
         }
 
         $paymentMethod = strtolower(trim((string)param('payment_method', 'mobile_money')));
+        enforceCashLimit((float)$amount, $paymentMethod);
 
         // Cash on delivery never touches Pesapal.
         if ($paymentMethod === 'cash') {

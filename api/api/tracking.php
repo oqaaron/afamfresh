@@ -180,6 +180,8 @@ try {
         'source'         => $source,
         'status'         => $assignmentStatus,
         'order_status'   => $deliverable['status'],
+        'delivery_otp'   => $deliverable['delivery_otp'] ?? null,
+        'landmark_notes' => $deliverable['landmark_notes'] ?? null,
         'has_rider'      => $assignment !== false && $assignment !== null,
         'rider' => ($assignment && ($inProgress || $isAdmin || $isRider)) ? [
             'name'         => $assignment['rider_name'],

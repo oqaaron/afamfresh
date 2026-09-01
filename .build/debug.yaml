@@ -1,0 +1,183 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "PackageStructure": ["<PackageStructure>"]
+  "afamfresh-x86_64-unknown-linux-gnu-debug.exe": ["<afamfresh-x86_64-unknown-linux-gnu-debug.exe>"]
+  "afamfresh-x86_64-unknown-linux-gnu-debug.module": ["<afamfresh-x86_64-unknown-linux-gnu-debug.module>"]
+  "afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module": ["<afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module>"]
+  "afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module": ["<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module>"]
+  "afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test": ["<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test>"]
+  "afamfreshTests-x86_64-unknown-linux-gnu-debug.module": ["<afamfreshTests-x86_64-unknown-linux-gnu-debug.module>"]
+  "main": ["<afamfresh-x86_64-unknown-linux-gnu-debug.exe>","<afamfresh-x86_64-unknown-linux-gnu-debug.module>"]
+  "test": ["<afamfresh-x86_64-unknown-linux-gnu-debug.exe>","<afamfresh-x86_64-unknown-linux-gnu-debug.module>","<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test>","<afamfreshTests-x86_64-unknown-linux-gnu-debug.module>"]
+default: "main"
+nodes:
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o"]
+    description: "Wrapping AST for afamfresh for debugging"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-modulewrap","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o","-target","x86_64-unknown-linux-gnu"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.product/Objects.LinkFileList"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshPackageDiscoveredTests.swiftmodule.o":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshPackageDiscoveredTests.swiftmodule.o"]
+    description: "Wrapping AST for afamfreshPackageDiscoveredTests for debugging"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-modulewrap","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshPackageDiscoveredTests.swiftmodule.o","-target","x86_64-unknown-linux-gnu"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift":
+    tool: test-discovery-tool
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/afamfreshPackageTests.swiftmodule.o":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/afamfreshPackageTests.swiftmodule.o"]
+    description: "Wrapping AST for afamfreshPackageTests for debugging"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-modulewrap","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/afamfreshPackageTests.swiftmodule.o","-target","x86_64-unknown-linux-gnu"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift":
+    tool: test-entry-point-tool
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshPackageDiscoveredTests.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/all-discovered-tests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/afamfreshPackageTests.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swiftmodule.o"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.product/Objects.LinkFileList"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swiftmodule.o":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swiftmodule.o"]
+    description: "Wrapping AST for afamfreshTests for debugging"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-modulewrap","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swiftmodule.o","-target","x86_64-unknown-linux-gnu"]
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources"]
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources"
+
+  "/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt"
+
+  "<afamfresh-x86_64-unknown-linux-gnu-debug.exe>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh"]
+    outputs: ["<afamfresh-x86_64-unknown-linux-gnu-debug.exe>"]
+
+  "<afamfresh-x86_64-unknown-linux-gnu-debug.module>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule"]
+    outputs: ["<afamfresh-x86_64-unknown-linux-gnu-debug.module>"]
+
+  "<afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/all-discovered-tests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"]
+    outputs: ["<afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module>"]
+
+  "<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule"]
+    outputs: ["<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module>"]
+
+  "<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.xctest"]
+    outputs: ["<afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test>"]
+
+  "<afamfreshTests-x86_64-unknown-linux-gnu-debug.module>":
+    tool: phony
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"]
+    outputs: ["<afamfreshTests-x86_64-unknown-linux-gnu-debug.module>"]
+
+  "C.afamfresh-x86_64-unknown-linux-gnu-debug.exe":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.product/Objects.LinkFileList"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh"]
+    description: "Linking ./.build/x86_64-unknown-linux-gnu/debug/afamfresh"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-L","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh","-module-name","afamfresh","-emit-executable","-Xlinker","--defsym","-Xlinker","main=afamfresh_main","-Xlinker","-rpath=$ORIGIN","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.product/Objects.LinkFileList","-target","x86_64-unknown-linux-gnu","-g"]
+
+  "C.afamfresh-x86_64-unknown-linux-gnu-debug.module":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift","/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule"]
+    description: "Compiling Swift Module 'afamfresh' (9 sources)"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-module-name","afamfresh","-emit-dependencies","-emit-module","-emit-module-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfresh.swiftmodule","-output-file-map","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/output-file-map.json","-incremental","-c","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/sources","-I","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules","-target","x86_64-unknown-linux-gnu","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","afamfresh_main","-color-diagnostics","-swift-version","6","-g","-Xcc","-fPIC","-Xcc","-g","-package-name","afamfresh","-Xcc","-fno-omit-frame-pointer"]
+
+  "C.afamfreshPackageDiscoveredTests-x86_64-unknown-linux-gnu-debug.module":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/afamfreshTests.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.derived/all-discovered-tests.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/all-discovered-tests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule"]
+    description: "Compiling Swift Module 'afamfreshPackageDiscoveredTests' (2 sources)"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-module-name","afamfreshPackageDiscoveredTests","-emit-dependencies","-emit-module","-emit-module-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule","-output-file-map","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/sources","-I","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules","-target","x86_64-unknown-linux-gnu","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/include/afamfreshPackageDiscoveredTests-Swift.h","-color-diagnostics","-g","-Xcc","-fPIC","-Xcc","-g","-package-name","afamfresh","-Xcc","-fno-omit-frame-pointer"]
+
+  "C.afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.module":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.derived/runner.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageDiscoveredTests.swiftmodule","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule"]
+    description: "Compiling Swift Module 'afamfreshPackageTests' (1 sources)"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-module-name","afamfreshPackageTests","-emit-dependencies","-emit-module","-emit-module-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshPackageTests.swiftmodule","-output-file-map","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/sources","-I","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules","-target","x86_64-unknown-linux-gnu","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/include/afamfreshPackageTests-Swift.h","-color-diagnostics","-g","-Xcc","-fPIC","-Xcc","-g","-package-name","afamfresh","-Xcc","-fno-omit-frame-pointer"]
+
+  "C.afamfreshPackageTests-x86_64-unknown-linux-gnu-debug.test":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/afamfresh.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshPackageDiscoveredTests.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageDiscoveredTests.build/all-discovered-tests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/afamfreshPackageTests.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.build/runner.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swiftmodule.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.product/Objects.LinkFileList"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.xctest"]
+    description: "Linking ./.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.xctest"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-L","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug","-o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.xctest","-module-name","afamfreshPackageTests","-emit-executable","-Xlinker","-rpath=$ORIGIN","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshPackageTests.product/Objects.LinkFileList","-target","x86_64-unknown-linux-gnu","-g"]
+
+  "C.afamfreshTests-x86_64-unknown-linux-gnu-debug.module":
+    tool: shell
+    inputs: ["/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/afamfreshTests.swift","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/swift-version-23D30A7F429B2B0E.txt","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfresh","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources"]
+    outputs: ["/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/afamfreshTests.swift.o","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule"]
+    description: "Compiling Swift Module 'afamfreshTests' (1 sources)"
+    args: ["/home/aokwi/.local/share/swiftly/toolchains/6.3.3/usr/bin/swiftc","-module-name","afamfreshTests","-emit-dependencies","-emit-module","-emit-module-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules/afamfreshTests.swiftmodule","-output-file-map","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/afamfreshTests.build/sources","-I","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/Modules","-target","x86_64-unknown-linux-gnu","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/home/aokwi/Desktop/afamfresh/.build/x86_64-unknown-linux-gnu/debug/ModuleCache","-parseable-output","-parse-as-library","-color-diagnostics","-swift-version","6","-g","-Xcc","-fPIC","-Xcc","-g","-package-name","afamfresh","-Xcc","-fno-omit-frame-pointer"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/home/aokwi/Desktop/afamfresh/Sources/afamfresh/","/home/aokwi/Desktop/afamfresh/Tests/afamfreshTests/","/home/aokwi/Desktop/afamfresh/Package.swift","/home/aokwi/Desktop/afamfresh/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+

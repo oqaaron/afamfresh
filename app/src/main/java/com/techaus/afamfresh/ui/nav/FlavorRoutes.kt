@@ -55,4 +55,5 @@ data class FlavorRouteDeps(
      * the signature has to match across them.
      */
     val trackingViewModel: TrackingViewModel,
+    val authRepository: com.techaus.afamfresh.repository.AuthRepository,
 )

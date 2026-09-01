@@ -1,17 +1,19 @@
 package com.techaus.afamfresh.repository
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
-import com.google.android.gms.common.api.ApiException
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.techaus.afamfresh.R
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.api.ApiService
@@ -19,8 +21,10 @@ import com.techaus.afamfresh.models.BaseResponse
 import com.techaus.afamfresh.models.LoginRequest
 import com.techaus.afamfresh.models.LoginResponse
 import com.techaus.afamfresh.models.NotificationPrefs
+import com.techaus.afamfresh.models.PhoneVerifyResponse
 import com.techaus.afamfresh.models.RegisterRequest
 import com.techaus.afamfresh.models.RegisterResponse
+import com.techaus.afamfresh.models.RiderRegistrationRequest
 import com.techaus.afamfresh.models.RoleSwitchResponse
 import com.techaus.afamfresh.models.UpdateProfileRequest
 import com.techaus.afamfresh.models.User
@@ -30,8 +34,8 @@ import com.techaus.afamfresh.utils.SessionTracker
 import com.techaus.afamfresh.utils.SecurePrefs
 import com.techaus.afamfresh.utils.enqueueApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -449,6 +453,104 @@ class AuthRepository(
             }
     }
 
+    fun registerRider(request: RiderRegistrationRequest, callback: (RegisterResponse?, ApiError?) -> Unit) {
+        try {
+            apiService.registerRider(body = request)
+                .enqueueApi<RegisterResponse>("AuthRepo", "registerRider") { body, error ->
+                    when {
+                        error != null -> callback(null, error)
+                        body?.success == true -> callback(body, null)
+                        else -> callback(null, ApiError.reported(body?.error))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "registerRider exception: ${e.message}", e)
+            callback(null, ApiError.Unexpected(e.message))
+        }
+    }
+
+    // ===== PHONE / OTP SIGN-IN =====
+    // Third sign-in mechanism alongside password (login/register above) and
+    // Google (further down). Follows login/register's callback+enqueueApi
+    // style rather than googleLogin's suspend one — that's the majority
+    // pattern in this file, and there's no reason for phone auth specifically
+    // to be the odd one out.
+
+    fun sendPhoneOtp(mobile: String, callback: (BaseResponse?, ApiError?) -> Unit) {
+        try {
+            apiService.sendPhoneOtp(mobile = mobile)
+                .enqueueApi<BaseResponse>("AuthRepo", "sendPhoneOtp") { body, error ->
+                    when {
+                        error != null -> callback(null, error)
+                        body?.success == true -> callback(body, null)
+                        else -> callback(null, ApiError.reported(body?.error ?: "Could not send the verification code."))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "sendPhoneOtp exception: ${e.message}", e)
+            callback(null, ApiError.Unexpected(e.message))
+        }
+    }
+
+    fun verifyPhoneOtp(mobile: String, code: String, callback: (PhoneVerifyResponse?, ApiError?) -> Unit) {
+        try {
+            apiService.verifyPhoneOtp(mobile = mobile, code = code)
+                .enqueueApi<PhoneVerifyResponse>("AuthRepo", "verifyPhoneOtp") { body, error ->
+                    when {
+                        error != null -> callback(null, error)
+
+                        // Existing account — this call IS the login, same
+                        // shape of consequence as login()/googleLogin() above.
+                        body?.success == true && body.isNewUser == false && body.token != null && body.user != null -> {
+                            saveToken(body.token)
+                            saveUser(body.user)
+                            updateLastActivity()
+                            callback(body, null)
+                        }
+
+                        // New number — verified, but no account yet. Nothing
+                        // to save to session here; the caller moves on to
+                        // completePhoneSignup() with body.proofToken.
+                        body?.success == true && body.isNewUser == true -> callback(body, null)
+
+                        else -> callback(null, ApiError.reported(body?.error ?: "Incorrect code. Please try again."))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "verifyPhoneOtp exception: ${e.message}", e)
+            callback(null, ApiError.Unexpected(e.message))
+        }
+    }
+
+    fun completePhoneSignup(
+        mobile: String,
+        proofToken: String,
+        fname: String,
+        lname: String,
+        callback: (LoginResponse?, ApiError?) -> Unit
+    ) {
+        try {
+            apiService.completePhoneSignup(mobile = mobile, proofToken = proofToken, fname = fname, lname = lname)
+                .enqueueApi<LoginResponse>("AuthRepo", "completePhoneSignup") { body, error ->
+                    when {
+                        error != null -> callback(null, error)
+
+                        body?.success == true && body.token != null && body.user != null -> {
+                            saveToken(body.token)
+                            saveUser(body.user)
+                            updateLastActivity()
+                            callback(body, null)
+                        }
+
+                        else -> callback(null, ApiError.reported(body?.error ?: "Could not create your account."))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("AuthRepo", "completePhoneSignup exception: ${e.message}", e)
+            callback(null, ApiError.Unexpected(e.message))
+        }
+    }
+
     fun logout(callback: (Boolean) -> Unit) {
         apiService.logout().enqueue(object : Callback<BaseResponse> {
             override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
@@ -469,22 +571,27 @@ class AuthRepository(
     /**
      * Asks the backend to email a reset link.
      *
-     * Reports success to the caller even on an HTTP error, deliberately: the
-     * UI must not reveal whether an address has an account. Genuine network
-     * failures are still surfaced as false so the user can retry.
+     * Unknown addresses still resolve as success so account existence is not
+     * disclosed. Provider failures for a real account are returned as a
+     * generic error so the UI does not claim an email was sent.
      */
-    fun requestPasswordReset(email: String, callback: (success: Boolean, networkError: Boolean) -> Unit) {
+    fun requestPasswordReset(email: String, callback: (success: Boolean, errorMessage: String?) -> Unit) {
         apiService.requestPasswordReset(email = email).enqueue(object : Callback<BaseResponse> {
             override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
                 if (!response.isSuccessful) {
                     Log.w("AuthRepo", "requestPasswordReset HTTP ${response.code()}")
                 }
-                callback(true, false)
+                val body = response.body()
+                if (response.isSuccessful && body?.success == true) {
+                    callback(true, null)
+                } else {
+                    callback(false, body?.error ?: "We could not send the reset email right now. Please try again later.")
+                }
             }
 
             override fun onFailure(call: Call<BaseResponse>, t: Throwable) {
                 Log.e("AuthRepo", "requestPasswordReset network failure: ${t.message}", t)
-                callback(false, true)
+                callback(false, "Couldn't reach the server. Check your connection and try again.")
             }
         })
     }
@@ -541,81 +648,116 @@ class AuthRepository(
 
     // ===== GOOGLE SIGN-IN =====
 
-    fun getGoogleSignInClient(): GoogleSignInClient {
-        // default_web_client_id is generated by the google-services plugin from
-        // app/google-services.json, so it cannot disagree with the project the
-        // rest of Firebase is configured for.
-        //
-        // It used to be a literal here. That literal named a client in one
-        // project while the backend's audience check named a client in
-        // another, so every sign-in that got past Google was then rejected by
-        // our own server — and neither side could reveal the mismatch, because
-        // each looked correct on its own.
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(context.getString(R.string.default_web_client_id))
-            .requestEmail()
-            .build()
-        return GoogleSignIn.getClient(context, gso)
-    }
-
     /**
-     * A sentence explaining a Google Sign-In failure, from its status code.
+     * A sentence explaining a Google Sign-In failure, from the exception
+     * Credential Manager threw.
      *
-     * DEVELOPER_ERROR is the one worth naming precisely: it means this app's
-     * (package name, SHA-1) pair has no OAuth client registered in Firebase,
-     * which is a configuration gap rather than anything the user did. It is
-     * also the failure the three-app split makes most likely, since each new
-     * applicationId needs its own fingerprint registered.
+     * Credential Manager doesn't expose a numeric status code the way the
+     * legacy API's GoogleSignInStatusCodes did — NoCredentialException is the
+     * one worth naming precisely, since it's what a missing/misconfigured
+     * OAuth client registration in Firebase surfaces as here (the same real
+     * cause the old DEVELOPER_ERROR branch used to name), not a generic
+     * failure. Anything else falls back to a message that still points the
+     * user toward email/password, with the real exception type logged for
+     * debugging rather than guessed at.
      */
-    private fun googleSignInMessage(statusCode: Int): String = when (statusCode) {
-        GoogleSignInStatusCodes.DEVELOPER_ERROR ->
-            "Google Sign-In isn't set up for this app yet — its SHA-1 fingerprint is " +
-                "missing from Firebase. Please sign in with your email and password."
-        GoogleSignInStatusCodes.NETWORK_ERROR ->
-            "Couldn't reach Google. Check your connection and try again."
-        GoogleSignInStatusCodes.SIGN_IN_FAILED ->
-            "Google couldn't sign you in. Try again, or use your email and password."
-        GoogleSignInStatusCodes.INVALID_ACCOUNT ->
-            "That Google account can't be used here. Try a different one."
-        GoogleSignInStatusCodes.SIGN_IN_REQUIRED ->
-            "Please choose a Google account to continue."
+    private fun googleSignInMessage(e: GetCredentialException): String = when (e) {
+        is androidx.credentials.exceptions.NoCredentialException ->
+            "No Google account is available to sign in with on this device, " +
+                "or this app isn't set up for Google Sign-In yet. " +
+                "Please sign in with your email and password."
         else ->
-            "Google sign-in didn't work (code $statusCode). " +
+            "Google couldn't sign you in (${e.type}). " +
                 "Try again, or use your email and password."
     }
 
-    suspend fun handleGoogleSignInResult(data: Intent?): GoogleSignInResult {
-        return suspendCancellableCoroutine { continuation ->
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            task.addOnCompleteListener { task ->
-                try {
-                    val account = task.getResult(ApiException::class.java)
-                    if (account != null) {
-                        val idToken = account.idToken
-                        if (idToken != null) {
-                            continuation.resume(GoogleSignInResult.Success(idToken, account))
-                        } else {
-                            continuation.resume(GoogleSignInResult.Error("No ID token found"))
-                        }
-                    } else {
-                        continuation.resume(GoogleSignInResult.Error("Sign-in failed"))
-                    }
-                } catch (e: ApiException) {
-                    // ApiException.message for a configuration problem is the
-                    // bare string "10", which told the user nothing and told
-                    // us nothing either. The numeric code goes to logcat and
-                    // the user gets a sentence naming the actual cause.
-                    if (e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
-                        // The user backed out of the account chooser. Not a
-                        // failure, and showing them an error for their own
-                        // deliberate action reads as a bug.
-                        continuation.resume(GoogleSignInResult.Cancelled)
-                    } else {
-                        Log.e("AuthRepo", "Google sign-in failed: statusCode=${e.statusCode}", e)
-                        continuation.resume(GoogleSignInResult.Error(googleSignInMessage(e.statusCode)))
-                    }
-                }
+    /**
+     * Runs the whole Credential Manager flow — building the request, showing
+     * the account picker, and parsing the result — in one suspend call.
+     *
+     * This replaces what used to be two separate functions:
+     * getGoogleSignInClient() (build an Intent to launch) and
+     * handleGoogleSignInResult() (parse what came back from
+     * onActivityResult). That split doesn't exist anymore because Credential
+     * Manager has no Activity Result step at all — getCredential() is a
+     * single suspend call — so LoginScreen/RegisterScreen no longer need an
+     * ActivityResultLauncher or a separate result-handling call either.
+     *
+     * default_web_client_id is generated by the google-services plugin from
+     * app/google-services.json, so it cannot disagree with the project the
+     * rest of Firebase is configured for — same reasoning as before, still
+     * true here since Credential Manager's Google ID option wants the same
+     * web/server client id requestIdToken() used to.
+     */
+    suspend fun signInWithGoogle(context: Context): GoogleSignInResult {
+        // GetSignInWithGoogleOption, not GetGoogleIdOption. GetGoogleIdOption
+        // is built for the automatic "One Tap" bottom-sheet prompt that
+        // appears without the user tapping anything — using it behind an
+        // explicit "Continue with Google" button (this app's actual UX)
+        // produced a specific, documented failure: "During begin sign in,
+        // failure response from one tap: 16: [28433] Cannot find a matching
+        // credential." That exact error is filed against Google's own
+        // android/identity-samples repo (issue #94) with matching code,
+        // confirming it's a known mismatch between option type and UX
+        // pattern, not a bug in this implementation. GetSignInWithGoogleOption
+        // is the option meant for a deliberate button tap like this one.
+        //
+        // The constructor takes serverClientId directly, not a builder
+        // method — a real shape difference from GetGoogleIdOption, not a
+        // typo.
+        val signInWithGoogleOption = GetSignInWithGoogleOption
+            .Builder(context.getString(R.string.default_web_client_id))
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(signInWithGoogleOption)
+            .build()
+
+        return try {
+            val credentialManager = CredentialManager.create(context)
+            // Credential Manager has a documented bug where getCredential()
+            // can hang indefinitely — no exception, no crash — if the picker
+            // is interacted with before it's fully finished rendering (see
+            // android/identity-samples issue #113). withTimeoutOrNull turns
+            // that into a clear failure after 30 seconds instead of leaving
+            // the user stuck forever with a disabled button and no feedback.
+            val result = withTimeoutOrNull(30_000L) {
+                credentialManager.getCredential(context, request)
+            } ?: run {
+                Log.e("AuthRepo", "Google sign-in timed out waiting for Credential Manager to respond")
+                return GoogleSignInResult.Error(
+                    "Google sign-in took too long to respond. Please try again, or use your email and password."
+                )
             }
+            val credential = result.credential
+
+            if (credential is CustomCredential &&
+                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+            ) {
+                try {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    GoogleSignInResult.Success(googleIdTokenCredential.idToken)
+                } catch (e: GoogleIdTokenParsingException) {
+                    Log.e("AuthRepo", "Google ID token parsing failed: ${e.message}", e)
+                    GoogleSignInResult.Error("No ID token found")
+                }
+            } else {
+                // Previously silent — nothing logged here meant a failure on
+                // this specific path was invisible in logcat, showing only
+                // as "Sign-in failed" on screen with no trace of why.
+                // credential.javaClass.name shows exactly what type Google
+                // actually returned instead of the expected GoogleIdTokenCredential.
+                Log.e("AuthRepo", "Google sign-in returned an unexpected credential type: ${credential.javaClass.name}")
+                GoogleSignInResult.Error("Sign-in failed")
+            }
+        } catch (e: GetCredentialCancellationException) {
+            // The user backed out of the account chooser. Not a failure, and
+            // showing them an error for their own deliberate action reads as
+            // a bug — same reasoning the legacy SIGN_IN_CANCELLED branch had.
+            GoogleSignInResult.Cancelled
+        } catch (e: GetCredentialException) {
+            Log.e("AuthRepo", "Google sign-in failed: ${e.type}", e)
+            GoogleSignInResult.Error(googleSignInMessage(e))
         }
     }
 
@@ -656,7 +798,15 @@ class AuthRepository(
     }
 
     sealed class GoogleSignInResult {
-        data class Success(val idToken: String, val account: com.google.android.gms.auth.api.signin.GoogleSignInAccount) : GoogleSignInResult()
+        // account field removed: it was never read anywhere in
+        // AuthRepository/AuthViewModel/LoginScreen/RegisterScreen (confirmed
+        // by search across all four before removing it), and Credential
+        // Manager has no equivalent to produce — it returns a
+        // GoogleIdTokenCredential, not a GoogleSignInAccount, so there was no
+        // way to keep populating this field even if something elsewhere did
+        // read it. Worth a repo-wide search for `.account` on this type if
+        // you have visibility I don't.
+        data class Success(val idToken: String) : GoogleSignInResult()
         data class Error(val message: String) : GoogleSignInResult()
 
         /** The user dismissed the account chooser — nothing to report. */

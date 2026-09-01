@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.techaus.afamfresh.models.CartItem
 import com.techaus.afamfresh.models.PaymentRequest
 import com.techaus.afamfresh.ui.theme.*
+import com.techaus.afamfresh.utils.PaymentPolicy
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.AddressViewModel
 import com.techaus.afamfresh.viewmodel.CheckoutViewModel
@@ -76,6 +77,7 @@ fun CheckoutScreen(
     var email by rememberSaveable(userEmail) { mutableStateOf(userEmail ?: "") }
     var area by rememberSaveable { mutableStateOf("") }
     var address by rememberSaveable(deliveryResult) { mutableStateOf(deliveryResult?.dropoffAddress ?: "") }
+    var landmarkNotes by rememberSaveable { mutableStateOf("") }
     var paymentMethod by rememberSaveable { mutableStateOf("mobile_money") }
 
     // Off by default — an order with no schedule is "as soon as possible",
@@ -123,9 +125,15 @@ fun CheckoutScreen(
     }
 
     val total = subtotal + deliveryCost - loyaltyDiscount
+    val cashAllowed = PaymentPolicy.cashAllowedFor(total)
     val isBusy = isPlacingOrder || isPaying
 
     fun submitOrder() {
+        if (paymentMethod == "cash" && !cashAllowed) {
+            checkoutViewModel.setError("Cash payments are limited to UGX 50,000. Please use mobile money or card.")
+            return
+        }
+
         checkoutViewModel.placeOrder(
             cartItems = cartItems,
             fname = fname,
@@ -133,6 +141,7 @@ fun CheckoutScreen(
             mobile = mobile,
             area = area,
             address = address,
+            landmarkNotes = landmarkNotes,
             email = email,
             deliveryResult = deliveryResult,
             pointsRedeem = loyaltyPreview?.pointsApplied ?: 0,
@@ -258,6 +267,20 @@ fun CheckoutScreen(
                 CheckoutField(value = email, onChange = { email = it }, label = "Email (optional)")
                 CheckoutField(value = area, onChange = { area = it }, label = "Area / neighborhood")
                 CheckoutField(value = address, onChange = { address = it }, label = "Delivery address")
+                OutlinedTextField(
+                    value = landmarkNotes,
+                    onValueChange = { landmarkNotes = it },
+                    label = { Text("Landmark / gate / house description") },
+                    placeholder = { Text("e.g. Black gate opposite the pharmacy") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    minLines = 2,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Cream,
+                        focusedContainerColor = Cream
+                    )
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))

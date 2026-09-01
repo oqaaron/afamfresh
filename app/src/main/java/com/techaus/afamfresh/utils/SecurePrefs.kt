@@ -24,14 +24,9 @@ import androidx.security.crypto.MasterKey
  * are therefore not signed out by this change — which matters, because the
  * alternative is every current user being kicked to the login screen on update.
  *
- * ## Fallback
- *
- * If the Keystore is unavailable or corrupt (it does happen — some devices
- * invalidate keys on lock-screen changes, and the encrypted file is then
- * unreadable), this falls back to plain SharedPreferences rather than crashing
- * the app on launch. A user locked out of their own app by a Keystore fault is
- * a worse outcome than the storage being temporarily unencrypted, and the
- * fallback is logged.
+ * Keystore failures are not silently downgraded to plaintext storage. If the
+ * encrypted preference store cannot be initialized, we surface the error so the
+ * app does not keep functioning with sensitive session state in cleartext.
  */
 object SecurePrefs {
 
@@ -61,10 +56,11 @@ object SecurePrefs {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // Includes the case where a previously written encrypted file can
-            // no longer be decrypted.
-            Log.e(TAG, "EncryptedSharedPreferences unavailable, falling back to plaintext: ${e.message}", e)
-            return appContext.getSharedPreferences(plaintextName, Context.MODE_PRIVATE)
+            // Do not fall back to plaintext storage. Keystore failures are a
+            // security event, and the app should fail loudly rather than keep
+            // sensitive session data in cleartext on disk.
+            Log.e(TAG, "EncryptedSharedPreferences unavailable for $encryptedName: ${e.message}", e)
+            throw IllegalStateException("Unable to initialize encrypted preferences for $encryptedName", e)
         }
 
         migrateIfNeeded(appContext, plaintextName, encrypted)

@@ -1,0 +1,65 @@
+diff --git a/api/api/vendor-catalogue.php b/api/api/vendor-catalogue.php
+index f2b2c12..80fdd10 100644
+--- a/api/api/vendor-catalogue.php
++++ b/api/api/vendor-catalogue.php
+@@ -94,6 +94,29 @@ if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+     $price       = $field('price');
+     $quantityType = $field('quantitytype') ?: 'kg';
+ 
++    // Validated here for the same reason admin/add-product.php validates it:
++    // the app's category chips are a convenience, and a raw POST bypasses
++    // them entirely. A category outside the `category` table means the
++    // product vanishes from the customer app's home-screen bubbles and shows
++    // up as a phantom tile of its own in Browse -- with no error raised
++    // anywhere, so nobody finds out until a vendor asks why their product is
++    // unbuyable.
++    //
++    // This endpoint previously inserted $category raw. It was the ONLY write
++    // path to items.category that skipped the check.
++    require_once __DIR__ . '/../includes/categories.php';
++
++    if ($category !== '' && !isKnownCategory($dbh, $category)) {
++        echo json_encode([
++            'success' => false,
++            'error'   => 'Unknown category "' . $category . '". Pick one from the list.',
++        ]);
++        exit;
++    }
++    // Store the table's exact spelling, so a value differing only by case or
++    // spacing lands as one category rather than two.
++    $category = canonicalCategory($dbh, $category);
++
+     if ($name === '' || $category === '' || $price === '') {
+         echo json_encode([
+             'success' => false,
+diff --git a/app/src/vendor/java/com/techaus/afamfresh/ui/screens/vendor/NewProductScreen.kt b/app/src/vendor/java/com/techaus/afamfresh/ui/screens/vendor/NewProductScreen.kt
+index d5cbc85..06ddf5d 100644
+--- a/app/src/vendor/java/com/techaus/afamfresh/ui/screens/vendor/NewProductScreen.kt
++++ b/app/src/vendor/java/com/techaus/afamfresh/ui/screens/vendor/NewProductScreen.kt
+@@ -73,9 +73,24 @@ fun NewProductScreen(
+ 
+     // Matches the categories already in `items`, so a vendor product files
+     // alongside the catalogue rather than inventing a category of one.
++    // The canonical list, matching the `category` table. Keep the two in step:
++    // api/vendor-catalogue.php now rejects anything off the table server-side,
++    // so a stale entry here shows the vendor an error they cannot act on.
++    //
++    // Not a free choice. The customer app filters on exact names
++    // (HomeScreen.kt's FRESH_FOOD_CATEGORIES, BrowseScreen.kt's derived
++    // tiles), so a category outside the table makes the product invisible in
++    // Fresh Food and renders a phantom Browse tile of its own.
++    //
++    // The previous list claimed to match `items` and did not: six of its ten
++    // entries -- Tubers, Legumes, Herbs, Dairy, Meat, Others -- existed in no
++    // category table anywhere. "Dairy" and "Meat" were the dangerous ones,
++    // because the real names are "Dairy Products" and "Meats" and the
++    // truncated forms look entirely plausible in the picker.
+     val categories = listOf(
+-        "Vegetables", "Fruits", "Grains", "Tubers", "Legumes",
+-        "Herbs", "Dairy", "Meat", "Fish Products", "Others"
++        "Fruits", "Juice", "Vegetables", "Oils", "Meats",
++        "Dairy Products", "Chicken Products", "Dry Ratio", "Groceries",
++        "Grains", "Fish Products", "Meal Plans", "Condiments", "Beverages"
+     )
+     val units = listOf("kg", "piece", "bunch", "tray", "basket", "crate", "sack")
+ 

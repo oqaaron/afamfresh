@@ -1,0 +1,68 @@
+{
+  "": {
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/primary.swiftdeps"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshAPI.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshAPI.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AfamFreshModels.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AfamFreshModels.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/AppFlavour.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/AppFlavour.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/BulkModels.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/BulkModels.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI+Bulk.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI+Bulk.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerAPI.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerAPI.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/CustomerModels.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/CustomerModels.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/PaymentAndRoles.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/PaymentAndRoles.dia"
+  },
+  "/home/aokwi/Desktop/afamfresh/Sources/afamfresh/main.swift": {
+    "dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.d",
+    "object": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swift.o",
+    "swiftmodule": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main~partial.swiftmodule",
+    "swift-dependencies": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.swiftdeps",
+    "diagnostics": "/home/aokwi/Desktop/afamfresh/.build/index-build/x86_64-unknown-linux-gnu/debug/afamfresh.build/main.dia"
+  }
+}

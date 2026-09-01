@@ -38,6 +38,7 @@ data class Order(
     @SerializedName("mobile") val mobile: String? = null,
     @SerializedName("area") val area: String? = null,
     @SerializedName("address") val address: String? = null,
+    @SerializedName("landmark_notes") val landmarkNotes: String? = null,
 
     /** The geocoded destination; `address` is what the customer typed. */
     @SerializedName("delivery_address") val deliveryAddress: String? = null,

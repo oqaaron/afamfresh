@@ -1,9 +1,8 @@
 package com.techaus.afamfresh.viewmodel
 
-import android.content.Intent
+import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.techaus.afamfresh.BuildConfig
@@ -19,6 +18,27 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+/**
+ * States specific to the phone/OTP sign-in flow — kept separate from
+ * [LoginUiState] rather than adding a case to it. NeedsSignup has no
+ * equivalent there: LoginUiState only knows success or failure, and this
+ * flow has a real third outcome — verified, but no account exists yet.
+ * LoginScreen's LaunchedEffect(loginState) pattern-matches LoginUiState
+ * elsewhere; adding a case there risks breaking an exhaustive `when` in code
+ * this file can't see. Only the final success (Login branch of verify, or
+ * completePhoneSignup) writes into loginState/user/loginSuccess — the same
+ * shared surface login()/register()/handleGoogleSignInResult() already do.
+ */
+sealed class PhoneAuthState {
+    object Idle : PhoneAuthState()
+    object SendingCode : PhoneAuthState()
+    object CodeSent : PhoneAuthState()
+    object Verifying : PhoneAuthState()
+    data class NeedsSignup(val mobile: String, val proofToken: String) : PhoneAuthState()
+    object Completing : PhoneAuthState()
+    data class Error(val message: String) : PhoneAuthState()
+}
 
 class AuthViewModel(
     private val authRepository: AuthRepository
@@ -256,19 +276,18 @@ class AuthViewModel(
     }
 
     // ===== GOOGLE SIGN-IN =====
-    fun signInWithGoogle(launcher: ActivityResultLauncher<Intent>) {
+    // One function now, not two. The old split (signInWithGoogle launches an
+    // Intent via an ActivityResultLauncher, handleGoogleSignInResult
+    // processes whatever came back in onActivityResult) existed because the
+    // legacy API had a real gap in the middle — an Activity Result the app
+    // had to wait for. Credential Manager's getCredential() is a single
+    // suspend call with no such gap, so there's nothing left to split.
+    fun signInWithGoogle(context: Context) {
         _isLoading.value = true
         _error.value = null
         _loginState.value = LoginUiState.Loading
-        val signInClient = authRepository.getGoogleSignInClient()
-        launcher.launch(signInClient.signInIntent)
-    }
-
-    fun handleGoogleSignInResult(result: Intent?) {
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val signInResult = authRepository.handleGoogleSignInResult(result)
+            val signInResult = authRepository.signInWithGoogle(context)
             when (signInResult) {
                 is GoogleSignInResult.Success -> {
                     val loginResponse = authRepository.googleLogin(signInResult.idToken)
@@ -294,5 +313,73 @@ class AuthViewModel(
             }
             _isLoading.value = false
         }
+    }
+
+    // ===== PHONE / OTP SIGN-IN =====
+    // Third sign-in mechanism alongside password (login/register above) and
+    // Google (immediately above). See PhoneAuthState's own doc comment for
+    // why this doesn't route through loginState for every step.
+
+    private val _phoneAuthState = MutableStateFlow<PhoneAuthState>(PhoneAuthState.Idle)
+    val phoneAuthState: StateFlow<PhoneAuthState> = _phoneAuthState.asStateFlow()
+
+    fun sendPhoneOtp(mobile: String) {
+        _phoneAuthState.value = PhoneAuthState.SendingCode
+        authRepository.sendPhoneOtp(mobile) { response, error ->
+            _phoneAuthState.value = if (response?.success == true) {
+                PhoneAuthState.CodeSent
+            } else {
+                PhoneAuthState.Error(error?.userMessage ?: response?.error ?: "Could not send the verification code.")
+            }
+        }
+    }
+
+    fun verifyPhoneOtp(mobile: String, code: String) {
+        _phoneAuthState.value = PhoneAuthState.Verifying
+        authRepository.verifyPhoneOtp(mobile, code) { response, error ->
+            when {
+                // Existing number — this IS the login, same shared surface
+                // login()/register()/handleGoogleSignInResult() write into.
+                response?.success == true && response.isNewUser == false && response.user != null -> {
+                    _user.value = response.user
+                    _loginSuccess.value = true
+                    _loginState.value = LoginUiState.Success(response.user)
+                    _phoneAuthState.value = PhoneAuthState.Idle
+                }
+
+                // New number — verified, no account yet. The screen layer
+                // reacts to NeedsSignup by navigating to the name-collection
+                // step, then calls completePhoneSignup with this proofToken.
+                response?.success == true && response.isNewUser == true && response.proofToken != null -> {
+                    _phoneAuthState.value = PhoneAuthState.NeedsSignup(mobile, response.proofToken)
+                }
+
+                else -> {
+                    _phoneAuthState.value =
+                        PhoneAuthState.Error(error?.userMessage ?: response?.error ?: "Incorrect code. Please try again.")
+                }
+            }
+        }
+    }
+
+    fun completePhoneSignup(mobile: String, proofToken: String, fname: String, lname: String) {
+        _phoneAuthState.value = PhoneAuthState.Completing
+        authRepository.completePhoneSignup(mobile, proofToken, fname, lname) { response, error ->
+            if (response?.success == true && response.user != null) {
+                _user.value = response.user
+                _loginSuccess.value = true
+                _loginState.value = LoginUiState.Success(response.user)
+                _phoneAuthState.value = PhoneAuthState.Idle
+            } else {
+                _phoneAuthState.value =
+                    PhoneAuthState.Error(error?.userMessage ?: response?.error ?: "Could not create your account.")
+            }
+        }
+    }
+
+    /** Mirrors resetLoginState() above — called when backing out of the
+     *  phone flow, so a stale error doesn't reappear on a later attempt. */
+    fun resetPhoneAuthState() {
+        _phoneAuthState.value = PhoneAuthState.Idle
     }
 }

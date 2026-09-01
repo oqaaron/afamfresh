@@ -94,6 +94,81 @@ if ($action == 'login') {
 }
 
 // ============================================================
+// ACTION: REGISTER RIDER
+// ============================================================
+// Rider accounts are provisioned as rider accounts in one transaction. This
+// avoids creating a customer account first and then leaving the applicant
+// blocked by rider.php while an administrator repairs the role manually.
+if ($action == 'register_rider') {
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $fname = trim($input['fname'] ?? '');
+    $lname = trim($input['lname'] ?? '');
+    $email = strtolower(trim($input['email'] ?? ''));
+    $phone = trim($input['phone'] ?? '');
+    $password = $input['password'] ?? '';
+    $vehicleType = trim($input['vehicle_type'] ?? 'motorcycle');
+    $vehiclePlate = trim($input['vehicle_plate'] ?? '');
+
+    if ($fname === '' || $email === '' || $phone === '' || strlen($password) < MIN_PASSWORD_LENGTH
+        || $vehiclePlate === '') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Please fill all required fields.']);
+        exit;
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Please enter a valid email address.']);
+        exit;
+    }
+
+    if (rateLimited($dbh, 'register_rider:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || rateLimited($dbh, 'register_rider:id:' . $email, 5, 300)) {
+        failRateLimited();
+    }
+
+    try {
+        $check = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        $check->execute([$email]);
+        if ($check->fetchColumn()) {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'error' => 'An account with this email already exists.']);
+            exit;
+        }
+
+        $dbh->beginTransaction();
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $userInsert = $dbh->prepare(
+            "INSERT INTO users (fname, lname, email, mobile, password, area, address, account_type, `current_role`)
+             VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', 'rider', 'rider')"
+        );
+        $userInsert->execute([$fname, $lname, $email, $phone, $hash]);
+        $userId = (int)$dbh->lastInsertId();
+
+        // riders.password is legacy NOT NULL; authentication uses users.password.
+        $riderInsert = $dbh->prepare(
+            "INSERT INTO riders (user_id, name, phone, email, password, vehicle_type, vehicle_plate, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'offline', NOW())"
+        );
+        $riderInsert->execute([
+            $userId, trim($fname . ' ' . $lname), $phone, $email, $hash, $vehicleType, $vehiclePlate
+        ]);
+        $dbh->commit();
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Rider registration submitted successfully. You can now log in.'
+        ]);
+    } catch (Throwable $e) {
+        if ($dbh->inTransaction()) $dbh->rollBack();
+        error_log('register_rider failed: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Registration failed. Please try again.']);
+    }
+    exit;
+}
+
+// ============================================================
 // ACTION: REGISTER
 // ============================================================
 if ($action == 'register') {
@@ -866,8 +941,9 @@ if ($action == 'forgot_password') {
         failRateLimited();
     }
 
-    // Always report success regardless of whether the email is registered —
-    // an error here would let a caller test which addresses have accounts.
+    // Unknown addresses still receive the same success response. For a known
+    // address, however, a provider failure must not be reported as success or
+    // the customer is told to check an inbox that can never receive anything.
     try {
         // fname is selected purely so the email can address the recipient;
         // nothing downstream branches on it. (The column is fname/lname —
@@ -876,6 +952,7 @@ if ($action == 'forgot_password') {
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        $deliveryFailed = false;
         if ($user) {
             $rawToken = bin2hex(random_bytes(32));
             $hashedToken = hash('sha256', $rawToken);
@@ -958,12 +1035,15 @@ if ($action == 'forgot_password') {
             // accounts — but a delivery failure has to be findable in the log,
             // because to the user it looks identical to never having asked.
             if (empty($sent['result'])) {
+                $deliveryFailed = true;
                 error_log('[forgot_password] Reset email NOT delivered to ' . $email
                     . ' — ' . ($sent['message'] ?? 'unknown error'));
             }
         }
 
-        echo json_encode(['success' => true]);
+        echo json_encode($deliveryFailed
+            ? ['success' => false, 'error' => 'We could not send the reset email right now. Please try again later.']
+            : ['success' => true]);
     } catch (PDOException $e) {
         error_log("Forgot password DB error: " . $e->getMessage());
         // Still report success — a DB error must not leak account existence either,
