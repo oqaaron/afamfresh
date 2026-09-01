@@ -2,6 +2,7 @@
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/delivery-fee.php';
+require_once __DIR__ . '/../includes/settlement.php';
 header('Content-Type: application/json');
 
 error_reporting(E_ALL);
@@ -860,6 +861,12 @@ switch ($action) {
                 'emoji'                  => $emoji ?: null,
                 'photo_filename'         => $photoFilename,
             ]);
+
+            // Execute automated wallet and ledger distribution
+            $settleRes = settleOrderFulfillment($dbh, (int)$orderId);
+            if (!$settleRes['success']) {
+                error_log("Order #{$orderId} customer confirmation settlement warning: " . ($settleRes['error'] ?? 'Unknown error'));
+            }
 
             echo json_encode(['success' => true, 'message' => 'Thanks for confirming!']);
         } catch (Exception $e) {

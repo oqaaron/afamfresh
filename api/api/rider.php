@@ -21,6 +21,7 @@ require_once __DIR__ . '/../includes/rider_earnings.php';
 require_once __DIR__ . '/../includes/rider_dispatch.php';
 require_once __DIR__ . '/../includes/payment_ledger.php';
 require_once __DIR__ . '/../includes/storage.php';
+require_once __DIR__ . '/../includes/settlement.php';
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -421,6 +422,16 @@ if ($action === 'update_status') {
                                 updated_at = NOW()
                           WHERE id = ? AND payment_status = 'pending_cash'"
                     )->execute([$rider['id'], $orderId]);
+                }
+            }
+
+            // =============================================================
+            // AUTOMATED WALLET & LEDGER SETTLEMENT
+            // =============================================================
+            if ($source === 'order') {
+                $settleRes = settleOrderFulfillment($dbh, $orderId);
+                if (!$settleRes['success']) {
+                    error_log("Order settlement warning on order #{$orderId}: " . ($settleRes['error'] ?? ''));
                 }
             }
 
