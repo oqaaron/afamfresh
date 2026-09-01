@@ -16,10 +16,28 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- Add indexes if they don't exist (MySQL 8.0.13+)
-ALTER TABLE user_otp_verifications
-ADD INDEX IF NOT EXISTS idx_status (status),
-ADD INDEX IF NOT EXISTS idx_last_sent_at (last_sent_at);
+-- Add indexes if they don't already exist
+SET @idx_status_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
+  WHERE TABLE_NAME = 'user_otp_verifications' AND INDEX_NAME = 'idx_status');
+
+SET @idx_sent_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
+  WHERE TABLE_NAME = 'user_otp_verifications' AND INDEX_NAME = 'idx_last_sent_at');
+
+SET @sql_idx := IF(@idx_status_exists = 0, 
+  'ALTER TABLE user_otp_verifications ADD INDEX idx_status (status)',
+  'SELECT 1');
+
+PREPARE stmt_idx FROM @sql_idx;
+EXECUTE stmt_idx;
+DEALLOCATE PREPARE stmt_idx;
+
+SET @sql_idx2 := IF(@idx_sent_exists = 0,
+  'ALTER TABLE user_otp_verifications ADD INDEX idx_last_sent_at (last_sent_at)',
+  'SELECT 1');
+
+PREPARE stmt_idx2 FROM @sql_idx2;
+EXECUTE stmt_idx2;
+DEALLOCATE PREPARE stmt_idx2;
 
 -- Update status if there are any pending records without a status set
 UPDATE user_otp_verifications
