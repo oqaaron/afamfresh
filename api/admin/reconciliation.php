@@ -1,18 +1,6 @@
 <?php
-// =============================================================
-// admin/reconciliation.php
-//
-// Where the money came from, and what does not add up.
-//
-// Before this page the admin panel had one money figure — `SUM(total_amount)
-// FROM orders` with no WHERE clause — and no way to tell cash from electronic,
-// because nothing recorded how an order was paid. There was no report, no
-// export and no reconciliation of any kind anywhere in admin/.
-//
-// The daily table is the artefact: hold it next to the Pesapal settlement
-// statement and the electronic column should tie line by line. Cash will not
-// appear there at all, which is exactly why the two are separated.
-// =============================================================
+// admin/reconciliation.php — Platform Financial Reconciliation Dashboard
+declare(strict_types=1);
 
 require_once __DIR__ . '/auth_check.php';
 require_once __DIR__ . '/includes/config.php';
@@ -21,12 +9,9 @@ require_once __DIR__ . '/../includes/reconciliation.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 requireAdminPermission('reports.view_financial');
 
-// Default to the last 30 days rather than all time: an all-time default makes
-// the page slow and answers a question nobody actually asks.
 $to   = $_GET['to']   ?? date('Y-m-d');
 $from = $_GET['from'] ?? date('Y-m-d', strtotime('-29 days'));
 
-// Validated, not trusted — these reach a date comparison in every query below.
 $valid = fn($d) => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d);
 if (!$valid($from)) $from = date('Y-m-d', strtotime('-29 days'));
 if (!$valid($to))   $to   = date('Y-m-d');
@@ -39,9 +24,7 @@ try {
     $exceptions = reconciliationExceptions($dbh, $from, $to);
     $migrationMissing = ($revenue['by_method'] === null);
 } catch (PDOException $e) {
-    // Almost certainly the 2026-08-13 migration not having been run. Say so
-    // plainly rather than showing an empty page that looks like no trade.
-    error_log('reconciliation: ' . $e->getMessage());
+    error_log('Reconciliation dashboard exception: ' . $e->getMessage());
     $migrationMissing = true;
     $revenue = $daily = $riderCash = null;
     $exceptions = ['delivered_unpaid' => [], 'paid_unattributed' => []];
@@ -63,74 +46,86 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
 <?php include __DIR__ . '/includes/nav.php'; ?>
 <div class="flex-1 overflow-auto">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h1 class="text-2xl font-bold text-green-800 mb-1">Reconciliation</h1>
-        <p class="text-gray-600 mb-6">
-            Settled money only — orders whose payment actually completed.
-            Everything else is in the exceptions at the bottom.
-        </p>
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-green-800 mb-1">Financial Reconciliation</h1>
+                <p class="text-gray-600 text-sm">
+                    Settled payments and order revenue tracking. Compare electronic volume directly with Pesapal settlements.
+                </p>
+            </div>
+        </div>
 
         <?php if ($migrationMissing): ?>
-            <div class="bg-yellow-100 border border-yellow-300 text-yellow-900 px-4 py-3 rounded mb-6">
-                <strong>The payment-method migration has not been run.</strong>
-                Cash and electronic cannot be separated until it is —
-                <code>migrations/2026-08-13-payment-method-and-ledger.sql</code>.
+            <div class="bg-yellow-100 border border-yellow-300 text-yellow-900 px-4 py-3 rounded-lg mb-6 text-sm">
+                <strong>Payment ledger synchronization required:</strong>
+                Cash and digital methods cannot be fully categorized until ledger tables are active.
             </div>
         <?php endif; ?>
 
-        <form method="get" class="flex flex-wrap items-end gap-3 mb-6">
+        <!-- Filter and Export Bar -->
+        <form method="get" class="flex flex-wrap items-end gap-3 mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">From</label>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">From</label>
                 <input type="date" name="from" value="<?= htmlspecialchars($from) ?>"
-                       class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                       class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-green-600">
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">To</label>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">To</label>
                 <input type="date" name="to" value="<?= htmlspecialchars($to) ?>"
-                       class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                       class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-green-600">
             </div>
-            <button class="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg text-sm font-semibold">
-                Apply
+            <button class="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                Filter Dates
             </button>
             <?php $q = http_build_query(['from' => $from, 'to' => $to]); ?>
-            <a href="export-reconciliation.php?type=daily&<?= $q ?>"
-               class="ml-auto text-sm text-green-700 hover:underline">
-                <i class="fas fa-download mr-1"></i> Daily CSV
-            </a>
-            <a href="export-reconciliation.php?type=rider_cash&<?= $q ?>"
-               class="text-sm text-green-700 hover:underline">Rider cash CSV</a>
-            <a href="export-reconciliation.php?type=orders&<?= $q ?>"
-               class="text-sm text-green-700 hover:underline">All settled orders CSV</a>
+            <div class="ml-auto flex items-center space-x-3 text-sm">
+                <a href="export-reconciliation.php?type=daily&<?= $q ?>" class="text-green-700 font-medium hover:underline">
+                    <i class="fas fa-file-csv mr-1"></i> Daily CSV
+                </a>
+                <span class="text-gray-300">|</span>
+                <a href="export-reconciliation.php?type=rider_cash&<?= $q ?>" class="text-green-700 font-medium hover:underline">
+                    <i class="fas fa-motorcycle mr-1"></i> Rider Cash CSV
+                </a>
+                <span class="text-gray-300">|</span>
+                <a href="export-reconciliation.php?type=merchants&<?= $q ?>" class="text-green-700 font-medium hover:underline">
+                    <i class="fas fa-store mr-1"></i> Merchant Splits CSV
+                </a>
+                <span class="text-gray-300">|</span>
+                <a href="export-reconciliation.php?type=orders&<?= $q ?>" class="text-green-700 font-medium hover:underline">
+                    <i class="fas fa-receipt mr-1"></i> Orders CSV
+                </a>
+            </div>
         </form>
 
         <?php if ($revenue !== null): ?>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <?php
             $cards = [
-                ['Gross placed', $revenue['total']['gross']['value'], 'border-gray-300', 'ordered, paid or not'],
-                ['Settled', $revenue['total']['settled']['value'], 'border-green-600', 'money received'],
-                ['Cash outstanding', $revenue['total']['outstanding']['value'], 'border-yellow-500', 'not yet collected'],
-                ['Failed or cancelled', $revenue['total']['lost']['value'], 'border-red-500', 'never completed'],
+                ['Gross Placed', $revenue['total']['gross']['value'], 'border-gray-300', 'Total volume ordered'],
+                ['Settled Revenue', $revenue['total']['settled']['value'], 'border-green-600', 'Funds received & verified'],
+                ['Cash Outstanding', $revenue['total']['outstanding']['value'], 'border-yellow-500', 'Pending rider handovers'],
+                ['Failed / Cancelled', $revenue['total']['lost']['value'], 'border-red-500', 'Voided transactions'],
             ];
             foreach ($cards as [$label, $value, $border, $sub]): ?>
-                <div class="bg-white p-4 rounded-xl shadow border-l-4 <?= $border ?>">
-                    <p class="text-gray-500 text-xs uppercase tracking-wide"><?= $label ?></p>
-                    <p class="text-xl font-bold text-gray-800"><?= $ugx($value) ?></p>
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 <?= $border ?>">
+                    <p class="text-gray-500 text-xs font-semibold uppercase tracking-wide"><?= $label ?></p>
+                    <p class="text-xl font-bold text-gray-800 my-1"><?= $ugx($value) ?></p>
                     <p class="text-xs text-gray-400"><?= $sub ?></p>
                 </div>
             <?php endforeach; ?>
         </div>
 
         <?php if ($revenue['by_method'] !== null): ?>
-        <div class="bg-white rounded-xl shadow p-5 mb-8">
-            <h2 class="font-semibold text-gray-800 mb-3">Settled, by how it was paid</h2>
+        <div class="bg-white rounded-xl shadow-sm p-5 mb-8 border border-gray-100">
+            <h2 class="font-bold text-gray-800 mb-3">Settled Volume by Payment Channel</h2>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <?php foreach ([
-                    'cash' => 'Cash', 'mobile_money' => 'Mobile money',
-                    'card' => 'Card', 'unknown' => 'Unattributed',
+                    'cash' => 'Cash on Delivery', 'mobile_money' => 'Mobile Money (MTN / Airtel)',
+                    'card' => 'Debit / Credit Card', 'unknown' => 'Unattributed',
                 ] as $k => $label): ?>
-                    <div>
-                        <p class="text-gray-500"><?= $label ?></p>
-                        <p class="font-semibold text-lg"><?= $ugx($revenue['by_method'][$k]['value']) ?></p>
+                    <div class="border-r last:border-0 border-gray-100 pr-2">
+                        <p class="text-gray-500 text-xs"><?= $label ?></p>
+                        <p class="font-bold text-lg text-gray-800 mt-1"><?= $ugx($revenue['by_method'][$k]['value']) ?></p>
                         <p class="text-xs text-gray-400"><?= number_format($revenue['by_method'][$k]['count']) ?> orders</p>
                     </div>
                 <?php endforeach; ?>
@@ -140,40 +135,37 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
         <?php endif; ?>
 
         <?php if ($daily): ?>
-        <div class="bg-white rounded-xl shadow overflow-hidden mb-8">
-            <div class="px-5 py-3 border-b">
-                <h2 class="font-semibold text-gray-800">Day by day</h2>
-                <p class="text-xs text-gray-500">
-                    The electronic columns should tie to the Pesapal settlement statement.
-                    Cash will not appear there.
-                </p>
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-8 border border-gray-100">
+            <div class="px-5 py-3 border-b bg-gray-50 flex justify-between items-center">
+                <h2 class="font-bold text-gray-800">Daily Payment Breakdown</h2>
+                <span class="text-xs text-gray-500">Cross-reference mobile money and card totals against Pesapal payouts</span>
             </div>
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-xs uppercase text-gray-500">
                     <tr>
-                        <th class="px-4 py-2 text-left">Date</th>
-                        <th class="px-4 py-2 text-right">Orders</th>
-                        <th class="px-4 py-2 text-right">Cash</th>
-                        <th class="px-4 py-2 text-right">Mobile money</th>
-                        <th class="px-4 py-2 text-right">Card</th>
-                        <th class="px-4 py-2 text-right">Unattributed</th>
-                        <th class="px-4 py-2 text-right">Total</th>
+                        <th class="px-4 py-2.5 text-left font-semibold">Date</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Orders</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Cash (UGX)</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Mobile Money (UGX)</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Card (UGX)</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Unattributed</th>
+                        <th class="px-4 py-2.5 text-right font-semibold">Total (UGX)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                 <?php foreach ($daily as $d):
-                    $total = $d['cash'] + $d['mobile_money'] + $d['card'] + $d['unknown_method']; ?>
-                    <tr>
-                        <td class="px-4 py-2"><?= htmlspecialchars($d['day']) ?></td>
+                    $total = (float)$d['cash'] + (float)$d['mobile_money'] + (float)$d['card'] + (float)$d['unknown_method']; ?>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-4 py-2 font-medium"><?= htmlspecialchars($d['day']) ?></td>
                         <td class="px-4 py-2 text-right"><?= number_format($d['orders_n']) ?></td>
                         <td class="px-4 py-2 text-right"><?= number_format($d['cash']) ?></td>
                         <td class="px-4 py-2 text-right"><?= number_format($d['mobile_money']) ?></td>
                         <td class="px-4 py-2 text-right"><?= number_format($d['card']) ?></td>
-                        <td class="px-4 py-2 text-right <?= $d['unknown_method'] > 0 ? 'text-yellow-700' : 'text-gray-400' ?>">
+                        <td class="px-4 py-2 text-right <?= $d['unknown_method'] > 0 ? 'text-yellow-700 font-semibold' : 'text-gray-400' ?>">
                             <?= number_format($d['unknown_method']) ?>
                         </td>
-                        <td class="px-4 py-2 text-right font-semibold"><?= number_format($total) ?></td>
+                        <td class="px-4 py-2 text-right font-bold text-gray-900"><?= number_format($total) ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -183,19 +175,27 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
         <?php endif; ?>
 
         <?php if ($riderCash): ?>
-        <div class="bg-white rounded-xl shadow overflow-hidden mb-8">
-            <div class="px-5 py-3 border-b">
-                <h2 class="font-semibold text-gray-800">Cash collected, by rider</h2>
-                <p class="text-xs text-gray-500">What each rider confirmed taking at the door.</p>
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-8 border border-gray-100">
+            <div class="px-5 py-3 border-b bg-gray-50">
+                <h2 class="font-bold text-gray-800">Rider Doorstep Cash Collections</h2>
+                <p class="text-xs text-gray-500">Cash received by dispatch riders pending balance handover.</p>
             </div>
             <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-4 py-2 text-left font-semibold">Rider</th>
+                        <th class="px-4 py-2 text-left font-semibold">Contact</th>
+                        <th class="px-4 py-2 text-right font-semibold">Trips</th>
+                        <th class="px-4 py-2 text-right font-semibold">Total Handover (UGX)</th>
+                    </tr>
+                </thead>
                 <tbody class="divide-y divide-gray-100">
                 <?php foreach ($riderCash as $r): ?>
-                    <tr>
-                        <td class="px-4 py-2"><?= htmlspecialchars($r['name']) ?></td>
-                        <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars($r['phone'] ?? '') ?></td>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-4 py-2 font-medium"><?= htmlspecialchars($r['name']) ?></td>
+                        <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars($r['phone'] ?? '—') ?></td>
                         <td class="px-4 py-2 text-right text-gray-500"><?= number_format($r['deliveries']) ?> deliveries</td>
-                        <td class="px-4 py-2 text-right font-semibold"><?= $ugx($r['collected']) ?></td>
+                        <td class="px-4 py-2 text-right font-bold text-gray-800"><?= $ugx($r['collected']) ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -203,25 +203,23 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
         </div>
         <?php endif; ?>
 
+        <!-- Audit Exception Tables -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-white rounded-xl shadow overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-red-100">
                 <div class="px-5 py-3 border-b bg-red-50">
-                    <h2 class="font-semibold text-red-800">Delivered but not paid</h2>
-                    <p class="text-xs text-red-700">Goods handed over with no money recorded.</p>
+                    <h2 class="font-bold text-red-800">Delivered Orders Awaiting Payment</h2>
+                    <p class="text-xs text-red-700">Orders marked delivered without completed payment records.</p>
                 </div>
                 <?php if (!$exceptions['delivered_unpaid']): ?>
-                    <p class="px-5 py-4 text-sm text-gray-500">Nothing — every delivered order is paid.</p>
+                    <p class="px-5 py-4 text-sm text-gray-500">All delivered orders are fully reconciled.</p>
                 <?php else: ?>
                 <table class="min-w-full text-sm divide-y divide-gray-100">
                     <tbody class="divide-y divide-gray-100">
                     <?php foreach ($exceptions['delivered_unpaid'] as $x): ?>
                         <tr>
-                            <td class="px-4 py-2">
-                                <span class="text-gray-400"><?= $x['source'] === 'Bulk' ? 'Bulk' : 'Shop' ?></span>
-                                #<?= (int)$x['id'] ?>
-                            </td>
+                            <td class="px-4 py-2 font-medium">#<?= (int)$x['id'] ?></td>
                             <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars($x['payment_status']) ?></td>
-                            <td class="px-4 py-2 text-right font-semibold"><?= number_format($x['amount']) ?></td>
+                            <td class="px-4 py-2 text-right font-bold text-red-600"><?= number_format($x['amount']) ?> UGX</td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -229,28 +227,21 @@ $ugx = fn($v) => 'UGX ' . number_format((float)$v);
                 <?php endif; ?>
             </div>
 
-            <div class="bg-white rounded-xl shadow overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-yellow-100">
                 <div class="px-5 py-3 border-b bg-yellow-50">
-                    <h2 class="font-semibold text-yellow-900">Paid but unattributed</h2>
-                    <p class="text-xs text-yellow-800">
-                        Money received that cannot be assigned to cash or electronic.
-                        Mostly pre-migration; a new one means a payment path is not
-                        recording its method.
-                    </p>
+                    <h2 class="font-bold text-yellow-900">Unattributed Paid Transactions</h2>
+                    <p class="text-xs text-yellow-800">Paid orders missing payment method assignment.</p>
                 </div>
                 <?php if (!$exceptions['paid_unattributed']): ?>
-                    <p class="px-5 py-4 text-sm text-gray-500">Nothing — every settled order has a method.</p>
+                    <p class="px-5 py-4 text-sm text-gray-500">All settled orders have designated payment channels.</p>
                 <?php else: ?>
                 <table class="min-w-full text-sm divide-y divide-gray-100">
                     <tbody class="divide-y divide-gray-100">
                     <?php foreach ($exceptions['paid_unattributed'] as $x): ?>
                         <tr>
-                            <td class="px-4 py-2">
-                                <span class="text-gray-400"><?= $x['source'] === 'Bulk' ? 'Bulk' : 'Shop' ?></span>
-                                #<?= (int)$x['id'] ?>
-                            </td>
+                            <td class="px-4 py-2 font-medium">#<?= (int)$x['id'] ?></td>
                             <td class="px-4 py-2 text-gray-500"><?= htmlspecialchars((string)$x['at']) ?></td>
-                            <td class="px-4 py-2 text-right font-semibold"><?= number_format($x['amount']) ?></td>
+                            <td class="px-4 py-2 text-right font-bold text-yellow-800"><?= number_format($x['amount']) ?> UGX</td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
