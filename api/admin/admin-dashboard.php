@@ -1,15 +1,12 @@
 <?php
 // admin/admin-dashboard.php
-//
-// Refactored to support the unified Merchants architecture:
-// Vendors, Market Vendors, Fast Food / Restaurants, and Wholesale.
+// Refactored to support the unified Merchants architecture & dynamic commission configuration.
 
 require_once __DIR__ . '/auth_check.php';
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 
-// Check permissions across merchant listings, cancellations/refunds, and merchant accounts
 requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refunds', 'vendors.manage', 'Bulk.manage_listings', 'Bulk.manage_refunds']);
 ?>
 <!DOCTYPE html>
@@ -39,7 +36,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
         <div class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-3xl font-bold text-green-800">🛠️ AfamFresh Admin</h1>
-                <p class="text-gray-600 mt-1">Manage platform settings, merchant catalog approvals, and seller accounts.</p>
+                <p class="text-gray-600 mt-1">Manage platform settings, commission structures, and merchant accounts.</p>
             </div>
             <div class="flex items-center space-x-4">
                 <span class="text-sm text-gray-600">Welcome, <strong><?= htmlspecialchars($_SESSION['admin_name'] ?? 'Admin') ?></strong></span>
@@ -50,17 +47,17 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
         <!-- Status Messages -->
         <div id="message" class="mb-6 hidden rounded-lg px-4 py-3 font-medium"></div>
 
-        <!-- ====== CONFIGURATION SECTION ====== -->
+        <!-- ====== CONFIGURATION & COMMISSIONS SECTION ====== -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-8 card">
-            <h2 class="text-xl font-semibold text-green-800 border-b border-gray-200 pb-3 mb-6">⚙️ Remote Configuration</h2>
+            <h2 class="text-xl font-semibold text-green-800 border-b border-gray-200 pb-3 mb-6">⚙️ Remote Configuration & Platform Commissions</h2>
             <form id="configForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Minimum Required Version</label>
-                    <input type="text" id="min_version_required" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent">
+                    <label class="block text-sm font-medium text-gray-700">Minimum Required App Version</label>
+                    <input type="text" id="min_version_required" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent text-sm">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Current Live Version</label>
-                    <input type="text" id="current_version" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent">
+                    <label class="block text-sm font-medium text-gray-700">Current Live App Version</label>
+                    <input type="text" id="current_version" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent text-sm">
                 </div>
                 <div class="flex items-center space-x-2">
                     <input type="checkbox" id="is_maintenance_mode" value="1" class="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500">
@@ -72,10 +69,38 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700">Maintenance Message</label>
-                    <textarea id="maintenance_message" rows="2" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent"></textarea>
+                    <textarea id="maintenance_message" rows="2" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-600 focus:border-transparent text-sm"></textarea>
                 </div>
-                <div class="md:col-span-2">
-                    <button type="button" onclick="saveConfig()" class="bg-green-700 hover:bg-green-800 text-white px-6 py-2 rounded-lg font-semibold transition btn">💾 Push Changes</button>
+
+                <!-- Global Commission Defaults -->
+                <div class="md:col-span-2 border-t pt-4 mt-2">
+                    <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Default Platform Commissions (%)</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Riders (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" id="default_rider_commission_rate" class="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-green-800">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Standard Vendors (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" id="default_vendor_commission_rate" class="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-green-800">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Market Produce (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" id="default_market_vendor_commission_rate" class="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-green-800">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Restaurants (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" id="default_fastfood_commission_rate" class="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-green-800">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Wholesale (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" id="default_wholesale_commission_rate" class="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-green-800">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 mt-2">
+                    <button type="button" onclick="saveConfig()" class="bg-green-700 hover:bg-green-800 text-white px-6 py-2 rounded-lg font-semibold transition btn">💾 Push Configuration</button>
                 </div>
             </form>
         </div>
@@ -154,7 +179,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Business</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Commission</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Commission Rate</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Min Payout</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
@@ -167,7 +192,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
             </div>
         </div>
 
-        <!-- ====== VENDOR / MERCHANT TRANSACTIONS ====== -->
+        <!-- ====== MERCHANT TRANSACTIONS LEDGER ====== -->
         <div class="bg-white rounded-xl shadow-md p-6 card">
             <div class="flex items-center justify-between border-b border-gray-200 pb-3 mb-6">
                 <h2 class="text-xl font-semibold text-green-800">💰 Merchant Transactions Ledger</h2>
@@ -253,6 +278,12 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                 document.getElementById('is_maintenance_mode').checked = data.is_maintenance_mode === '1';
                 document.getElementById('maintenance_message').value = data.maintenance_message || '';
                 document.getElementById('merchant_approval_required').checked = (data.merchant_approval_required === '1' || data.Bulk_approval_required === '1');
+
+                document.getElementById('default_rider_commission_rate').value = data.default_rider_commission_rate || '15.0';
+                document.getElementById('default_vendor_commission_rate').value = data.default_vendor_commission_rate || '10.0';
+                document.getElementById('default_market_vendor_commission_rate').value = data.default_market_vendor_commission_rate || '6.0';
+                document.getElementById('default_fastfood_commission_rate').value = data.default_fastfood_commission_rate || '18.0';
+                document.getElementById('default_wholesale_commission_rate').value = data.default_wholesale_commission_rate || '3.5';
             } else {
                 showNotification('Failed to load configuration: ' + (res.error || 'Unknown error'), 'error');
             }
@@ -265,14 +296,19 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                 is_maintenance_mode: document.getElementById('is_maintenance_mode').checked ? '1' : '0',
                 maintenance_message: document.getElementById('maintenance_message').value.trim(),
                 merchant_approval_required: document.getElementById('merchant_approval_required').checked ? '1' : '0',
-                Bulk_approval_required: document.getElementById('merchant_approval_required').checked ? '1' : '0'
+                Bulk_approval_required: document.getElementById('merchant_approval_required').checked ? '1' : '0',
+                default_rider_commission_rate: document.getElementById('default_rider_commission_rate').value.trim(),
+                default_vendor_commission_rate: document.getElementById('default_vendor_commission_rate').value.trim(),
+                default_market_vendor_commission_rate: document.getElementById('default_market_vendor_commission_rate').value.trim(),
+                default_fastfood_commission_rate: document.getElementById('default_fastfood_commission_rate').value.trim(),
+                default_wholesale_commission_rate: document.getElementById('default_wholesale_commission_rate').value.trim()
             };
             const res = await apiRequest('../api/config.php', {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
             if (res.success) {
-                showNotification('Configuration saved successfully.');
+                showNotification('Configuration and platform commission settings saved.');
             } else {
                 showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
             }
@@ -361,7 +397,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                 body: JSON.stringify({ id })
             });
             if (res.success) {
-                showNotification(res.refund_requested ? 'Approved. Refund requested from Pesapal.' : 'Approved and cancelled.');
+                showNotification(res.refund_requested ? 'Approved. Pesapal refund initiated.' : 'Approved and cancelled.');
                 loadPendingCancellations();
             } else {
                 showNotification('Error: ' + (res.error || 'Unknown error'), 'error');
@@ -425,10 +461,10 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
 
         // ---- MERCHANTS REGISTRY ----
         const MERCHANT_TYPES = [
-            { id: 'vendor', label: 'Standard Vendor', defaultRate: 10.0, defaultMin: 5000 },
-            { id: 'market_vendor', label: 'Market Produce', defaultRate: 6.0, defaultMin: 5000 },
-            { id: 'fastfood_restaurant', label: 'Fast Food & Restaurant', defaultRate: 18.0, defaultMin: 5000 },
-            { id: 'wholesale', label: 'Wholesale Depot', defaultRate: 3.5, defaultMin: 50000 }
+            { id: 'vendor', label: 'Standard Vendor' },
+            { id: 'market_vendor', label: 'Market Produce' },
+            { id: 'fastfood_restaurant', label: 'Fast Food & Restaurant' },
+            { id: 'wholesale', label: 'Wholesale Depot' }
         ];
 
         async function loadVendors() {
@@ -444,7 +480,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                 }
                 tbody.innerHTML = list.map(v => {
                     const currentType = v.merchant_type || v.business_type || 'vendor';
-                    const commRate = v.commission_rate ? (v.commission_rate * 100) : (currentType === 'wholesale' ? 3.5 : (currentType === 'fastfood_restaurant' ? 18.0 : 10.0));
+                    const commPercent = Number(v.commission_rate ? (v.commission_rate * 100) : 10.0).toFixed(1);
                     const minPayout = v.min_payout_threshold || (currentType === 'wholesale' ? 50000 : 5000);
 
                     return `
@@ -457,14 +493,25 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                         <td class="px-4 py-3 text-sm">${escapeHtml(v.email || '—')}</td>
                         <td class="px-4 py-3 text-sm">
                             <select onchange="setMerchantType(${v.id}, this.value, this)"
-                                    class="border border-gray-300 rounded px-2 py-1 text-xs">
+                                    class="border border-gray-300 rounded px-2 py-1 text-xs font-medium">
                                 ${MERCHANT_TYPES.map(t => `
                                     <option value="${t.id}"${currentType === t.id ? ' selected' : ''}>${t.label}</option>
                                 `).join('')}
                             </select>
                         </td>
                         <td class="px-4 py-3 text-sm">
-                            <span class="font-semibold text-green-700">${Number(commRate).toFixed(1)}%</span>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" step="0.1" min="0" max="100" 
+                                       id="comm_rate_${v.id}" 
+                                       value="${commPercent}" 
+                                       class="w-16 border border-gray-300 rounded px-1.5 py-0.5 text-xs text-right font-semibold text-green-800 focus:ring-1 focus:ring-green-600">
+                                <span class="text-xs text-gray-500 font-semibold">%</span>
+                                <button onclick="saveCustomCommission(${v.id})" 
+                                        title="Save custom rate" 
+                                        class="bg-gray-100 hover:bg-green-600 hover:text-white text-gray-700 px-2 py-0.5 rounded text-xs border border-gray-300 transition font-bold">
+                                    ✓
+                                </button>
+                            </div>
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-600">
                             UGX ${Number(minPayout).toLocaleString()}
@@ -488,24 +535,45 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
 
         async function setMerchantType(id, type, el) {
             const matched = MERCHANT_TYPES.find(m => m.id === type);
-            if (!confirm(`Update merchant classification to "${matched ? matched.label : type}"?\n\nThis automatically updates commission tiers and minimum payout thresholds.`)) {
+            const label = matched ? matched.label : type;
+            if (!confirm(`Update merchant classification to "${label}"?\n\nThis automatically updates commission tiers and minimum payout thresholds.`)) {
                 loadVendors();
                 return;
             }
             const res = await apiRequest('../api/admin/vendors.php?action=set_business_type', {
                 method: 'POST',
-                body: JSON.stringify({ 
-                    id, 
-                    business_type: type,
-                    merchant_type: type 
-                })
+                body: JSON.stringify({ id: id, merchant_type: type, business_type: type })
             });
             if (res.success) {
-                showNotification('Merchant tier updated.');
+                showNotification(`Merchant tier updated to ${label}.`);
                 loadVendors();
             } else {
                 showNotification(res.error || 'Could not update merchant tier.', 'error');
                 loadVendors();
+            }
+        }
+
+        async function saveCustomCommission(merchantId) {
+            const input = document.getElementById(`comm_rate_${merchantId}`);
+            const ratePercent = parseFloat(input.value);
+
+            if (isNaN(ratePercent) || ratePercent < 0 || ratePercent > 100) {
+                showNotification('Provide a valid commission percentage between 0 and 100.', 'error');
+                return;
+            }
+
+            const rateDecimal = ratePercent / 100.0;
+
+            const res = await apiRequest('../api/admin/vendors.php?action=set_commission_rate', {
+                method: 'POST',
+                body: JSON.stringify({ id: merchantId, commission_rate: rateDecimal })
+            });
+
+            if (res.success) {
+                showNotification(`Commission for Merchant #${merchantId} saved at ${ratePercent.toFixed(1)}%.`);
+                loadVendors();
+            } else {
+                showNotification(res.error || 'Failed to save commission rate.', 'error');
             }
         }
 
@@ -523,7 +591,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
             }
         }
 
-        // ---- MERCHANT TRANSACTIONS ----
+        // ---- TRANSACTION LEDGER ----
         function ugx(v) {
             return 'UGX ' + Number(v || 0).toLocaleString('en-UG', { maximumFractionDigits: 0 });
         }
@@ -570,7 +638,7 @@ requireAnyAdminPermission(['merchants.manage_listings', 'merchants.manage_refund
                     <td class="px-4 py-3 text-sm text-right">${ugx(e.order_amount)}</td>
                     <td class="px-4 py-3 text-sm text-right text-gray-500">
                         ${ugx(e.commission_amount)}
-                        <span class="text-xs font-semibold text-green-700 block">${Number(e.commission_rate || 0)}%</span>
+                        <span class="text-xs font-semibold text-green-700 block">${Number(e.commission_rate || 0).toFixed(1)}%</span>
                     </td>
                     <td class="px-4 py-3 text-sm text-right font-semibold">${ugx(e.net_earnings)}</td>
                     <td class="px-4 py-3 text-sm">
