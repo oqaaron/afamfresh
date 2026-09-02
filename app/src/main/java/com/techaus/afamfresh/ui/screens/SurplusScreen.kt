@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -14,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -29,23 +32,42 @@ import com.techaus.afamfresh.utils.formatQuantity
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.BulkViewModel
 
-// ⚠️ INFERRED screen. Signature matches MainScreen.kt's composable("Bulk")
-// call exactly. This is the public "rescue Bulk produce at a discount"
-// marketplace — separate from the vendor-facing screens in ui/screens/vendor/.
+private enum class MerchantCategory(val label: String) {
+    ALL("All"),
+    VENDORS("Vendors"),
+    MARKET_VENDORS("Market Vendors"),
+    FAST_FOOD("Fast Food Restaurants"),
+    WHOLESALE("Wholesale")
+}
+
+private fun matchesMerchantCategory(listing: BulkListing, category: MerchantCategory): Boolean {
+    return when (category) {
+        MerchantCategory.ALL -> true
+        MerchantCategory.VENDORS -> listing.getMerchantCategory() == "vendors"
+        MerchantCategory.MARKET_VENDORS -> listing.getMerchantCategory() == "market_vendors"
+        MerchantCategory.FAST_FOOD -> listing.getMerchantCategory() == "fast_food_restaurants"
+        MerchantCategory.WHOLESALE -> listing.getMerchantCategory() == "wholesale"
+    }
+}
+
+// The merchant marketplace is the renamed bulk section. This keeps the app's
+// data flow intact while letting the customer browse by merchant type.
 @Composable
 fun BulkScreen(
     BulkViewModel: BulkViewModel,
     onBack: () -> Unit,
     onListingClick: (BulkListing) -> Unit,
-    // Bulk orders are not in the ordinary order list — different table,
-    // different lifecycle — so without this the only route to them is having
-    // just paid for one.
     onMyOrdersClick: () -> Unit = {}
 ) {
     val listings by BulkViewModel.listings.collectAsState()
     val isLoading by BulkViewModel.isLoading.collectAsState()
     val error by BulkViewModel.error.collectAsState()
     val canRetry by BulkViewModel.canRetry.collectAsState()
+    var selectedCategory by remember { mutableStateOf(MerchantCategory.ALL) }
+
+    val filteredListings = remember(listings, selectedCategory) {
+        listings.filter { matchesMerchantCategory(it, selectedCategory) }
+    }
 
     Scaffold(
         containerColor = Cream,
@@ -55,8 +77,8 @@ fun BulkScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Bulk Deals", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Rescue fresh produce at a discount", fontSize = 12.sp, color = InkMuted)
+                    Text("Merchants", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Vendors, market vendors, fast food restaurants and wholesale", fontSize = 12.sp, color = InkMuted)
                 }
                 TextButton(onClick = onMyOrdersClick) {
                     Text("My orders", color = Forest, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -75,22 +97,59 @@ fun BulkScreen(
                         onRetry = if (canRetry) ({ BulkViewModel.loadListings() }) else null
                     )
                 }
-                listings.isEmpty() -> {
-                    EmptyState(
-                        icon = Icons.Default.LocalFlorist,
-                        title = "No Bulk deals right now",
-                        detail = "Vendors post discounted produce here when they have extra. Check back soon.",
-                        actionLabel = "REFRESH",
-                        onAction = { BulkViewModel.loadListings() }
-                    )
-                }
                 else -> {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(listings, key = { it.id }) { listing ->
-                            BulkCard(listing = listing, onClick = { onListingClick(listing) })
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                itemsIndexed(MerchantCategory.values()) { _, category ->
+                                    val selected = category == selectedCategory
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = if (selected) Forest else CardWhite,
+                                        modifier = Modifier
+                                            .wrapContentWidth()
+                                            .clickable { selectedCategory = category }
+                                    ) {
+                                        Text(
+                                            category.label,
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                            color = if (selected) Color.White else Ink,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (filteredListings.isEmpty()) {
+                            item {
+                                EmptyState(
+                                    icon = Icons.Default.LocalFlorist,
+                                    title = if (selectedCategory == MerchantCategory.FAST_FOOD) {
+                                        "Fast food restaurants are coming soon"
+                                    } else {
+                                        "No ${selectedCategory.label.lowercase()} listings right now"
+                                    },
+                                    detail = if (selectedCategory == MerchantCategory.FAST_FOOD) {
+                                        "New fast food restaurants will appear here when they are added to the catalog."
+                                    } else {
+                                        "Merchants in this category will appear here when they are available."
+                                    },
+                                    actionLabel = "REFRESH",
+                                    onAction = { BulkViewModel.loadListings() }
+                                )
+                            }
+                        } else {
+                            items(filteredListings, key = { it.id }) { listing ->
+                                BulkCard(listing = listing, onClick = { onListingClick(listing) })
+                            }
                         }
                     }
                 }

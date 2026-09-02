@@ -70,6 +70,7 @@ data class BulkListing(
     @SerializedName("image") val image: String? = null,
     @SerializedName("quantitytype") val unit: String? = null,
     @SerializedName("business_name") val businessName: String? = null,
+    @SerializedName("business_type") val businessType: String? = null,
     @SerializedName("vendor_location") val vendorLocation: String? = null,
     @SerializedName("vendor_fname") val vendorFirstName: String? = null,
     @SerializedName("vendor_lname") val vendorLastName: String? = null
@@ -100,6 +101,20 @@ data class BulkListing(
      * callers that care about the wholesale case should check [isWholesale].
      */
     val hasRetailReference: Boolean get() = originalPrice > 0.0 && originalPrice > discountedPrice
+
+    /**
+     * Map the server's business_type to a customer-facing merchant category.
+     * Used by the merchant taxonomy screen for filtering and display.
+     */
+    fun getMerchantCategory(): String {
+        return when (businessType) {
+            "farmer" -> "vendors"
+            "market_vendor" -> "market_vendors"
+            "fast_food_restaurant" -> "fast_food_restaurants"
+            "wholesaler" -> "wholesale"
+            else -> "vendors"
+        }
+    }
 }
 
 data class BulkListingsResponse(

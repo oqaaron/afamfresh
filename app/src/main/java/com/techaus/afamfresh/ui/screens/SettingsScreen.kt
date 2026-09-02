@@ -61,7 +61,7 @@ fun SettingsScreen(
 
             SettingsToggleRow(
                 title = "Push notifications",
-                subtitle = "Order updates and Bulk deals",
+                subtitle = "Order updates and merchant deals",
                 checked = notificationsEnabled,
                 onCheckedChange = { enabled ->
                     notificationsEnabled = enabled

@@ -202,7 +202,7 @@ fun MainScreen(
                         Triple("home", Icons.Default.Home, "Home"),
                         Triple("orders", Icons.Default.List, "Orders"),
                         Triple("cart", Icons.Default.ShoppingCart, "Cart"),
-                        Triple("Bulk", Icons.Default.ShoppingCart, "Bulk"),
+                        Triple("Merchant", Icons.Default.ShoppingCart, "Merchant"),
                         Triple("profile", Icons.Default.Person, "Profile")
                     )
                 }
@@ -246,7 +246,7 @@ fun MainScreen(
                     onOrdersClick = { navController.navigate("orders") },
                     onLocationClick = { navController.navigate("addresses") },
                     onProfileClick = { navController.navigate("profile") },
-                    onBulkClick = { navController.navigate("Bulk") },
+                    onBulkClick = { navController.navigate("Merchant") },
                     onCartClick = { navController.navigate("cart") },
                     onBrowseClick = { navController.navigate("browse") },
                     productViewModel = productViewModel,
@@ -344,25 +344,25 @@ fun MainScreen(
             }
 
             // ===== Bulk =====
-            if (isCustomerApp) composable("Bulk") {
+            if (isCustomerApp) composable("Merchant") {
                 BulkScreen(
                     BulkViewModel = BulkViewModel,
                     onBack = { navController.navigate("home") },
                     onListingClick = { listing ->
-                        navController.navigate("Bulk_checkout/${listing.id}")
+                        navController.navigate("Merchant_checkout/${listing.id}")
                     },
-                    onMyOrdersClick = { navController.navigate("Bulk_orders") }
+                    onMyOrdersClick = { navController.navigate("Merchant_orders") }
                 )
             }
 
-            // ===== Bulk CHECKOUT =====
+            // ===== Merchant CHECKOUT =====
             //
             // Only the listing ID travels in the route. The listing itself is
             // looked up from the ViewModel, because a route argument survives
             // process death while an object reference does not — and passing a
             // whole listing through a URL means encoding a price the customer
             // could then edit.
-            if (isCustomerApp) composable("Bulk_checkout/{listingId}") { backStackEntry ->
+            if (isCustomerApp) composable("Merchant_checkout/{listingId}") { backStackEntry ->
                 val listingId = backStackEntry.arguments?.getString("listingId")?.toIntOrNull()
                 val listings by BulkViewModel.listings.collectAsState()
                 val addresses by addressViewModel.addresses.collectAsState()
@@ -397,7 +397,7 @@ fun MainScreen(
                     paymentViewModel = paymentViewModel,
                     onBack = { navController.popBackStack() },
                     onPickLocation = {
-                        navController.navigate("Bulk_delivery_map/${listingId ?: 0}")
+                        navController.navigate("Merchant_delivery_map/${listingId ?: 0}")
                     },
                     onPaymentRedirect = { paymentUrl, transactionId ->
                         navController.navigate(
@@ -435,19 +435,19 @@ fun MainScreen(
                     // so the customer is returned to the marketplace rather than
                     // to a checkout form that would place a second one.
                     onBack = {
-                        navController.navigate("Bulk") {
-                            popUpTo("Bulk") { inclusive = true }
+                        navController.navigate("Merchant") {
+                            popUpTo("Merchant") { inclusive = true }
                         }
                     },
                     onCheckoutFinished = { trackingId ->
-                        navController.navigate("Bulk_payment_confirming/$trackingId") {
-                            popUpTo("Bulk") { inclusive = false }
+                        navController.navigate("Merchant_payment_confirming/$trackingId") {
+                            popUpTo("Merchant") { inclusive = false }
                         }
                     }
                 )
             }
 
-            if (isCustomerApp) composable("Bulk_payment_confirming/{trackingId}") { backStackEntry ->
+            if (isCustomerApp) composable("Merchant_payment_confirming/{trackingId}") { backStackEntry ->
                 val trackingId = backStackEntry.arguments?.getString("trackingId") ?: ""
                 PaymentConfirmingScreen(
                     trackingId = trackingId,
@@ -522,11 +522,11 @@ fun MainScreen(
             }
 
             // ===== Bulk ORDERS =====
-            if (isCustomerApp) composable("Bulk_orders") {
+            if (isCustomerApp) composable("Merchant_orders") {
                 BulkOrdersScreen(
                     BulkViewModel = BulkViewModel,
                     userId = user?.id?.toIntOrNull(),
-                    onBack = { navController.navigate("Bulk") },
+                    onBack = { navController.navigate("Merchant") },
                     onTrackOrder = { orderId -> navController.navigate("track/$orderId/Bulk") },
                     onConfirmReceipt = { orderId ->
                         navController.navigate("confirm_receipt/Bulk/$orderId")

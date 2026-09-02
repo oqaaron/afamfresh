@@ -72,8 +72,8 @@ fun BulkOrdersScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
                 }
                 Column {
-                    Text("Bulk orders", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Bulk deals you have bought", fontSize = 12.sp, color = InkMuted)
+                    Text("Merchant orders", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Merchant purchases you have made", fontSize = 12.sp, color = InkMuted)
                 }
             }
         }
@@ -92,9 +92,9 @@ fun BulkOrdersScreen(
                 orders.isEmpty() ->
                     EmptyState(
                         icon = Icons.Default.Inventory2,
-                        title = "No Bulk orders yet",
-                        detail = "Bulk deals you buy from the Bulk marketplace show up here.",
-                        actionLabel = "BROWSE Bulk",
+                        title = "No merchant orders yet",
+                        detail = "Merchant purchases you make from the marketplace will show up here.",
+                        actionLabel = "BROWSE MERCHANTS",
                         onAction = onBack
                     )
 

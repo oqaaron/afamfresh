@@ -106,7 +106,7 @@ fun NotificationsScreen(
                         Text("Nothing here yet", fontWeight = FontWeight.SemiBold, color = Ink)
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Order updates and Bulk deals will show up here.",
+                            "Order updates and merchant deals will show up here.",
                             fontSize = 13.sp,
                             color = InkMuted
                         )

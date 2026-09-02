@@ -3,6 +3,25 @@ header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/bulk_listing_rules.php';
 
+/**
+ * Map vendor business_type to customer-facing merchant category.
+ * 
+ * Categories:
+ * - vendors: farmers selling directly
+ * - market_vendors: market stall operators 
+ * - fast_food_restaurants: fast food establishments
+ * - wholesale: wholesalers selling bulk
+ */
+function getMerchantCategory($businessType) {
+    $map = [
+        'farmer' => 'vendors',
+        'market_vendor' => 'market_vendors',
+        'fast_food_restaurant' => 'fast_food_restaurants',
+        'wholesaler' => 'wholesale'
+    ];
+    return $map[$businessType] ?? 'vendors';
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 try {
@@ -76,7 +95,7 @@ try {
             : "sl.discount_percent DESC, sl.created_at ASC";
 
         $stmt = $dbh->prepare("
-            SELECT sl.*, v.business_name, v.location as vendor_location,
+            SELECT sl.*, v.business_name, v.business_type, v.location as vendor_location,
                    i.name as product_name, i.category, i.image,
                    u.fname as vendor_fname, u.lname as vendor_lname
             FROM Bulk_listings sl
@@ -247,13 +266,16 @@ try {
             INSERT INTO Bulk_listings
             (vendor_id, product_id, original_price, discount_percent, discounted_price,
              Bulk_quantity, remaining_quantity, min_order_quantity, expiry_date, listing_type, description,
-             condition_rating, pickup_only, weight_per_unit_kg, is_weight_based, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+             condition_rating, pickup_only, weight_per_unit_kg, is_weight_based, merchant_category, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         ");
+        // Calculate merchant_category from the vendor's business_type at time of listing.
+        $merchantCategory = getMerchantCategory($vendor['business_type']);
+        
         $result = $stmt->execute([
             $vendor_id, $product_id, $original_price, $discount_percent, $discounted_price,
             $Bulk_quantity, $Bulk_quantity, $min_order_quantity, $expiry_date, $listing_type, $description,
-            $condition_rating, $pickup_only, $weight_per_unit_kg, $is_weight_based
+            $condition_rating, $pickup_only, $weight_per_unit_kg, $is_weight_based, $merchantCategory
         ]);
         
         if ($result) {

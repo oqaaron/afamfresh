@@ -44,7 +44,7 @@ fun NavGraphBuilder.flavorRoutes(deps: FlavorRouteDeps) {
         }
     }
 
-    composable("Bulk_delivery_map/{listingId}") { backStackEntry ->
+    composable("Merchant_delivery_map/{listingId}") { backStackEntry ->
         val listingId = backStackEntry.arguments?.getString("listingId").orEmpty()
         DeliveryMapScreen(
             onBack = { nav.popBackStack() },

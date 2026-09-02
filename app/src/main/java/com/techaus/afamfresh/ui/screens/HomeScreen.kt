@@ -397,13 +397,13 @@ fun HomeScreen(
                                         }
                                     }
                                     PromoBannerId.WEEKEND_DEAL -> {
-                                        // "Bulk Deals and Hot Sale" can't both
-                                        // happen from one tap — Bulk Deals
+                                        // "Merchant Deals and Hot Sale" can't both
+                                        // happen from one tap — Merchant Deals
                                         // navigates to an entirely different
                                         // screen/data source (Bulk_listings,
                                         // not this screen's product catalogue),
                                         // while Hot Sale filters THIS grid.
-                                        // Bulk Deals wins, per instruction —
+                                        // Merchant Deals wins, per instruction —
                                         // Hot Sale filtering is dropped here.
                                         onBulkClick()
                                     }
@@ -441,7 +441,7 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Same 8 entries as before — Bulk Deals/Promos/Flash Sales
+                    // Same 8 entries as before — Merchant Deals/Promos/Flash Sales
                     // are real, separate features (not folded into a generic
                     // "Categories" grab-bag), so nothing here was dropped to
                     // match the mockup's simpler 4-icon example. Single
@@ -465,7 +465,7 @@ fun HomeScreen(
                         item {
                             GlovoBubble(
                                 drawableRes = R.drawable.bulkdeals,
-                                title = "Bulk Deals",
+                                title = "Merchant",
                                 isSelected = false,
                                 onClick = onBulkClick
                             )
