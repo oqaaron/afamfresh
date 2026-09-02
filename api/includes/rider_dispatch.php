@@ -201,7 +201,9 @@ function applyDeliveryStatus(PDO $dbh, string $source, int $orderId, array $map,
     if ($next === 'delivered') {
         $dbh->prepare(
             "UPDATE Bulk_orders
-                SET status = 'delivered', delivered_at = NOW(), updated_at = NOW()
+                SET status = 'delivered', delivery_confirmed = 1, 
+                    delivery_confirmed_at = NOW(), delivered_at = NOW(), 
+                    updated_at = NOW()
               WHERE id = ?"
         )->execute([$orderId]);
     }

@@ -393,13 +393,15 @@ if ($action === 'update_status') {
             applyDeliveryStatus($dbh, $source, $orderId, $map, $next);
 
             // Synchronize completion timestamps on orders table
+            // Note: completed_at is NOT set here; it is only set when the customer
+            // confirms receipt via the confirm-and-rate endpoint. The rider only
+            // marks delivery_confirmed = 1 to indicate proof of delivery is uploaded.
             if ($source === 'order') {
                 $dbh->prepare("
                     UPDATE orders 
                     SET delivery_confirmed = 1,
                         delivery_confirmed_at = NOW(),
-                        delivered_at = NOW(),
-                        completed_at = CURRENT_TIMESTAMP
+                        delivered_at = NOW()
                     WHERE orderid = ?
                 ")->execute([$orderId]);
             }
