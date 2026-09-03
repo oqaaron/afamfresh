@@ -12,9 +12,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// This file was missing — I created Color.kt earlier but never the theme
-// wrapper that MainActivity imports as com.techaus.afamfresh.ui.theme.AfamfreshTheme.
-
 private val LightColors = lightColorScheme(
     primary = Forest,
     onPrimary = Color.White,
@@ -33,25 +30,27 @@ private val LightColors = lightColorScheme(
     outline = DividerGray
 )
 
-// ⚠️ Dark mode is defined but NOT well-tested — most screens in this app
-// hardcode colors (Cream backgrounds, Ink text) rather than reading from
-// MaterialTheme.colorScheme, so enabling dark mode would currently produce
-// an inconsistent result. `useDarkTheme` defaults to false for that reason.
-// If you want real dark mode support, the screens need to be migrated to
-// MaterialTheme.colorScheme.* first.
 private val DarkColors = darkColorScheme(
-    primary = ForestLight,
-    onPrimary = Color.Black,
-    background = Color(0xFF121212),
-    onBackground = Color(0xFFEAEAEA),
-    surface = Color(0xFF1E1E1E),
-    onSurface = Color(0xFFEAEAEA),
-    error = Tomato
+    primary = Forest,
+    onPrimary = Color.White,
+    primaryContainer = CardDark,
+    onPrimaryContainer = ForestLight,
+    secondary = ForestLight,
+    onSecondary = Color.Black,
+    background = BackgroundDark,
+    onBackground = InkDark,
+    surface = CardDark,
+    onSurface = InkDark,
+    surfaceVariant = DividerGrayDark,
+    onSurfaceVariant = InkMutedDark,
+    error = Tomato,
+    onError = Color.White,
+    outline = DividerGrayDark
 )
 
 @Composable
 fun AfamfreshTheme(
-    useDarkTheme: Boolean = false, // deliberately not isSystemInDarkTheme() — see note above
+    useDarkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (useDarkTheme) DarkColors else LightColors
@@ -61,9 +60,9 @@ fun AfamfreshTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = colorScheme.primary.toArgb()
-                WindowCompat.getInsetsController(window, view)
-                    .isAppearanceLightStatusBars = false
+                // Pin status bar directly to the vibrant top green (#1EB85A)
+                window.statusBarColor = Forest.toArgb()
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
             }
         }
     }

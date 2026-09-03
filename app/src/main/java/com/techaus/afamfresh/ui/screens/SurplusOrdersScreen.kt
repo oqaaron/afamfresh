@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,37 +27,19 @@ import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 import com.techaus.afamfresh.viewmodel.BulkViewModel
 
-/**
- * A customer's Bulk orders.
- *
- * Kept separate from the ordinary order list because Bulk orders live in a
- * different table with a different lifecycle: they carry a payment status that
- * can sit at "awaiting payment" for half an hour before being cancelled, and a
- * pickup code the customer has to be able to find again.
- *
- * This screen is also where every uncertain payment outcome lands. Someone
- * arriving here may have just paid, may have abandoned a payment, or may not
- * know which. So each card states the payment position plainly rather than
- * folding it into a single "status" word.
- */
 @Composable
 fun BulkOrdersScreen(
     BulkViewModel: BulkViewModel,
     userId: Int?,
     onBack: () -> Unit,
-    /** Opens live tracking. Only offered while the order is actually moving. */
     onTrackOrder: (Int) -> Unit = {},
-    /** Opens the confirm-and-rate screen, once the rider has uploaded proof
-     *  of delivery and the customer has not yet confirmed it. */
-    onConfirmReceipt: (Int) -> Unit = {}
+    onConfirmReceipt: (Int) -> Unit = {},
+    onPayNow: (BulkOrder) -> Unit = {}
 ) {
     val orders by BulkViewModel.myOrders.collectAsState()
     val isLoading by BulkViewModel.ordersLoading.collectAsState()
     val error by BulkViewModel.ordersError.collectAsState()
 
-    // Reloaded on every visit, not cached: the most common way to arrive here is
-    // straight from a payment, and a stale list would show the order the app saw
-    // before the money was confirmed.
     LaunchedEffect(userId) {
         userId?.let { BulkViewModel.loadMyOrders(it) }
     }
@@ -65,7 +48,9 @@ fun BulkOrdersScreen(
         containerColor = Cream,
         topBar = {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
@@ -78,7 +63,11 @@ fun BulkOrdersScreen(
             }
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             when {
                 isLoading && orders.isEmpty() ->
                     ListSkeleton(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -105,9 +94,10 @@ fun BulkOrdersScreen(
                     ) {
                         items(orders, key = { it.id }) { order ->
                             OrderCard(
-                                order,
+                                order = order,
                                 onTrack = { onTrackOrder(order.id) },
-                                onConfirmReceipt = { onConfirmReceipt(order.id) }
+                                onConfirmReceipt = { onConfirmReceipt(order.id) },
+                                onPayNow = { onPayNow(order) }
                             )
                         }
                     }
@@ -120,7 +110,8 @@ fun BulkOrdersScreen(
 private fun OrderCard(
     order: BulkOrder,
     onTrack: () -> Unit = {},
-    onConfirmReceipt: () -> Unit = {}
+    onConfirmReceipt: () -> Unit = {},
+    onPayNow: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -132,7 +123,7 @@ private fun OrderCard(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    order.productName ?: "Bulk order",
+                    text = order.productName ?: "Bulk order",
                     fontWeight = FontWeight.SemiBold,
                     color = Ink
                 )
@@ -145,7 +136,7 @@ private fun OrderCard(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                "${order.quantityLabel}  •  ${order.totalWeightKg.toInt()} kg",
+                text = "${order.quantityLabel}  •  ${order.totalWeightKg.toInt()} kg",
                 fontSize = 13.sp,
                 color = InkMuted
             )
@@ -154,7 +145,7 @@ private fun OrderCard(
 
         if (order.deliveryFee > 0) {
             Text(
-                "includes ${formatUgx(order.deliveryFee)} delivery",
+                text = "includes ${formatUgx(order.deliveryFee)} delivery",
                 fontSize = 11.sp,
                 color = InkMuted
             )
@@ -169,7 +160,6 @@ private fun OrderCard(
             StatusChip(label = paymentLabel, tone = paymentTone)
         }
 
-        // The whole point of a pickup code is being able to find it later.
         order.pickupCode?.takeIf { it.isNotBlank() }?.let { code ->
             Spacer(Modifier.height(12.dp))
             Column(
@@ -184,29 +174,59 @@ private fun OrderCard(
             }
         }
 
-        if (order.isAwaitingPayment) {
+        // Active button for orders awaiting payment or with failed transactions
+        val canPay = (order.isAwaitingPayment || order.paymentStatus.equals("failed", ignoreCase = true)) &&
+            order.status !in setOf("cancelled", "refunded")
+
+        if (canPay) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Not paid yet. Unpaid orders are released after 30 minutes and the stock " +
-                    "goes back on sale.",
+                text = if (order.paymentStatus.equals("failed", ignoreCase = true)) {
+                    "Payment failed. You can retry paying with mobile money or card."
+                } else {
+                    "Not paid yet. Unpaid reservations are released after 30 minutes."
+                },
                 fontSize = 11.sp,
-                color = InkMuted
+                color = Tomato
             )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = onPayNow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Tomato)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Payment,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Pay Now • ${formatUgx(order.grandTotal)}",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
         }
 
-        // Only while it is moving. A tracking map for a delivered order shows a
-        // journey that has finished, and for a pending one shows nothing at all.
         if (order.hasRider && order.status !in setOf("delivered", "cancelled", "refunded")) {
             Spacer(Modifier.height(10.dp))
             FilledTonalButton(onClick = onTrack, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.LocationOn, contentDescription = null,
-                     modifier = Modifier.size(16.dp))
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
                 Spacer(Modifier.width(6.dp))
                 Text("Track this delivery")
             }
         }
 
-        // Delivered by the rider, not yet confirmed by the customer.
         if (order.needsReceiptConfirmation) {
             Spacer(Modifier.height(10.dp))
             Button(
@@ -244,18 +264,11 @@ private fun orderStatusLabel(status: String): String = when (status) {
     else -> status.replaceFirstChar { it.uppercase() }
 }
 
-/**
- * The payment position, in words a customer can act on.
- *
- * `authorization_pending` is deliberately not shown as "pending": it means a
- * payment is genuinely in flight, and someone reading "pending" is far more
- * likely to try paying again.
- */
 private fun paymentChip(paymentStatus: String): Pair<String, Color> = when (paymentStatus) {
     "paid" -> "Paid" to Forest
     "pending_cash" -> "Cash on delivery" to Forest
     "authorization_pending" -> "Payment in progress" to Ink
     "failed" -> "Payment failed" to Color(0xFFB3261E)
     "cancelled" -> "Cancelled" to Color(0xFFB3261E)
-    else -> "Awaiting payment" to Ink
+    else -> "Awaiting payment" to Tomato
 }

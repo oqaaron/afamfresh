@@ -2,8 +2,8 @@ package com.techaus.afamfresh
 
 import android.Manifest
 import android.content.Intent
-import android.net.Uri
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -25,13 +25,14 @@ import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.models.LoginUiState
 import com.techaus.afamfresh.models.Product
-import com.techaus.afamfresh.services.AfamFreshMessagingService
 import com.techaus.afamfresh.models.User
+import com.techaus.afamfresh.services.AfamFreshMessagingService
+import com.techaus.afamfresh.ui.nav.flavorAuthRoutes
+import com.techaus.afamfresh.ui.screens.CompletePhoneSignupScreen
 import com.techaus.afamfresh.ui.screens.ForgotPasswordScreen
 import com.techaus.afamfresh.ui.screens.LoginScreen
 import com.techaus.afamfresh.ui.screens.MainScreen
 import com.techaus.afamfresh.ui.screens.MaintenanceScreen
-import com.techaus.afamfresh.ui.screens.CompletePhoneSignupScreen
 import com.techaus.afamfresh.ui.screens.OnboardingScreen
 import com.techaus.afamfresh.ui.screens.OtpEntryScreen
 import com.techaus.afamfresh.ui.screens.PhoneEntryScreen
@@ -40,7 +41,6 @@ import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
-import com.techaus.afamfresh.ui.nav.flavorAuthRoutes
 import com.techaus.afamfresh.utils.FirebaseTokenManager
 import com.techaus.afamfresh.utils.OnboardingPrefs
 import com.techaus.afamfresh.utils.SessionTracker
@@ -48,18 +48,8 @@ import com.techaus.afamfresh.viewmodel.*
 
 class MainActivity : ComponentActivity() {
 
-    /**
-     * Built lazily so that [ApiClient.initialize] has already run by the time
-     * the factory reads `ApiClient.apiService` (a lateinit property). onCreate
-     * initialises ApiClient before anything below is touched.
-     */
     private val viewModelFactory by lazy { AppViewModelFactory(applicationContext) }
 
-    // `by viewModels` scopes these to the Activity's ViewModelStore, which
-    // Android preserves across configuration changes. Rotating the device no
-    // longer rebuilds them, so ProductViewModel / BulkViewModel /
-    // VendorViewModel no longer re-run their init-block network calls and
-    // discard already-loaded data.
     private val authViewModel: AuthViewModel by viewModels { viewModelFactory }
     private val productViewModel: ProductViewModel by viewModels { viewModelFactory }
     private val orderViewModel: OrderViewModel by viewModels { viewModelFactory }
@@ -77,14 +67,10 @@ class MainActivity : ComponentActivity() {
     private val favoritesViewModel: FavoritesViewModel by viewModels { viewModelFactory }
     private val trackingViewModel: TrackingViewModel by viewModels { viewModelFactory }
 
-    /** Order id carried by a tapped push notification. */
     private val pendingOrderId = mutableStateOf<String?>(null)
     private val pendingOrderSource = mutableStateOf<String?>(null)
-
-    /** Reset token from an `afamfresh://reset-password?token=...` deep link. */
     private val pendingResetToken = mutableStateOf<String?>(null)
 
-    // Used directly (not through a ViewModel) by the splash and session checks.
     private val authRepository get() = viewModelFactory.authRepository
     private val appRepository get() = viewModelFactory.appRepository
 
@@ -100,7 +86,6 @@ class MainActivity : ComponentActivity() {
                 requestNotificationPermission()
             }
 
-            // Request location permissions for customer app (used for GPS-based address selection)
             if (BuildConfig.APP_ROLE == "user") {
                 requestLocationPermission()
             }
@@ -110,28 +95,12 @@ class MainActivity : ComponentActivity() {
             setContent {
                 val context = LocalContext.current
                 var isLoggedIn by remember { mutableStateOf(authRepository.isLoggedIn()) }
-                // Must agree with isLoggedIn above. getUser() ignores session
-                // validity, so pairing it with isLoggedIn() gave a signed-out
-                // user a non-null profile — enough for the UI to treat them as
-                // signed in on a cold start.
                 var currentUser by remember { mutableStateOf<User?>(authRepository.getRestorableUser()) }
 
-                // rememberSaveable so a rotation does not replay the splash or
-                // re-run the config check.
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 var shouldProceed by rememberSaveable { mutableStateOf(true) }
                 var maintenanceMessage by rememberSaveable { mutableStateOf<String?>(null) }
                 var forceUpdateRequired by rememberSaveable { mutableStateOf(false) }
-                // Read once at cold start, not on every recomposition — the
-                // in-memory value then tracks the user's progress through the
-                // slides until markOnboardingSeen() persists it for good.
-                //
-                // Customer-only: the copy ("Fresh produce delivered", etc.) is
-                // written for someone browsing groceries, not a rider or
-                // vendor. Gated the same way location permissions already are
-                // above (BuildConfig.APP_ROLE), not via FlavorRoutes — that
-                // seam is for screens registered inside the NavHost, and this
-                // is shown before the NavHost exists at all.
                 var showOnboarding by rememberSaveable {
                     mutableStateOf(
                         BuildConfig.APP_ROLE == "user" && !OnboardingPrefs.hasSeenOnboarding(context)
@@ -144,11 +113,6 @@ class MainActivity : ComponentActivity() {
                             isLoggedIn = true
                             currentUser = user
                             Log.d("MainActivity", "User logged in: ${user.name}")
-
-                            // register_token is an authenticated endpoint, so
-                            // this has to happen after login — not at app
-                            // start, where it would just 401. This is the call
-                            // site that was previously missing entirely.
                             FirebaseTokenManager.registerTokenWithBackend()
                         } else {
                             isLoggedIn = false
@@ -164,10 +128,6 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
 
-                // A 401 from any request anywhere in the app lands here. This
-                // is the case that previously had no handling at all: once the
-                // session lapsed mid-browse, every call just failed silently
-                // and the user was left tapping a dead app.
                 LaunchedEffect(Unit) {
                     SessionTracker.expired.collect {
                         if (!isLoggedIn) return@collect
@@ -183,9 +143,6 @@ class MainActivity : ComponentActivity() {
                             Toast.LENGTH_LONG
                         ).show()
 
-                        // popUpTo(0) clears the whole back stack, so back from
-                        // login cannot return to a screen the user is no
-                        // longer authorised to see.
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -200,15 +157,6 @@ class MainActivity : ComponentActivity() {
                                     authRepository = authRepository,
                                     appRepository = appRepository,
                                     onConfigChecked = { proceed, message, forceUpdate ->
-                                        // The real value is honoured now. The old
-                                        // `shouldProceed = true` override existed
-                                        // because the config check used to fail
-                                        // closed, so any backend outage locked
-                                        // everyone out. SplashScreen/AppRepository
-                                        // now fail OPEN — errors, timeouts and a
-                                        // missing config.php all yield proceed=true
-                                        // — so only an explicit maintenance_mode
-                                        // (or force_update) blocks anyone.
                                         shouldProceed = proceed
                                         maintenanceMessage = message
                                         forceUpdateRequired = forceUpdate
@@ -221,14 +169,11 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            // The message is actually shown to the user now,
-                            // rather than being received and discarded.
                             !shouldProceed || forceUpdateRequired -> {
                                 MaintenanceScreen(
                                     message = maintenanceMessage,
                                     isForceUpdate = forceUpdateRequired,
                                     onRetry = {
-                                        // Re-run the whole config check.
                                         maintenanceMessage = null
                                         forceUpdateRequired = false
                                         shouldProceed = true
@@ -237,12 +182,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            // First launch only — OnboardingPrefs persists this
-                            // so it never shows again on this device once
-                            // completed or skipped. Sits after the maintenance
-                            // gate (no point onboarding someone into a blocked
-                            // app) and before login/home, independent of
-                            // whether they end up logging in or registering.
                             showOnboarding -> {
                                 OnboardingScreen(
                                     productViewModel = productViewModel,
@@ -256,27 +195,10 @@ class MainActivity : ComponentActivity() {
                             else -> {
                                 val resetToken by pendingResetToken
 
-                                // A reset link must win over the normal start
-                                // destination, otherwise tapping it while
-                                // already signed in would silently ignore it.
                                 LaunchedEffect(resetToken) {
                                     resetToken?.let { navController.navigate("reset_password/$it") }
                                 }
 
-                                // Shared by both phone-auth success paths below
-                                // (existing-number login via otp_entry, and a
-                                // completed new-number signup via
-                                // complete_phone_signup) — same side effect
-                                // LoginScreen's onLoginSuccess already performs
-                                // for password login, just not duplicated
-                                // inline in two places. popUpTo targets the
-                                // graph's start destination rather than a
-                                // specific route name: phone auth's back stack
-                                // is deeper than plain login's (phone_entry ->
-                                // otp_entry -> maybe complete_phone_signup), so
-                                // clearing back to "login" specifically would
-                                // leave earlier phone-auth screens stranded
-                                // under home on the back stack.
                                 fun completeLogin(name: String) {
                                     isLoggedIn = true
                                     currentUser = authRepository.getUser()
@@ -369,17 +291,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
 
-                                    // ===== PHONE / OTP SIGN-IN =====
-                                    // Third sign-in mechanism alongside password
-                                    // (login/register above) and Google. No
-                                    // route navigates here yet — LoginScreen
-                                    // needs its own new button/callback to
-                                    // actually call navController.navigate
-                                    // ("phone_entry"), which needs editing
-                                    // LoginScreen.kt itself. These three routes
-                                    // are fully wired and reachable once
-                                    // something calls that.
-
                                     composable("phone_entry") {
                                         val phoneAuthState by authViewModel.phoneAuthState.collectAsState()
                                         var pendingMobile by remember { mutableStateOf("") }
@@ -399,11 +310,6 @@ class MainActivity : ComponentActivity() {
                                                 pendingMobile = fullNumber
                                                 authViewModel.sendPhoneOtp(fullNumber)
                                             },
-                                            // No terms-of-service screen or URL
-                                            // known — left as a no-op rather
-                                            // than invented. Same open item as
-                                            // the "By clicking Continue..." line
-                                            // this screen already flags inline.
                                             onTermsClick = { },
                                             isLoading = phoneAuthState is PhoneAuthState.SendingCode,
                                             errorMessage = (phoneAuthState as? PhoneAuthState.Error)?.message
@@ -415,15 +321,6 @@ class MainActivity : ComponentActivity() {
                                         val phoneAuthState by authViewModel.phoneAuthState.collectAsState()
                                         val loginState by authViewModel.loginState.collectAsState()
 
-                                        // Existing-number branch: verifyPhoneOtp
-                                        // wrote straight into loginState, same
-                                        // shared surface password login uses.
-                                        // resetLoginState() after, matching
-                                        // LoginScreen's own LaunchedEffect —
-                                        // without it, a stale Success value
-                                        // could re-fire completeLogin() if this
-                                        // composable re-enters composition
-                                        // later without a fresh state change.
                                         LaunchedEffect(loginState) {
                                             val state = loginState
                                             if (state is LoginUiState.Success) {
@@ -432,8 +329,6 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
 
-                                        // New-number branch: no account yet,
-                                        // move on to name collection.
                                         LaunchedEffect(phoneAuthState) {
                                             val state = phoneAuthState
                                             if (state is PhoneAuthState.NeedsSignup) {
@@ -525,7 +420,7 @@ class MainActivity : ComponentActivity() {
                                             onProductClick = { product: Product ->
                                                 Log.d("MainActivity", "Product clicked: ${product.name}")
                                             },
-                                            onBack = { /* Handle back press */ }
+                                            onBack = { }
                                         )
                                     }
                                 }
@@ -540,21 +435,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * The activity is `launchMode="singleTop"`, so when it is already running
-     * a new intent arrives here instead of through onCreate. Without this,
-     * tapping a notification while the app was open would do nothing.
-     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
     }
 
-    /**
-     * Extracts the two things that can launch the app from outside:
-     * a tapped push notification, and a password-reset deep link.
-     */
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
 
@@ -564,22 +450,6 @@ class MainActivity : ComponentActivity() {
             pendingOrderSource.value = intent.getStringExtra(AfamFreshMessagingService.EXTRA_SOURCE)
         }
 
-        // Two shapes reach here for the same reset flow:
-        //
-        //   1. afamfresh://reset-password?token=XYZ (and the per-flavor
-        //      variants afamfresh-rider://, afamfresh-vendor://) — the
-        //      custom-scheme fallback, still used when Android hasn't
-        //      verified the https App Link (or can't, e.g. a debug build
-        //      against a local backend with no assetlinks.json).
-        //   2. https://<appLinkHost>/go/<DEEP_LINK_SCHEME>/reset-password?token=XYZ
-        //      — the verified Android App Link. Preferred: it can't be
-        //      claimed by another app the way the custom scheme can, since
-        //      Digital Asset Links ties it to this app's signing cert.
-        //
-        // Both are compared against BuildConfig.DEEP_LINK_SCHEME, not a
-        // literal "afamfresh" — the manifest registers whichever scheme/path
-        // the flavor declares, so a hardcoded literal here would drop the
-        // token silently in two of the three apps, as it once did.
         val data = intent.data
         val isCustomSchemeReset = data != null &&
             data.scheme == BuildConfig.DEEP_LINK_SCHEME &&
