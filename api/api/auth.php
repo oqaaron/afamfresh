@@ -94,6 +94,247 @@ if ($action == 'login') {
 }
 
 // ============================================================
+// HELPER: PASSWORD COMPLEXITY VALIDATOR
+// ============================================================
+function validatePasswordRequirements($pwd) {
+    if (strlen($pwd) < 8) {
+        return "Password must be at least 8 characters long.";
+    }
+    if (!preg_match('/[A-Z]/', $pwd)) {
+        return "Password must contain at least one uppercase letter (A-Z).";
+    }
+    if (!preg_match('/[a-z]/', $pwd)) {
+        return "Password must contain at least one lowercase letter (a-z).";
+    }
+    if (!preg_match('/[0-9]/', $pwd)) {
+        return "Password must contain at least one number (0-9).";
+    }
+    if (!preg_match('/[@$!%*?&#^()_\-+=<>{}~`|\'":;,.\/]/', $pwd)) {
+        return "Password must contain at least one special character (@$!%*?&#^).";
+    }
+    return null;
+}
+
+// ============================================================
+// ACTION: REGISTER RIDER
+// ============================================================
+if ($action == 'register_rider') {
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $fname = trim($input['fname'] ?? '');
+    $lname = trim($input['lname'] ?? '');
+    $email = strtolower(trim($input['email'] ?? ''));
+    $phone = trim($input['phone'] ?? '');
+    $password = $input['password'] ?? '';
+    $vehicleType = trim($input['vehicle_type'] ?? 'motorcycle');
+    $vehiclePlate = trim($input['vehicle_plate'] ?? '');
+
+    if ($fname === '' || $email === '' || $phone === '' || $password === '' || $vehiclePlate === '') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Please fill all required fields.']);
+        exit;
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Please enter a valid email address.']);
+        exit;
+    }
+
+    $pwdError = validatePasswordRequirements($password);
+    if ($pwdError !== null) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => $pwdError]);
+        exit;
+    }
+
+    if (rateLimited($dbh, 'register_rider:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || rateLimited($dbh, 'register_rider:id:' . $email, 5, 300)) {
+        failRateLimited();
+    }
+
+    try {
+        $check = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        $check->execute([$email]);
+        if ($check->fetchColumn()) {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'error' => 'An account with this email already exists.']);
+            exit;
+        }
+
+        $dbh->beginTransaction();
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+
+        // 1. Insert base user record with pending status
+        $userInsert = $dbh->prepare(
+            "INSERT INTO users (fname, lname, email, mobile, password, area, address, account_type, `current_role`, status, created_at)
+             VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', 'rider', 'rider', 'pending', NOW())"
+        );
+        $userInsert->execute([$fname, $lname, $email, $phone, $hash]);
+        $userId = (int)$dbh->lastInsertId();
+
+        // 2. Insert into riders profile table
+        $riderInsert = $dbh->prepare(
+            "INSERT INTO riders (user_id, name, phone, email, password, vehicle_type, vehicle_plate, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'offline', NOW())"
+        );
+        $riderInsert->execute([
+            $userId, trim($fname . ' ' . $lname), $phone, $email, $hash, $vehicleType, $vehiclePlate
+        ]);
+
+        // 3. Mark pending in user_roles
+        $roleInsert = $dbh->prepare(
+            "INSERT INTO user_roles (user_id, role, status, created_at)
+             VALUES (?, 'rider', 'pending', NOW())
+             ON DUPLICATE KEY UPDATE status = 'pending'"
+        );
+        $roleInsert->execute([$userId]);
+
+        // 4. Insert into role_requests so it renders on admin/role-requests.php
+        $reqInsert = $dbh->prepare(
+            "INSERT INTO role_requests (user_id, requested_role, status, created_at)
+             VALUES (?, 'rider', 'pending', NOW())"
+        );
+        $reqInsert->execute([$userId]);
+
+        $dbh->commit();
+
+        require_once __DIR__ . '/../includes/notifications.php';
+        if (function_exists('notifyWelcome')) {
+            notifyWelcome($userId, $fname, 'rider');
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Rider application submitted successfully. Please wait for admin approval.'
+        ]);
+    } catch (Throwable $e) {
+        if ($dbh->inTransaction()) $dbh->rollBack();
+        error_log('register_rider failed: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Registration failed. Please try again.']);
+    }
+    exit;
+}
+
+// ============================================================
+// ACTION: REGISTER (Standard / Customer)
+// ============================================================
+if ($action == 'register') {
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $name = trim($input['name'] ?? '');
+    $email = strtolower(trim($input['email'] ?? ''));
+    $password = $input['password'] ?? '';
+    $mobile = trim($input['mobile'] ?? '');
+    $role = trim($input['role'] ?? 'user');
+
+    $fname = trim($input['fname'] ?? '');
+    $lname = trim($input['lname'] ?? '');
+
+    if ($fname === '' && $name !== '') {
+        $nameParts = explode(' ', $name, 2);
+        $fname = $nameParts[0] ?? '';
+        $lname = $nameParts[1] ?? '';
+    }
+
+    if ($fname === '' || $email === '' || $password === '') {
+        echo json_encode(['success' => false, 'error' => 'Please fill in all required fields.']);
+        exit;
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'error' => 'Please enter a valid email address.']);
+        exit;
+    }
+
+    $pwdError = validatePasswordRequirements($password);
+    if ($pwdError !== null) {
+        echo json_encode(['success' => false, 'error' => $pwdError]);
+        exit;
+    }
+
+    if (rateLimited($dbh, 'register:ip:' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), 5, 300)
+        || ($email !== '' && rateLimited($dbh, 'register:id:' . $email, 5, 300))) {
+        failRateLimited();
+    }
+
+    try {
+        $checkStmt = $dbh->prepare("SELECT id FROM users WHERE email = ?");
+        $checkStmt->execute([$email]);
+        if ($checkStmt->fetch()) {
+            echo json_encode(['success' => false, 'error' => 'Email already registered']);
+            exit;
+        }
+
+        $accountType = accountTypeForAppRole($role) ?? 'customer';
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        $userStatus = ($accountType === 'customer') ? 'active' : 'pending';
+
+        $stmt = $dbh->prepare(
+            "INSERT INTO users (fname, lname, email, password, mobile, area, address, account_type, `current_role`, status, created_at)
+             VALUES (?, ?, ?, ?, ?, 'Not specified', 'Not specified', ?, ?, ?, NOW())"
+        );
+        $result = $stmt->execute([
+            $fname, $lname, $email, $hashedPassword, $mobile,
+            $accountType,
+            $accountType === 'customer' ? 'user' : $accountType,
+            $userStatus
+        ]);
+
+        if ($result) {
+            $userId = (int)$dbh->lastInsertId();
+
+            if ($accountType === 'customer') {
+                $dbh->prepare(
+                    "INSERT INTO user_roles (user_id, role, status, created_at)
+                     VALUES (?, 'user', 'active', NOW())
+                     ON DUPLICATE KEY UPDATE status = 'active'"
+                )->execute([$userId]);
+            } else {
+                $dbh->prepare(
+                    "INSERT INTO user_roles (user_id, role, status, created_at)
+                     VALUES (?, ?, 'pending', NOW())
+                     ON DUPLICATE KEY UPDATE status = 'pending'"
+                )->execute([$userId, $accountType]);
+
+                $dbh->prepare(
+                    "INSERT INTO role_requests (user_id, requested_role, status, created_at)
+                     VALUES (?, ?, 'pending', NOW())"
+                )->execute([$userId, $accountType]);
+            }
+
+            require_once __DIR__ . '/../includes/notifications.php';
+            if (function_exists('notifyWelcome')) {
+                notifyWelcome($userId, $fname, $accountType);
+            }
+
+            $token = generateToken();
+            session_regenerate_id(true);
+            $_SESSION['user_id'] = $userId;
+            $_SESSION['user_name'] = trim("$fname $lname");
+            $_SESSION['account_type'] = $accountType;
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Registration successful.',
+                'token'   => $token,
+                'user'    => [
+                    'id'           => $userId,
+                    'name'         => trim("$fname $lname"),
+                    'email'        => $email,
+                    'account_type' => $accountType,
+                    'status'       => $userStatus
+                ]
+            ]);
+            exit;
+        }
+    } catch (Throwable $e) {
+        error_log('register failed: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Registration failed. Please try again.']);
+        exit;
+    }
+}
+// ============================================================
 // ACTION: REGISTER RIDER
 // ============================================================
 // Rider accounts are provisioned as rider accounts in one transaction. This

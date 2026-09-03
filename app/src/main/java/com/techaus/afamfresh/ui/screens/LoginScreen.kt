@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -151,12 +150,25 @@ fun LoginScreen(
 
                 // Password Field
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Password",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = NeutralText
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Password",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = NeutralText
+                        )
+                        Text(
+                            text = "Forgot Password?",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = EcoGreen,
+                            modifier = Modifier.clickable { onForgotPassword() }
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedTextField(
                         value = password,
@@ -222,27 +234,25 @@ fun LoginScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                Text(
-                    text = "Other sign in options",
-                    fontSize = 12.sp,
-                    color = NeutralMuted
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Social Round Auth Buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Alternative Phone Sign-In
+                OutlinedButton(
+                    onClick = onPhoneSignIn,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    SocialAuthButton(label = "f", onClick = {})
-                    SocialAuthButton(label = "G", onClick = {})
-                    SocialAuthButton(label = "", onClick = {})
+                    Text(
+                        text = "Sign in with phone number",
+                        color = NeutralText,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.Center,
@@ -263,24 +273,5 @@ fun LoginScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SocialAuthButton(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(Color(0xFFF5F7F6))
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF222B24)
-        )
     }
 }

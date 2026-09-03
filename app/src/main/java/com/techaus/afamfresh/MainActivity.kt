@@ -38,6 +38,7 @@ import com.techaus.afamfresh.ui.screens.OtpEntryScreen
 import com.techaus.afamfresh.ui.screens.PhoneEntryScreen
 import com.techaus.afamfresh.ui.screens.RegisterScreen
 import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
+import com.techaus.afamfresh.ui.screens.RiderRegisterScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
@@ -287,6 +288,24 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onPhoneSignUp = {
                                                 navController.navigate("phone_entry")
+                                            }
+                                        )
+                                    }
+
+                                    composable("rider_register") {
+                                        RiderRegisterScreen(
+                                            authViewModel = authViewModel,
+                                            onRegisterSuccess = {
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    "Courier application submitted for admin review.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            },
+                                            onBackToLogin = {
+                                                navController.navigate("login") {
+                                                    popUpTo("rider_register") { inclusive = true }
+                                                }
                                             }
                                         )
                                     }

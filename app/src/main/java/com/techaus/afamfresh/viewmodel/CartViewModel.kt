@@ -1,50 +1,83 @@
 package com.techaus.afamfresh.viewmodel
 
 import androidx.lifecycle.ViewModel
-import com.techaus.afamfresh.models.CartItem
+import androidx.lifecycle.viewModelScope
 import com.techaus.afamfresh.models.Product
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-// In-memory only (matches the no-persistence-arg constructor `CartViewModel()`
-// used in MainActivity.kt). If you need the cart to survive process death,
-// back this with SharedPreferences/DB later — not done here to avoid guessing
-// at a persistence layer that wasn't shown to me.
+data class CartItem(
+    val product: Product,
+    val quantity: Int
+)
+
+data class CartUiState(
+    val items: List<CartItem> = emptyList(),
+    val totalAmount: Double = 0.0,
+    val totalCount: Int = 0
+)
+
 class CartViewModel : ViewModel() {
 
-    private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
-    val cartItems: StateFlow<List<CartItem>> = _cartItems.asStateFlow()
+    private val _cartState = MutableStateFlow(CartUiState())
+    val cartState: StateFlow<CartUiState> = _cartState.asStateFlow()
 
-    val subtotal: Double get() = _cartItems.value.sumOf { it.lineTotal }
+    fun addToCart(product: Product, quantity: Int = 1) {
+        viewModelScope.launch {
+            _cartState.update { current ->
+                val currentList = current.items.toMutableList()
+                val existingIndex = currentList.indexOfFirst { it.product.id == product.id }
 
-    fun addToCart(product: Product, quantity: Int) {
-        val current = _cartItems.value.toMutableList()
-        val existingIndex = current.indexOfFirst { it.product.id == product.id }
-        if (existingIndex >= 0) {
-            val existing = current[existingIndex]
-            current[existingIndex] = existing.copy(quantity = existing.quantity + quantity)
-        } else {
-            current.add(CartItem(product = product, quantity = quantity))
+                if (existingIndex >= 0) {
+                    val existing = currentList[existingIndex]
+                    currentList[existingIndex] = existing.copy(quantity = existing.quantity + quantity)
+                } else {
+                    currentList.add(CartItem(product = product, quantity = quantity))
+                }
+
+                val newTotal = currentList.sumOf { (it.product.effectivePrice ?: 0.0) * it.quantity }
+                val newCount = currentList.sumOf { it.quantity }
+
+                CartUiState(
+                    items = currentList,
+                    totalAmount = newTotal,
+                    totalCount = newCount
+                )
+            }
         }
-        _cartItems.value = current
     }
 
-    fun removeFromCart(item: CartItem) {
-        _cartItems.value = _cartItems.value.filterNot { it.product.id == item.product.id }
+    fun updateQuantity(productId: Int, quantity: Int) {
+        viewModelScope.launch {
+            _cartState.update { current ->
+                val updatedList = current.items.mapNotNull { item ->
+                    if (item.product.id == productId) {
+                        if (quantity > 0) item.copy(quantity = quantity) else null
+                    } else {
+                        item
+                    }
+                }
+
+                val newTotal = updatedList.sumOf { (it.product.effectivePrice ?: 0.0) * it.quantity }
+                val newCount = updatedList.sumOf { it.quantity }
+
+                CartUiState(
+                    items = updatedList,
+                    totalAmount = newTotal,
+                    totalCount = newCount
+                )
+            }
+        }
     }
 
-    fun updateQuantity(item: CartItem, quantity: Int) {
-        if (quantity <= 0) {
-            removeFromCart(item)
-            return
-        }
-        _cartItems.value = _cartItems.value.map {
-            if (it.product.id == item.product.id) it.copy(quantity = quantity) else it
-        }
+    fun removeFromCart(productId: Int) {
+        updateQuantity(productId, 0)
     }
 
     fun clearCart() {
-        _cartItems.value = emptyList()
+        _cartState.value = CartUiState()
     }
 }
