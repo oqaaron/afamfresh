@@ -38,7 +38,6 @@ import com.techaus.afamfresh.ui.screens.OtpEntryScreen
 import com.techaus.afamfresh.ui.screens.PhoneEntryScreen
 import com.techaus.afamfresh.ui.screens.RegisterScreen
 import com.techaus.afamfresh.ui.screens.ResetPasswordScreen
-import com.techaus.afamfresh.ui.screens.RiderRegisterScreen
 import com.techaus.afamfresh.ui.screens.SplashScreen
 import com.techaus.afamfresh.ui.theme.AfamfreshTheme
 import com.techaus.afamfresh.ui.theme.Cream
@@ -113,12 +112,10 @@ class MainActivity : ComponentActivity() {
                         if (user != null) {
                             isLoggedIn = true
                             currentUser = user
-                            Log.d("MainActivity", "User logged in: ${user.name}")
                             FirebaseTokenManager.registerTokenWithBackend()
                         } else {
                             isLoggedIn = false
                             currentUser = null
-                            Log.d("MainActivity", "User logged out")
                         }
                     }
                 }
@@ -162,10 +159,6 @@ class MainActivity : ComponentActivity() {
                                         maintenanceMessage = message
                                         forceUpdateRequired = forceUpdate
                                         showSplash = false
-                                        Log.d(
-                                            "MainActivity",
-                                            "Splash finished. proceed=$proceed forceUpdate=$forceUpdate"
-                                        )
                                     }
                                 )
                             }
@@ -236,9 +229,7 @@ class MainActivity : ComponentActivity() {
                                                 navController.navigate("forgot_password")
                                             },
                                             onCreateAccount = {
-                                                navController.navigate(
-                                                    if (BuildConfig.APP_ROLE == "rider") "rider_register" else "register"
-                                                )
+                                                navController.navigate("register")
                                             },
                                             onPhoneSignIn = {
                                                 navController.navigate("phone_entry")
@@ -288,24 +279,6 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onPhoneSignUp = {
                                                 navController.navigate("phone_entry")
-                                            }
-                                        )
-                                    }
-
-                                    composable("rider_register") {
-                                        RiderRegisterScreen(
-                                            authViewModel = authViewModel,
-                                            onRegisterSuccess = {
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Courier application submitted for admin review.",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
-                                            },
-                                            onBackToLogin = {
-                                                navController.navigate("login") {
-                                                    popUpTo("rider_register") { inclusive = true }
-                                                }
                                             }
                                         )
                                     }
@@ -464,7 +437,6 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
 
         intent.getStringExtra(AfamFreshMessagingService.EXTRA_ORDER_ID)?.let {
-            Log.d("MainActivity", "Opened from notification for order $it")
             pendingOrderId.value = it
             pendingOrderSource.value = intent.getStringExtra(AfamFreshMessagingService.EXTRA_SOURCE)
         }
@@ -479,9 +451,7 @@ class MainActivity : ComponentActivity() {
 
         if (isCustomSchemeReset || isAppLinkReset) {
             val token = data?.getQueryParameter("token")
-            if (token.isNullOrBlank()) {
-                Log.w("MainActivity", "Reset-password link had no token")
-            } else {
+            if (!token.isNullOrBlank()) {
                 pendingResetToken.value = token
             }
         }

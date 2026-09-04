@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Payments
@@ -93,11 +94,15 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (isCustomerApp) {
             locationViewModel.requestCurrentLocation()
+            user?.id?.toIntOrNull()?.let { favoritesViewModel.loadFavorites(it) }
         }
     }
 
     LaunchedEffect(user?.id) {
-        user?.id?.toIntOrNull()?.let { vendorViewModel.start(it) }
+        user?.id?.toIntOrNull()?.let { 
+            vendorViewModel.start(it)
+            favoritesViewModel.loadFavorites(it)
+        }
     }
 
     LaunchedEffect(pendingOrderId, pendingOrderSource) {
@@ -140,7 +145,7 @@ fun MainScreen(
                         Triple("home", Icons.Default.Home, "Home"),
                         Triple("orders", Icons.Default.List, "Orders"),
                         Triple("cart", Icons.Default.ShoppingCart, "Cart"),
-                        Triple("Merchant", Icons.Default.ShoppingCart, "Merchant"),
+                        Triple("favorites", Icons.Default.Favorite, "Wishlist"),
                         Triple("profile", Icons.Default.Person, "Profile")
                     )
                 }
@@ -193,6 +198,30 @@ fun MainScreen(
                     addressViewModel = addressViewModel,
                     unreadNotifications = unreadNotifications,
                     onNotificationsClick = { navController.navigate("notifications") }
+                )
+            }
+
+            // ===== FAVORITES / WISHLIST =====
+            if (isCustomerApp) composable("favorites") {
+                val allProducts by productViewModel.products.collectAsState()
+                val favoriteIds by favoritesViewModel.favoriteIds.collectAsState()
+                val favoriteProducts = remember(allProducts, favoriteIds) {
+                    allProducts.filter { it.id in favoriteIds }
+                }
+
+                FavoritesScreen(
+                    favoriteProducts = favoriteProducts,
+                    onBack = { navController.navigate("home") },
+                    onProductClick = { product ->
+                        onProductClick(product)
+                        navController.navigate("product_detail/${product.id}")
+                    },
+                    onRemoveFavorite = { product ->
+                        favoritesViewModel.toggleFavorite(product.id, user?.id?.toIntOrNull())
+                    },
+                    onAddToCart = { product ->
+                        cartViewModel.addToCart(product, 1)
+                    }
                 )
             }
 
@@ -656,7 +685,7 @@ fun MainScreen(
                 ProductDetailScreen(
                     product = product,
                     isFavorite = productId != null && productId in favoriteIds,
-                    onToggleFavorite = { productId?.let { favoritesViewModel.toggleFavorite(it) } },
+                    onToggleFavorite = { productId?.let { favoritesViewModel.toggleFavorite(it, user?.id?.toIntOrNull()) } },
                     onBack = { navController.navigate("home") },
                     onAddToCart = { productToAdd, quantity ->
                         cartViewModel.addToCart(productToAdd, quantity)

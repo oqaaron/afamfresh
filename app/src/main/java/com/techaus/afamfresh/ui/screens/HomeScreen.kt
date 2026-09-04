@@ -105,7 +105,6 @@ fun HomeScreen(
             .filter { searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) }
     }
 
-    // Auto-sliding promo slides: derives from AppConfig and discounted/offer products
     val promoSlides = remember(appConfig, products) {
         val slides = mutableListOf<PromoSlide>()
         val baseBannerTitle = appConfig?.promoBannerTitle ?: "Get up to 40% off\non your first order\nfrom app."
@@ -114,7 +113,6 @@ fun HomeScreen(
 
         slides.add(PromoSlide("1", baseBannerTitle, baseBtn, baseImg))
 
-        // Populate additional slides from active products with admin discounts or weekly deals
         products.filter { it.hasDiscount || it.isOffer || it.isWeeklyDeal }.take(3).forEach { deal ->
             slides.add(
                 PromoSlide(
@@ -140,7 +138,6 @@ fun HomeScreen(
                 .padding(padding),
             contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            // ===== TOP GREEN HEADER WITH LOCATION & SEARCH =====
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(
                     modifier = Modifier
@@ -259,7 +256,6 @@ fun HomeScreen(
                 }
             }
 
-            // ===== AUTO-SLIDING PROMO BANNER CAROUSEL =====
             if (appConfig?.promoBannerActive != false) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     AutoSlidingPromoBanner(
@@ -270,7 +266,6 @@ fun HomeScreen(
                 }
             }
 
-            // ===== CATEGORIES =====
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(
                     modifier = Modifier
@@ -367,7 +362,6 @@ fun HomeScreen(
                 }
             }
 
-            // ===== PRODUCT GRID =====
             if (isLoadingProducts && products.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     ProductGridSkeleton(modifier = Modifier.fillMaxWidth().height(300.dp))
