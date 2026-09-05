@@ -1,19 +1,25 @@
+package com.techaus.afamfresh.viewmodel
+
+import androidx.lifecycle.ViewModel
+import com.techaus.afamfresh.models.Product
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class WishlistViewModel : ViewModel() {
-    private val _favoriteIds = MutableStateFlow<Set<Int>>(emptySet())
-    val favoriteIds: StateFlow<Set<Int>> = _favoriteIds.asStateFlow()
 
-    private val _wishlistProducts = MutableStateFlow<List<Product>>(emptyList())
-    val wishlistProducts: StateFlow<List<Product>> = _wishlistProducts.asStateFlow()
+    private val _wishlistItems = MutableStateFlow<List<Product>>(emptyList())
+    val wishlistItems: StateFlow<List<Product>> = _wishlistItems.asStateFlow()
 
-    fun toggleFavorite(userId: Int, productId: Int) {
-        val currentFavorites = _favoriteIds.value.toMutableSet()
-        if (currentFavorites.contains(productId)) {
-            currentFavorites.remove(productId)
-            // Call backend API to remove favorite
-        } else {
-            currentFavorites.add(productId)
-            // Call backend API to add favorite
+    fun addToWishlist(product: Product) {
+        val currentList = _wishlistItems.value.toMutableList()
+        if (!currentList.any { it.id == product.id }) {
+            currentList.add(product)
+            _wishlistItems.value = currentList
         }
-        _favoriteIds.value = currentFavorites
+    }
+
+    fun removeFromWishlist(product: Product) {
+        _wishlistItems.value = _wishlistItems.value.filter { it.id != product.id }
     }
 }

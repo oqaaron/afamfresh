@@ -430,7 +430,7 @@ private fun CategoryBubbleItem(
 }
 
 @Composable
-private fun ModernProductCard(
+fun ModernProductCard(
     product: Product,
     isFavorite: Boolean,
     onClick: () -> Unit,

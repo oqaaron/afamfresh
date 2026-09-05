@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels { viewModelFactory }
     private val productViewModel: ProductViewModel by viewModels { viewModelFactory }
     private val orderViewModel: OrderViewModel by viewModels { viewModelFactory }
-    private val BulkViewModel: BulkViewModel by viewModels { viewModelFactory }
+    private val bulkViewModel: BulkViewModel by viewModels { viewModelFactory }
     private val cartViewModel: CartViewModel by viewModels { viewModelFactory }
     private val checkoutViewModel: CheckoutViewModel by viewModels { viewModelFactory }
     private val paymentViewModel: PaymentViewModel by viewModels { viewModelFactory }
@@ -371,49 +371,7 @@ class MainActivity : ComponentActivity() {
                                     }
 
                                     composable("home") {
-                                        MainScreen(
-                                            authViewModel = authViewModel,
-                                            productViewModel = productViewModel,
-                                            orderViewModel = orderViewModel,
-                                            BulkViewModel = BulkViewModel,
-                                            cartViewModel = cartViewModel,
-                                            checkoutViewModel = checkoutViewModel,
-                                            paymentViewModel = paymentViewModel,
-                                            deliveryResultViewModel = deliveryResultViewModel,
-                                            vendorViewModel = vendorViewModel,
-                                            riderViewModel = riderViewModel,
-                                            roleGateViewModel = roleGateViewModel,
-                                            addressViewModel = addressViewModel,
-                                            locationViewModel = locationViewModel,
-                                            notificationViewModel = notificationViewModel,
-                                            favoritesViewModel = favoritesViewModel,
-                                            trackingViewModel = trackingViewModel,
-                                            deliveryRepository = viewModelFactory.deliveryRepository,
-                                            authRepository = authRepository,
-                                            pendingOrderId = pendingOrderId.value,
-                                            pendingOrderSource = pendingOrderSource.value,
-                                            onPendingOrderHandled = {
-                                                pendingOrderId.value = null
-                                                pendingOrderSource.value = null
-                                            },
-                                            onLogout = {
-                                                authViewModel.logout()
-                                                isLoggedIn = false
-                                                currentUser = null
-                                                navController.navigate("login") {
-                                                    popUpTo("home") { inclusive = true }
-                                                }
-                                                Toast.makeText(
-                                                    this@MainActivity,
-                                                    "Logged out",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            },
-                                            onProductClick = { product: Product ->
-                                                Log.d("MainActivity", "Product clicked: ${product.name}")
-                                            },
-                                            onBack = { }
-                                        )
+                                        MainScreen()
                                     }
                                 }
                             }

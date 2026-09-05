@@ -53,14 +53,12 @@ class AuthRepository(
     private val apiService: ApiService,
     private val context: Context
 ) {
-    // Encrypted: this file holds the auth token and the cached user profile.
     private val prefs: SharedPreferences = SecurePrefs.create(context, "auth_prefs")
 
     companion object {
-        private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 minutes
+        private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L
     }
 
-    // ===== TOKEN MANAGEMENT =====
     fun saveToken(token: String) {
         prefs.edit().putString("auth_token", token).apply()
         updateLastActivity()
@@ -72,7 +70,6 @@ class AuthRepository(
         prefs.edit().remove("auth_token").apply()
     }
 
-    // ===== SESSION TIMEOUT =====
     fun updateLastActivity() = SessionTracker.touch()
 
     fun getLastActivity(): Long = SessionTracker.lastActivity()
@@ -83,7 +80,6 @@ class AuthRepository(
         timeoutMs = SESSION_TIMEOUT_MS
     )
 
-    // ===== LOGIN STATUS =====
     fun isLoggedIn(): Boolean {
         val token = getToken()
         return !token.isNullOrEmpty() && isSessionValid()
@@ -95,7 +91,6 @@ class AuthRepository(
         ApiClient.clearCookies()
     }
 
-    // ===== USER MANAGEMENT =====
     fun saveUser(user: User) {
         @Suppress("USELESS_ELVIS")
         val roles = user.roles ?: listOf("user")
@@ -183,7 +178,6 @@ class AuthRepository(
             .apply()
     }
 
-    // ===== PROFILE =====
     fun refreshUser(callback: (User?, ApiError?) -> Unit) {
         apiService.getCurrentUser().enqueueApi<UserResponse>("AuthRepo", "refreshUser") { body, error ->
             when {
@@ -295,7 +289,6 @@ class AuthRepository(
             }
         }
 
-    // ===== ROLE MANAGEMENT =====
     fun getCurrentRole(): String {
         return prefs.getString("user_current_role", "user") ?: "user"
     }
@@ -312,7 +305,6 @@ class AuthRepository(
 
     fun hasRole(role: String): Boolean = getAvailableRoles().contains(role)
 
-    // ===== API CALLS =====
     fun login(email: String, password: String, callback: (LoginResponse?, ApiError?) -> Unit) {
         try {
             apiService.login(body = LoginRequest(email, password))
@@ -366,7 +358,6 @@ class AuthRepository(
         }
     }
 
-    // ===== PHONE / OTP SIGN-IN =====
     fun sendPhoneOtp(mobile: String, callback: (BaseResponse?, ApiError?) -> Unit) {
         try {
             apiService.sendPhoneOtp(mobile = mobile)
@@ -452,7 +443,6 @@ class AuthRepository(
         })
     }
 
-    // ===== PASSWORD RESET =====
     fun requestPasswordReset(email: String, callback: (success: Boolean, errorMessage: String?) -> Unit) {
         apiService.requestPasswordReset(email = email).enqueue(object : Callback<BaseResponse> {
             override fun onResponse(call: Call<BaseResponse>, response: Response<BaseResponse>) {
@@ -507,7 +497,6 @@ class AuthRepository(
             }
     }
 
-    // ===== GOOGLE SIGN-IN =====
     private fun googleSignInMessage(e: GetCredentialException): String = when (e) {
         is androidx.credentials.exceptions.NoCredentialException ->
             "No Google account is available to sign in with on this device, " +
@@ -520,7 +509,7 @@ class AuthRepository(
 
     suspend fun googleLogin(idToken: String): LoginResponse? = withContext(Dispatchers.IO) {
         try {
-            val response = apiService.googleLogin(mapOf("id_token" to idToken)).execute()
+            val response = apiService.googleLogin(idToken = idToken).execute()
             if (response.isSuccessful) {
                 val body = response.body()
                 if (body?.success == true && body.token != null && body.user != null) {
@@ -542,7 +531,6 @@ class AuthRepository(
         try {
             val serverClientId = context.getString(R.string.default_web_client_id)
             val googleIdOption = GetSignInWithGoogleOption.Builder(serverClientId)
-                .setFilterByAuthorizedAccounts(false)
                 .build()
 
             val request = GetCredentialRequest.Builder()
@@ -557,7 +545,7 @@ class AuthRepository(
 
             when (val credential = result.credential) {
                 is CustomCredential -> {
-                    if (credential.type == GoogleIdTokenCredential.MAX_GOOGLE_ID_TOKEN_CREDENTIAL_TYPE) {
+                    if (credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                         try {
                             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                             GoogleSignInResult.Success(
