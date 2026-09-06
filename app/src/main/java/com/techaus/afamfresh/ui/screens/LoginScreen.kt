@@ -61,7 +61,6 @@ fun LoginScreen(
             .fillMaxSize()
             .background(EcoGreen)
     ) {
-        // Upper Branding Area
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,7 +101,6 @@ fun LoginScreen(
             )
         }
 
-        // Curved White Form Card
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -118,7 +116,6 @@ fun LoginScreen(
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Email Field
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Email address",
@@ -148,7 +145,6 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Password Field
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -200,7 +196,6 @@ fun LoginScreen(
                     )
                 }
 
-                // Error Notification
                 if (error != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
@@ -213,7 +208,6 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Primary Submit Button
                 Button(
                     onClick = {
                         if (email.isNotBlank() && password.isNotBlank()) {
@@ -236,7 +230,6 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Alternative Phone Sign-In
                 OutlinedButton(
                     onClick = onPhoneSignIn,
                     modifier = Modifier

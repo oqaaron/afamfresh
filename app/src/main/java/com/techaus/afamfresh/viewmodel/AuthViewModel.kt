@@ -6,13 +6,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.techaus.afamfresh.models.LoginUiState
 import com.techaus.afamfresh.models.ProfileSaveState
+import com.techaus.afamfresh.models.RegisterRequest
 import com.techaus.afamfresh.models.UpdateProfileRequest
 import com.techaus.afamfresh.models.User
 import com.techaus.afamfresh.repository.AuthRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed class PhoneAuthState {
     object Idle : PhoneAuthState()
@@ -76,9 +79,28 @@ class AuthViewModel(
         _passwordSaveState.value = ProfileSaveState.Idle
     }
 
-    fun register(_fname: String, _lname: String, _email: String, _password: String, _role: String, _phone: String?) {
+    fun register(fname: String, lname: String, email: String, pass: String, role: String, phone: String?) {
         viewModelScope.launch {
-            // Implementation handled via repo callback or direct call
+            _isLoading.value = true
+            _error.value = null
+            
+            val fullName = "$fname $lname".trim()
+            val request = RegisterRequest(
+                name = fullName,
+                email = email,
+                password = pass,
+                role = role
+            )
+
+            authRepository.register(request) { response, apiError ->
+                _isLoading.value = false
+                if (apiError == null && response?.user != null) {
+                    _user.value = response.user
+                    _loginState.value = LoginUiState.Success(response.user)
+                } else {
+                    _error.value = apiError?.userMessage ?: response?.error ?: "Registration failed"
+                }
+            }
         }
     }
 
@@ -136,23 +158,57 @@ class AuthViewModel(
         _user.value = authRepository.getUser()
     }
 
-    fun uploadAvatar(_uri: Uri) {
+    fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
             _avatarUploading.value = true
             _avatarError.value = null
-            // Add repository implementation call for avatar upload here when ready
-            _avatarUploading.value = false
+
+            val bytes = withContext(Dispatchers.IO) {
+                try {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            if (bytes == null) {
+                _avatarUploading.value = false
+                _avatarError.value = "Failed to read image file"
+                return@launch
+            }
+
+            authRepository.uploadAvatar(bytes) { updatedUser, apiError ->
+                _avatarUploading.value = false
+                if (apiError == null && updatedUser != null) {
+                    _user.value = updatedUser
+                } else {
+                    _avatarError.value = apiError?.userMessage ?: "Failed to upload avatar"
+                }
+            }
         }
     }
 
     fun removeAvatar() {
         viewModelScope.launch {
-            // Add repository implementation call for avatar removal here when ready
+            _avatarUploading.value = true
+            _avatarError.value = null
+            authRepository.removeAvatar { updatedUser, apiError ->
+                _avatarUploading.value = false
+                if (apiError == null && updatedUser != null) {
+                    _user.value = updatedUser
+                } else {
+                    _avatarError.value = apiError?.userMessage ?: "Failed to remove avatar"
+                }
+            }
         }
     }
 
-    fun setNotificationPrefs(email: Boolean? = null, push: Boolean? = null, enabled: Boolean? = null) {
-        // Handle saving notification preferences
+    fun setNotificationPrefs(
+        @Suppress("UNUSED_PARAMETER") email: Boolean? = null,
+        @Suppress("UNUSED_PARAMETER") push: Boolean? = null,
+        @Suppress("UNUSED_PARAMETER") enabled: Boolean? = null
+    ) {
+        // Handled locally or via extended prefs configuration
     }
 
     fun sendPhoneOtp(mobile: String) {

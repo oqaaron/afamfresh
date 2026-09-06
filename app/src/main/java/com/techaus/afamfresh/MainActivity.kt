@@ -24,7 +24,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.techaus.afamfresh.api.ApiClient
 import com.techaus.afamfresh.models.LoginUiState
-import com.techaus.afamfresh.models.Product
 import com.techaus.afamfresh.models.User
 import com.techaus.afamfresh.services.AfamFreshMessagingService
 import com.techaus.afamfresh.ui.nav.flavorAuthRoutes
