@@ -25,8 +25,8 @@ import com.techaus.afamfresh.BuildConfig
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.viewmodel.AuthViewModel
 
-// ⚠️ INFERRED screen. Signature matches MainActivity.kt's composable("register")
-// call exactly: RegisterScreen(authViewModel, onRegister, onGoogleSignUpSuccess, onBackToLogin).
+private const val MIN_PASSWORD_LENGTH = 8
+
 @Composable
 fun RegisterScreen(
     authViewModel: AuthViewModel,
@@ -45,13 +45,15 @@ fun RegisterScreen(
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    // The account type comes from the build, not the person registering.
     val role = BuildConfig.APP_ROLE
     var localError by remember { mutableStateOf<String?>(null) }
 
     val isLoading by authViewModel.isLoading.collectAsState()
     val error by authViewModel.error.collectAsState()
     val loginState by authViewModel.loginState.collectAsState()
+
+    val isPasswordTooShort = password.isNotEmpty() && password.length < MIN_PASSWORD_LENGTH
+    val isPasswordMismatch = confirmPassword.isNotEmpty() && confirmPassword != password
 
     LaunchedEffect(loginState) {
         if (loginState is LoginUiState.Success) {
@@ -68,10 +70,6 @@ fun RegisterScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
         ) {
-            // Same logo, same rounded-square/Forest treatment as
-            // LoginScreen.kt — this screen had no branding at all before,
-            // which read as inconsistent sitting one tap away from a screen
-            // that does.
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "App Logo",
@@ -107,57 +105,72 @@ fun RegisterScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
-                    value = fname, onValueChange = { fname = it },
+                    value = fname,
+                    onValueChange = { fname = it; localError = null },
                     label = { Text("First name") },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp), singleLine = true
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
                 )
                 OutlinedTextField(
-                    value = lname, onValueChange = { lname = it },
+                    value = lname,
+                    onValueChange = { lname = it; localError = null },
                     label = { Text("Last name") },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp), singleLine = true
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
-                value = email, onValueChange = { email = it },
+                value = email,
+                onValueChange = { email = it; localError = null },
                 label = { Text("Email") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp), singleLine = true
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
             )
 
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
-                value = phone, onValueChange = { phone = it },
+                value = phone,
+                onValueChange = { phone = it; localError = null },
                 label = { Text("Mobile number") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp), singleLine = true
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
             )
 
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
-                value = password, onValueChange = { password = it },
+                value = password,
+                onValueChange = { password = it; localError = null },
                 label = { Text("Password") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp), singleLine = true
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true,
+                isError = isPasswordTooShort,
+                supportingText = if (isPasswordTooShort) {
+                    { Text("At least $MIN_PASSWORD_LENGTH characters required", color = Tomato) }
+                } else null
             )
 
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
-                value = confirmPassword, onValueChange = { confirmPassword = it },
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it; localError = null },
                 label = { Text("Confirm password") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp), singleLine = true
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true,
+                isError = isPasswordMismatch,
+                supportingText = if (isPasswordMismatch) {
+                    { Text("Passwords don't match", color = Tomato) }
+                } else null
             )
-
-            // The "sign up as" picker was removed. Which app you install now
-            // decides the account type (BuildConfig.APP_ROLE -> users.account_type),
-            // and it is fixed for the life of the account. Letting someone choose
-            // here is what allowed one account to be both a shopper and a rider.
 
             (localError ?: error)?.let {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -171,9 +184,12 @@ fun RegisterScreen(
                     when {
                         fname.isBlank() || lname.isBlank() -> localError = "Please enter your full name"
                         email.isBlank() -> localError = "Please enter your email"
-                        password.length < 6 -> localError = "Password must be at least 6 characters"
+                        phone.isBlank() -> localError = "Please enter your phone number"
+                        password.length < MIN_PASSWORD_LENGTH -> localError = "Password must be at least $MIN_PASSWORD_LENGTH characters"
+                        !password.any { it.isDigit() } -> localError = "Password must contain at least one number"
+                        !password.any { it.isLetter() } -> localError = "Password must contain at least one letter"
                         password != confirmPassword -> localError = "Passwords do not match"
-                        else -> onRegister(fname, lname, email, password, role, phone)
+                        else -> onRegister(fname.trim(), lname.trim(), email.trim(), password, role, phone.trim())
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -190,26 +206,6 @@ fun RegisterScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Google Sign-In removed from the UI here — not deleted from the
-            // codebase. AuthRepository.signInWithGoogle() and
-            // AuthViewModel's handling of it are both left fully intact;
-            // only this button is gone. Credential Manager's getCredential()
-            // proved unreliable enough in real testing (a documented library
-            // race condition — see android/identity-samples issue #113,
-            // "the suspend function locked and does not proceed, but not
-            // crash and not throw exception") to not ship behind a live
-            // button right now.
-            //
-            // Known, accepted trade-off: existing production accounts
-            // created via Google Sign-In have no password set and have no
-            // way to sign in until this is either fixed and re-enabled, or
-            // those specific accounts are handled directly.
-
-            // Same underlying "phone_entry" route LoginScreen's equivalent
-            // button leads to — the flow is unified (verify_phone_otp itself
-            // decides signup vs login based on whether the number already
-            // has an account), just worded for whichever screen someone
-            // happened to land on first.
             OutlinedButton(
                 onClick = onPhoneSignUp,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
