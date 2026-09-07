@@ -3,15 +3,12 @@ package com.techaus.afamfresh.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,14 +19,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.models.Product
+import com.techaus.afamfresh.ui.components.NetworkImage
 import com.techaus.afamfresh.ui.theme.*
 import com.techaus.afamfresh.utils.formatUgx
 
-// ⚠️ INFERRED screen. Signature matches MainScreen.kt's
-// composable("product_detail/{productId}") call:
-//   ProductDetailScreen(product, onBack, onAddToCart)
 @Composable
 fun ProductDetailScreen(
     product: Product?,
@@ -39,34 +33,56 @@ fun ProductDetailScreen(
     onAddToCart: (Product, Int) -> Unit
 ) {
     var quantity by remember { mutableStateOf(1) }
+    var isExpanded by remember { mutableStateOf(false) }
 
     if (product == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Item not found", color = InkMuted)
+            Text("Product not found", color = NeutralMuted)
         }
         return
     }
 
     Scaffold(
-        containerColor = Cream,
+        containerColor = Color.White,
         bottomBar = {
-            Surface(color = Cream, shadowElevation = 8.dp) {
-                Button(
-                    onClick = { onAddToCart(product, quantity) },
+            Surface(
+                color = Color.White,
+                shadowElevation = 12.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Forest),
-                    enabled = product.inStock
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        if (product.inStock) "Add To Cart" else "Out of stock",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    Column {
+                        Text("Total Price", fontSize = 12.sp, color = NeutralMuted)
+                        Text(
+                            text = formatUgx(product.effectivePrice * quantity),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeutralText
+                        )
+                    }
+
+                    Button(
+                        onClick = { onAddToCart(product, quantity) },
+                        modifier = Modifier
+                            .height(50.dp)
+                            .widthIn(min = 180.dp),
+                        shape = RoundedCornerShape(25.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = EcoGreen),
+                        enabled = product.inStock
+                    ) {
+                        Text(
+                            if (product.inStock) "Add to Cart" else "Out of Stock",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
                 }
             }
         }
@@ -75,135 +91,154 @@ fun ProductDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
         ) {
-            // ===== Hero image with green rounded-bottom header, back + favorite icons =====
+            // ===== HERO IMAGE + ROUNDED HEADER =====
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(320.dp)
-                    .background(ForestSurface, shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(bottomStart = 36.dp, bottomEnd = 36.dp))
+                    .background(Color(0xFFEFF5F0)),
+                contentAlignment = Alignment.Center
             ) {
-                NetworkImage(
-                    model = product.imageUrl,
-                    contentDescription = product.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                )
+                // Top Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onBack,
-                        modifier = Modifier.clip(CircleShape).background(CardWhite.copy(alpha = 0.9f))
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = NeutralText, modifier = Modifier.size(18.dp))
                     }
+
+                    Text("Details", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeutralText)
+
                     IconButton(
                         onClick = onToggleFavorite,
-                        modifier = Modifier.clip(CircleShape).background(CardWhite.copy(alpha = 0.9f))
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
                     ) {
                         Icon(
                             if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             contentDescription = "Favorite",
-                            tint = if (isFavorite) Tomato else Ink
+                            tint = if (isFavorite) Tomato else NeutralText,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
 
-                // Quantity stepper overlapping the bottom edge of the image, like the mockup
-                Row(
+                // Image
+                NetworkImage(
+                    model = product.imageUrl,
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .offset(y = 28.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Forest)
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { if (quantity > 1) quantity-- }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(16.dp))
-                    }
-                    Text(
-                        text = "$quantity",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 14.dp)
-                    )
-                    IconButton(onClick = { quantity++ }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(16.dp))
-                    }
-                }
+                        .size(190.dp)
+                        .padding(top = 28.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                Text(product.name, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
+            // ===== TITLE, RATING & STEPPER =====
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(product.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = NeutralText)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            repeat(4) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = StarYellow, modifier = Modifier.size(14.dp))
+                            }
+                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFD8DCD8), modifier = Modifier.size(14.dp))
+                        }
+                    }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                product.description?.let {
-                    Text(it, fontSize = 14.sp, color = InkMuted, lineHeight = 20.sp)
+                    // Stepper (- 1 KG +)
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFFF2F4F2)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { if (quantity > 1) quantity-- },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = NeutralText, modifier = Modifier.size(14.dp))
+                            }
+
+                            Text(
+                                text = "$quantity ${product.packLabel ?: "KG"}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NeutralText,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(EcoGreen)
+                                    .clickable { quantity++ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // ===== Product facts =====
-                //
-                // This used to show a star rating, calorie count, prep time and
-                // an ingredient-icon strip. None of those columns exist on
-                // `items`, so the server could never populate them and this
-                // whole block rendered blank. Replaced with the catalogue's real
-                // attributes.
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    product.packLabel?.let {
-                        Text("📦 $it", fontSize = 13.sp, color = Ink)
-                    }
-                    product.category?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, fontSize = 13.sp, color = InkMuted)
-                    }
-                    if (product.isWeeklyDeal) {
-                        Text("⭐ Weekly deal", fontSize = 13.sp, color = Ink)
-                    }
-                }
+                Text(
+                    text = "${formatUgx(product.effectivePrice)}/${product.packLabel ?: "KG"}",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = EcoGreen
+                )
 
-                if (product.hasDiscount) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            formatUgx(product.effectivePrice),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = Ink
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "-${product.discountPercent.toInt()}%",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Tomato
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(20.dp))
 
-                product.freshnessDate?.takeIf { it.isNotBlank() }?.let {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Fresh until $it", fontSize = 13.sp, color = InkMuted)
+                // ===== PRODUCT DETAILS DESCRIPTION =====
+                Text("Product Details", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = NeutralText)
+                Spacer(modifier = Modifier.height(6.dp))
+                val description = product.description ?: "Fresh farm produce delivered directly to your doorstep with guaranteed freshness and organic certification."
+                Text(
+                    text = description,
+                    fontSize = 13.sp,
+                    color = NeutralMuted,
+                    lineHeight = 20.sp,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 3
+                )
+                if (description.length > 100) {
+                    Text(
+                        text = if (isExpanded) "Show Less" else "Read More",
+                        color = EcoGreen,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 4.dp)
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun BadgeItem(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(label, fontSize = 13.sp, color = Ink)
     }
 }

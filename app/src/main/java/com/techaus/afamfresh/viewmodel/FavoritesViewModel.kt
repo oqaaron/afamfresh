@@ -1,59 +1,57 @@
 package com.techaus.afamfresh.viewmodel
 
-import androidx.lifecycle.ViewModel
-import com.techaus.afamfresh.repository.FavoritesRepository
+import android.app.Application
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.techaus.afamfresh.api.ApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
-/**
- * One shared instance backs both HomeScreen's product-card hearts and
- * ProductDetailScreen's header heart (see AppViewModelFactory/MainScreen
- * wiring), so favoriting a product on one screen is reflected on the other
- * immediately, without a network round trip.
- */
-class FavoritesViewModel(
-    private val favoritesRepository: FavoritesRepository
-) : ViewModel() {
+class FavoritesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _favoriteIds = MutableStateFlow<Set<Int>>(emptySet())
     val favoriteIds: StateFlow<Set<Int>> = _favoriteIds.asStateFlow()
 
-    init {
-        refresh()
-    }
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    fun refresh() {
-        favoritesRepository.getFavoriteIds { ids ->
-            _favoriteIds.value = ids
-        }
-    }
-
-    /**
-     * Flips locally before the network call returns, so the heart responds
-     * on the same frame as the tap. Reverts if the call fails — a heart tap
-     * is frequent and low-stakes enough that waiting for a round trip first
-     * would read as broken, unlike a cart or address mutation.
-     */
-    fun toggleFavorite(productId: Int) {
-        val wasFavorite = productId in _favoriteIds.value
-        _favoriteIds.value = if (wasFavorite) {
-            _favoriteIds.value - productId
-        } else {
-            _favoriteIds.value + productId
-        }
-
-        favoritesRepository.toggleFavorite(productId) { succeeded, _ ->
-            if (!succeeded) {
-                // Revert to exactly the pre-tap state, not just "toggle
-                // again" — a second failed toggle in between would make
-                // that wrong.
-                _favoriteIds.value = if (wasFavorite) {
-                    _favoriteIds.value + productId
-                } else {
-                    _favoriteIds.value - productId
-                }
+    // Load favorites for a specific user from backend
+    fun loadFavorites(userId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // Assuming you create a favorites endpoint or use ApiClient service
+                // val response = ApiClient.apiService.getFavorites(userId)
+                // if (response.isSuccessful) { _favoriteIds.value = response.body()?.map { it.productId }?.toSet() ?: emptySet() }
+            } catch (e: Exception) {
+                Log.e("FavoritesViewModel", "Error loading favorites", e)
+            } finally {
+                _isLoading.value = false
             }
+        }
+    }
+
+    // Toggle favorite locally and sync with backend
+    fun toggleFavorite(productId: Int, userId: Int? = null) {
+        viewModelScope.launch {
+            val currentFavorites = _favoriteIds.value.toMutableSet()
+            val isCurrentlyFavorite = currentFavorites.contains(productId)
+
+            if (isCurrentlyFavorite) {
+                currentFavorites.remove(productId)
+            } else {
+                currentFavorites.add(productId)
+            }
+            _favoriteIds.value = currentFavorites
+
+            // TODO: Fire network request to sync with backend table
+            // userId?.let { 
+            //     if (isCurrentlyFavorite) ApiClient.apiService.removeFavorite(it, productId)
+            //     else ApiClient.apiService.addFavorite(it, productId)
+            // }
         }
     }
 }

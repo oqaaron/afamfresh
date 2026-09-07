@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -17,61 +19,27 @@ import com.techaus.afamfresh.utils.DeliveryPushBus
 import com.techaus.afamfresh.utils.FirebaseTokenManager
 import kotlin.random.Random
 
-/**
- * Receives push messages and posts them as system notifications.
- *
- * Previously the app fetched an FCM token but had nothing registered to
- * receive messages, so pushes with a `data` payload were silently dropped.
- *
- * Expected payload from the backend (all optional except title/body):
- *
- *   {
- *     "title":    "Order confirmed",
- *     "body":     "Your order #1234 is being prepared",
- *     "order_id": "1234",       // deep-links to that order when present
- *     "source":   "order"       // "order" or "Bulk" — which table
- *                                // order_id means; the two id spaces
- *                                // overlap, so this decides where a tap
- *                                // navigates. Absent = treated as "order".
- *   }
- *
- * Send these as a `data` payload rather than a `notification` payload.
- * A `notification` payload is handled by the system directly while the app is
- * backgrounded, which means [onMessageReceived] never runs and the user's
- * notification preference below cannot be honoured.
- */
 class AfamFreshMessagingService : FirebaseMessagingService() {
 
     companion object {
-        const val CHANNEL_ID = "afamfresh_orders"
+        const val CHANNEL_URGENT = "afamfresh_urgent_alerts"
+        const val CHANNEL_DEFAULT = "afamfresh_orders"
+
         const val EXTRA_ORDER_ID = "notification_order_id"
-        // "order" or "Bulk" — the two id spaces overlap (a shop order and
-        // a Bulk order can share a numeric id), so a tap cannot resolve
-        // which table order_id means without this. Absent on older/legacy
-        // payloads; the receiving end treats that the same as "order".
         const val EXTRA_SOURCE = "notification_source"
         private const val TAG = "FCMService"
     }
 
-    /**
-     * Fired when FCM issues a new token — on install, app data clear, or
-     * periodic rotation. Without this the backend would keep a stale token and
-     * silently stop reaching the device.
-     */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed")
         FirebaseTokenManager.initialize(applicationContext)
-        // Only succeeds if there is a session; harmless otherwise, and
-        // MainActivity re-registers after the next login.
         FirebaseTokenManager.registerTokenWithBackend()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        // Respect the Settings toggle. The server has no unregister endpoint
-        // yet, so suppressing here is what makes "off" actually mean off.
         if (!FirebaseTokenManager.areNotificationsEnabled()) {
             Log.d(TAG, "Notification suppressed — disabled in Settings")
             return
@@ -81,11 +49,6 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
         val orderId = data["order_id"]
         val source = data["source"]
 
-        // Delivery transitions come in ahead of the body check on purpose.
-        //
-        // The server sends these as data-only so an open tracking screen can be
-        // nudged without a duplicate notification; the `?: return` below would
-        // otherwise swallow every one of them before anything saw the payload.
         if (data["type"] == "delivery_status") {
             val id = orderId?.toIntOrNull()
             if (id != null) {
@@ -93,14 +56,34 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
             }
         }
 
-        val title = data["title"] ?: message.notification?.title ?: "AfamFresh"
-        val body = data["body"] ?: message.notification?.body ?: return
+        val title: String = data["title"]
+            ?: message.notification?.title
+            ?: "AfamFresh"
 
-        showNotification(title, body, orderId, source)
+        val body: String = data["body"]
+            ?: message.notification?.body
+            ?: data["message"]
+            ?: return
+
+        val isUrgentExplicit = data["is_urgent"].equals("true", ignoreCase = true)
+        val isUrgentKeyword = title.contains("Arrived", ignoreCase = true) ||
+                title.contains("Ready", ignoreCase = true) ||
+                body.contains("collection code", ignoreCase = true) ||
+                body.contains("doorstep", ignoreCase = true)
+
+        val isUrgent = isUrgentExplicit || isUrgentKeyword
+
+        showNotification(title, body, orderId, source, isUrgent)
     }
 
-    private fun showNotification(title: String, body: String, orderId: String?, source: String?) {
-        createChannel()
+    private fun showNotification(
+        title: String,
+        body: String,
+        orderId: String?,
+        source: String?,
+        isUrgent: Boolean
+    ) {
+        createChannels()
 
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -110,46 +93,77 @@ class AfamFreshMessagingService : FirebaseMessagingService() {
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            // Unique per notification, otherwise a second notification would
-            // reuse the first one's extras and open the wrong order.
             orderId?.hashCode() ?: Random.nextInt(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val channelId = if (isUrgent) CHANNEL_URGENT else CHANNEL_DEFAULT
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val vibratePattern = longArrayOf(0, 350, 200, 350)
+
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.logo)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .build()
+            .setSound(soundUri)
+
+        if (isUrgent) {
+            builder.setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVibrate(vibratePattern)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+        } else {
+            builder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        }
 
         try {
             NotificationManagerCompat.from(this)
-                .notify(Random.nextInt(), notification)
+                .notify(orderId?.toIntOrNull() ?: Random.nextInt(), builder.build())
         } catch (e: SecurityException) {
-            // POST_NOTIFICATIONS not granted on Android 13+. Nothing to do but
-            // skip it — the in-app notifications screen still shows the item.
             Log.w(TAG, "POST_NOTIFICATIONS not granted, skipping: ${e.message}")
         }
     }
 
-    private fun createChannel() {
+    private fun createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
 
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .build()
+
+        if (manager.getNotificationChannel(CHANNEL_URGENT) == null) {
+            val urgentChannel = NotificationChannel(
+                CHANNEL_URGENT,
+                "Arrival & Critical Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Shows live pop-up alerts for arrivals, dispatches, and pickup codes"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 350, 200, 350)
+                enableLights(true)
+                setSound(soundUri, audioAttributes)
+            }
+            manager.createNotificationChannel(urgentChannel)
+        }
+
+        if (manager.getNotificationChannel(CHANNEL_DEFAULT) == null) {
+            val defaultChannel = NotificationChannel(
+                CHANNEL_DEFAULT,
                 "Order updates",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Order status changes and Bulk deals"
+                enableVibration(true)
+                setSound(soundUri, audioAttributes)
             }
-        )
+            manager.createNotificationChannel(defaultChannel)
+        }
     }
 }

@@ -1,31 +1,58 @@
 <?php
 // =============================================================
-// api/config.php — public, read-only app config (maintenance mode,
-// minimum app version, etc).
+// api/config.php — Public, Read-Only App Configuration Endpoint
 // =============================================================
-// Used to accept an unauthenticated PUT that wrote any key/value pair
-// straight into app_config — no session check, no key whitelist.
-// Anyone who found this endpoint could flip is_maintenance_mode (take
-// the app offline for every customer), min_version_required (lock
-// everyone out), or Bulk_approval_required (skip vendor-listing
-// review) with one request. The app itself only ever GETs this
-// (ApiService.kt has no write call here at all), so there was no
-// legitimate caller to break by removing it.
-//
-// Mutating this now goes through api/admin/config.php, which is
-// session-gated and key-whitelisted.
-// =============================================================
-header('Content-Type: application/json');
-require_once '../admin/includes/config.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+// Ensure errors are logged to the server rather than outputting HTML/Notices into the JSON body
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
+header('Content-Type: application/json; charset=utf-8');
+
+// Load database connection and base settings
+require_once __DIR__ . '/../admin/includes/config.php';
+
+// Handle preflight OPTIONS requests for CORS
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+    http_response_code(204);
+    exit();
+}
+
+// Only GET requests are permitted on this endpoint
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Method Not Allowed'
+    ], JSON_UNESCAPED_SLASHES);
+    exit();
+}
+
+try {
+    // Fetch configuration key-value pairs from database
     $stmt = $dbh->query("SELECT config_key, config_value FROM app_config");
     $config = [];
+
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $config[$row['config_key']] = $row['config_value'];
     }
-    echo json_encode(['success' => true, 'config' => $config]);
-} else {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+
+    // Return structured JSON response expected by Android app
+    http_response_code(200);
+    echo json_encode([
+        'success' => true,
+        'config' => (object)$config
+    ], JSON_UNESCAPED_SLASHES);
+    exit();
+
+} catch (PDOException $e) {
+    error_log("[api/config.php] Database fetch error: " . $e->getMessage());
+
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Internal server error while fetching application configuration'
+    ], JSON_UNESCAPED_SLASHES);
+    exit();
 }
