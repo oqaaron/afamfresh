@@ -23,7 +23,7 @@
  */
 
 // Allow cross-origin requests with credentials for web frontend integration
-$allowed_origin = 'https://your-frontend-domain.com'; // Replace or match dynamically if needed
+$allowed_origin = 'https://afamfreshwebportal.onrender.com'; // Replace or match dynamically if needed
 if (isset($_SERVER['HTTP_ORIGIN']) && $_SERVER['HTTP_ORIGIN'] === $allowed_origin) {
     header("Access-Control-Allow-Origin: " . $allowed_origin);
 }
