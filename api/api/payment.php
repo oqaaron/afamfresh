@@ -22,6 +22,20 @@
  *    includes/pesapal.php for why that matters.
  */
 
+// Allow cross-origin requests with credentials for web frontend integration
+$allowed_origin = 'https://your-frontend-domain.com'; // Replace or match dynamically if needed
+if (isset($_SERVER['HTTP_ORIGIN']) && $_SERVER['HTTP_ORIGIN'] === $allowed_origin) {
+    header("Access-Control-Allow-Origin: " . $allowed_origin);
+}
+header("Access-Control-Allow-Credentials: true");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
 session_start();
 require_once '../admin/includes/config.php';
 require_once '../includes/pesapal.php';
