@@ -250,8 +250,8 @@ define('TWILIO_PHONE_NUMBER', env('TWILIO_PHONE_NUMBER', '+19127582805'));
 // =============================================================
 // OFFICE / WAREHOUSE LOCATION (for delivery calculations)
 // =============================================================
-define('OFFICE_LAT', 0.38082497218633615);
-define('OFFICE_LNG', 32.65071116168179);
+define('OFFICE_LAT', 0.3809535324893614);
+define('OFFICE_LNG', 32.65067058654048);
 define('OFFICE_ADDRESS', 'AfamFresh Warehouse, Kampala');
 
 // =============================================================

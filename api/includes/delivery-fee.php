@@ -168,10 +168,10 @@ function calculateDeliveryFee($orderValue, $distance) {
     $processingPercent = $pricing['processing_percent']
         ?? (defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8);
     $freeThreshold = $pricing['free_delivery_threshold'] ?? (defined('FREE_DELIVERY_THRESHOLD') ? FREE_DELIVERY_THRESHOLD : 100000);
-    $partialThreshold = $pricing['medium_order_threshold'] ?? (defined('PARTIAL_FREE_THRESHOLD') ? PARTIAL_FREE_THRESHOLD : 50000);
-    $partialDistanceLimit = $pricing['free_delivery_distance_threshold'] ?? (defined('PARTIAL_FREE_DISTANCE_LIMIT') ? PARTIAL_FREE_DISTANCE_LIMIT : 10);
+    $partialThreshold = $pricing['medium_order_threshold'] ?? (defined('PARTIAL_FREE_THRESHOLD') ? PARTIAL_FREE_THRESHOLD : 65000);
+    $partialDistanceLimit = $pricing['free_delivery_distance_threshold'] ?? (defined('PARTIAL_FREE_DISTANCE_LIMIT') ? PARTIAL_FREE_DISTANCE_LIMIT : 7);
     $shortRate = $pricing['low_order_rate'] ?? (defined('SHORT_DISTANCE_RATE') ? SHORT_DISTANCE_RATE : 700);
-    $longRate = $pricing['medium_order_rate'] ?? (defined('LONG_DISTANCE_RATE') ? LONG_DISTANCE_RATE : 375);
+    $longRate = $pricing['medium_order_rate'] ?? (defined('LONG_DISTANCE_RATE') ? LONG_DISTANCE_RATE : 500);
     $profitEnabled = $pricing['profit_percent_enabled'] ?? (defined('PROFIT_PERCENT_ENABLED') ? PROFIT_PERCENT_ENABLED : false);
     $profitPercent = $pricing['profit_percent'] ?? (defined('PROFIT_PERCENT') ? PROFIT_PERCENT : 8);
     // Same story as processing: MIN_DELIVERY_FEE was never defined, so this
@@ -365,8 +365,8 @@ function calculateDeliveryFeeFromAddress($address, $area, $orderValue, $userLat 
     }
     
     // Calculate distance from office
-    $officeLat = defined('OFFICE_LAT') ? OFFICE_LAT : 0.3136;
-    $officeLng = defined('OFFICE_LNG') ? OFFICE_LNG : 32.5811;
+    $officeLat = defined('OFFICE_LAT') ? OFFICE_LAT : 0.3809535324893614;
+    $officeLng = defined('OFFICE_LNG') ? OFFICE_LNG : 32.65067058654048;
     $distance = null;
     
     if ($useRoadDistance) {
