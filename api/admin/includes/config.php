@@ -294,6 +294,125 @@ try {
 }
 
 // =============================================================
+// SESSION STORAGE — DATABASE-BACKED
+// =============================================================
+// PHP's default session handler writes to /var/lib/php/sessions, which on
+// Render lives inside the container image. Every deploy, every cold start
+// (free tier: 15 minutes idle), and every autoscale event wipes it. The
+// PHPSESSID cookie in the browser survives — it has a 7-day max-age — but
+// the session file it points to is gone, so $_SESSION is empty on the next
+// request and every authenticated endpoint answers "Not logged in" against
+// a cookie that looks perfectly valid.
+//
+// The visible symptom is exactly what this project kept hitting: login
+// returns {success:true}, the browser holds the correct PHPSESSID, and then
+// /api/auth/me, /api/payment.php, /api/orders.php all 401 with "Not logged
+// in" until the user signs in again — after which the same thing happens on
+// the next deploy.
+//
+// Storing sessions in the same MySQL database the rest of the app already
+// uses makes PHPSESSID survive every kind of container restart. The table
+// is php_sessions; run this once against the database before deploying:
+//
+//   CREATE TABLE IF NOT EXISTS php_sessions (
+//       id           VARCHAR(128) NOT NULL PRIMARY KEY,
+//       data         MEDIUMTEXT NOT NULL,
+//       last_access  INT UNSIGNED NOT NULL,
+//       INDEX idx_last_access (last_access)
+//   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+//
+// Registration must happen BEFORE any session_start() runs. This block sits
+// immediately after $dbh is built and before the session_start() call
+// further down, so the handler is in place for that call and — because this
+// file is required by every authenticated endpoint — for every request.
+class AfamSessionHandler implements SessionHandlerInterface
+{
+    private PDO $dbh;
+
+    public function __construct(PDO $dbh)
+    {
+        $this->dbh = $dbh;
+    }
+
+    public function open($path, $name): bool { return true; }
+    public function close(): bool { return true; }
+
+    public function read($id): string|false
+    {
+        try {
+            // The last_access bound is what makes the 7-day cookie max-age
+            // meaningful server-side too: a session that has not been
+            // touched in a week reads as empty, which is the same answer
+            // the garbage collector would eventually give, arrived at
+            // without waiting for gc to run.
+            $stmt = $this->dbh->prepare(
+                "SELECT data FROM php_sessions WHERE id = ? AND last_access > ?"
+            );
+            $stmt->execute([$id, time() - 604800]);
+            $data = $stmt->fetchColumn();
+            return $data === false ? '' : (string)$data;
+        } catch (PDOException $e) {
+            // Returning '' rather than throwing lets the request continue
+            // as an unauthenticated one — which is what an empty session
+            // would produce anyway. A database blip degrades to "please
+            // sign in again", not a 500 on every endpoint at once.
+            error_log('[session] read failed: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    public function write($id, $data): bool
+    {
+        try {
+            $stmt = $this->dbh->prepare(
+                "INSERT INTO php_sessions (id, data, last_access)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    data = VALUES(data),
+                    last_access = VALUES(last_access)"
+            );
+            return $stmt->execute([$id, $data, time()]);
+        } catch (PDOException $e) {
+            error_log('[session] write failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function destroy($id): bool
+    {
+        try {
+            $stmt = $this->dbh->prepare("DELETE FROM php_sessions WHERE id = ?");
+            return $stmt->execute([$id]);
+        } catch (PDOException $e) {
+            error_log('[session] destroy failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function gc($max_lifetime): int|false
+    {
+        try {
+            // PHP calls this with its own session.gc_maxlifetime (default
+            // 1440s = 24 minutes). That value is unrelated to the 7-day
+            // cookie this app issues, so the read() query above also
+            // enforces a 7-day window — otherwise a session could be
+            // garbage-collected while its cookie still said it was valid,
+            // and the user would be signed out for no visible reason.
+            $stmt = $this->dbh->prepare(
+                "DELETE FROM php_sessions WHERE last_access < ?"
+            );
+            $stmt->execute([time() - max((int)$max_lifetime, 604800)]);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            error_log('[session] gc failed: ' . $e->getMessage());
+            return 0;
+        }
+    }
+}
+
+session_set_save_handler(new AfamSessionHandler($dbh), true);
+
+// =============================================================
 // SESSION START (if not already started)
 // =============================================================
 if (session_status() === PHP_SESSION_NONE) {
