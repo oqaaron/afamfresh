@@ -168,10 +168,10 @@ function calculateDeliveryFee($orderValue, $distance) {
     $processingPercent = $pricing['processing_percent']
         ?? (defined('PROCESSING_FEE_PERCENT') ? PROCESSING_FEE_PERCENT : 1.8);
     $freeThreshold = $pricing['free_delivery_threshold'] ?? (defined('FREE_DELIVERY_THRESHOLD') ? FREE_DELIVERY_THRESHOLD : 100000);
-    $partialThreshold = $pricing['medium_order_threshold'] ?? (defined('PARTIAL_FREE_THRESHOLD') ? PARTIAL_FREE_THRESHOLD : 65000);
-    $partialDistanceLimit = $pricing['free_delivery_distance_threshold'] ?? (defined('PARTIAL_FREE_DISTANCE_LIMIT') ? PARTIAL_FREE_DISTANCE_LIMIT : 7);
+    $partialThreshold = $pricing['medium_order_threshold'] ?? (defined('PARTIAL_FREE_THRESHOLD') ? PARTIAL_FREE_THRESHOLD : 50000);
+    $partialDistanceLimit = $pricing['free_delivery_distance_threshold'] ?? (defined('PARTIAL_FREE_DISTANCE_LIMIT') ? PARTIAL_FREE_DISTANCE_LIMIT : 10);
     $shortRate = $pricing['low_order_rate'] ?? (defined('SHORT_DISTANCE_RATE') ? SHORT_DISTANCE_RATE : 700);
-    $longRate = $pricing['medium_order_rate'] ?? (defined('LONG_DISTANCE_RATE') ? LONG_DISTANCE_RATE : 500);
+    $longRate = $pricing['medium_order_rate'] ?? (defined('LONG_DISTANCE_RATE') ? LONG_DISTANCE_RATE : 375);
     $profitEnabled = $pricing['profit_percent_enabled'] ?? (defined('PROFIT_PERCENT_ENABLED') ? PROFIT_PERCENT_ENABLED : false);
     $profitPercent = $pricing['profit_percent'] ?? (defined('PROFIT_PERCENT') ? PROFIT_PERCENT : 8);
     // Same story as processing: MIN_DELIVERY_FEE was never defined, so this
