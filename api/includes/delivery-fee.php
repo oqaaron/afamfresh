@@ -187,10 +187,18 @@ function calculateDeliveryFee($orderValue, $distance) {
     $totalFee = 0;
     $isFree = false;
     $reason = '';
+    // The per-km rate actually applied for THIS order, so a client can
+    // display "9.3 km × 900 UGX" without guessing or hardcoding. It depends
+    // on which of the three rules below fires, and comes from the admin-
+    // editable `delivery_pricing` row — so exposing it is the only way the
+    // client can show the same rate the server charged. 0 when no distance
+    // charge applies (free-delivery rules).
+    $ratePerKm = 0;
     
     // Rule 1: Orders above free threshold
     if ($orderValue > $freeThreshold) {
         $distanceFee = 0;
+        $ratePerKm = 0;
         $totalFee = $serviceFee + $insuranceCharge + $processingFee;
         $reason = 'Free delivery for orders above ' . number_format($freeThreshold) . ' UGX';
     }
@@ -198,10 +206,12 @@ function calculateDeliveryFee($orderValue, $distance) {
     elseif ($orderValue > $partialThreshold) {
         if ($distance <= $partialDistanceLimit) {
             $distanceFee = 0;
+            $ratePerKm = 0;
             $totalFee = $serviceFee + $insuranceCharge + $processingFee;
             $reason = 'Free delivery for orders above ' . number_format($partialThreshold) . ' UGX within ' . $partialDistanceLimit . 'km';
         } else {
             $distanceFee = $distance * $longRate;
+            $ratePerKm = $longRate;
             $totalFee = $distanceFee + $serviceFee + $insuranceCharge + $processingFee;
             $reason = 'Long distance rate: ' . number_format($longRate) . ' UGX/km';
         }
@@ -209,6 +219,7 @@ function calculateDeliveryFee($orderValue, $distance) {
     // Rule 3: Orders below partial threshold
     else {
         $distanceFee = $distance * $shortRate;
+        $ratePerKm = $shortRate;
         if ($profitEnabled) {
             $profitMargin = $orderValue * ($profitPercent / 100);
         }
@@ -221,7 +232,7 @@ function calculateDeliveryFee($orderValue, $distance) {
             $isFree = ($minFee <= 0);
             $reason = $isFree ? 'Free delivery (minimum fee applied)' : 'Minimum delivery fee applied.';
         } else {
-            $reason = 'Standard rate: ' . number_format($shortRate) . ' UGX/km, plus ' . number_format($serviceFee) . ' UGX service fee, plus ' . $insurancePercent . '% insurance';
+            $reason = 'Standard rate: ' . number_format($shortRate) . ' UGX/km, plus ' . number_format($serviceFee) . ' UGX service fee,plus ' . $insurancePercent . '% insurance';
         }
     }
     
@@ -235,6 +246,12 @@ function calculateDeliveryFee($orderValue, $distance) {
         'total_fee' => round($totalFee),
         'is_free' => $isFree,
         'distance' => round($distance, 2),
+        // The rate the calculator actually used for this order. 0 for the
+        // two free-delivery rules above, or the applicable per-km rate for
+        // Rule 2's long-distance branch and Rule 3. Returned so the client
+        // can display "distance × rate" without recomputing it and without
+        // baking a rate into the client that would drift from this row.
+        'rate_per_km' => (int)$ratePerKm,
         'reason' => $reason
     ];
     
@@ -278,7 +295,7 @@ function saveGeocodeCache($address, $lat, $lng) {
     global $dbh;
     
     try {
-        $stmt = $dbh->prepare("INSERT INTO geocode_cache (address, lat, lng) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE lat = VALUES(lat), lng = VALUES(lng), updated_at = NOW()");
+        $stmt = $dbh->prepare("INSERT INTO geocode_cache (address, lat, lng) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE lat = VALUES(lat),lng = VALUES(lng), updated_at = NOW()");
         return $stmt->execute([$address, $lat, $lng]);
     } catch (PDOException $e) {
         error_log("Geocode cache save error: " . $e->getMessage());
@@ -374,6 +391,11 @@ function calculateDeliveryFeeFromAddress($address, $area, $orderValue, $userLat 
     return [
         'success' => true,
         'distance' => $feeDetails['distance'],
+        // The per-km rate this quote actually used, straight from
+        // calculateDeliveryFee(). Exposed here so the client can render
+        // "9.3 km × 900 UGX" without recomputing or hardcoding the rate.
+        // 0 when no distance charge applied (free-delivery rules).
+        'rate_per_km' => $feeDetails['rate_per_km'],
         'fee' => $feeDetails['total_fee'],
         'is_free' => $feeDetails['is_free'],
         'reason' => $feeDetails['reason'],
