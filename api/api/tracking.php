@@ -22,9 +22,10 @@
 // a courier's contact details for the rest of the day.
 // =============================================================
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-header('Content-Type: application/json');
 require_once '../admin/includes/config.php';
+header('Content-Type: application/json');
 require_once __DIR__ . '/../includes/rider_dispatch.php';
 
 function trackFail(string $message, int $code = 400): void {

@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once '../includes/pesapal.php';

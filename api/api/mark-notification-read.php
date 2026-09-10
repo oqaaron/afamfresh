@@ -4,10 +4,10 @@
  * AJAX endpoint to mark a notification as read
  */
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-header('Content-Type: application/json');
-
 require_once '../admin/includes/config.php';
+header('Content-Type: application/json');
 require_once '../includes/notifications.php';
 
 // Check if user is logged in

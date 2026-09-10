@@ -6,8 +6,9 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-require_once dirname(__DIR__) . '/admin/includes/config.php';
+require_once '../admin/includes/config.php';
 require_once dirname(__DIR__) . '/includes/settlement.php';
 
 header('Content-Type: application/json');

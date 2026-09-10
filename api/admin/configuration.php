@@ -2,8 +2,9 @@
 // admin/configuration.php — Central platform configuration & financial settings
 declare(strict_types=1);
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-require_once 'includes/config.php';
+require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/admin_permissions.php';
 require_once __DIR__ . '/../includes/admin_audit.php';

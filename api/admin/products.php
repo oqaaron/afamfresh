@@ -1,6 +1,7 @@
 <?php
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-require_once '../admin/includes/config.php'; // adjust path if needed
+require_once '../admin/includes/config.php';// adjust path if needed
 
 require_once __DIR__ . '/../includes/product_image.php';
 require_once __DIR__ . '/../includes/csrf.php';

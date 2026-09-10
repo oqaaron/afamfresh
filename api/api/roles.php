@@ -19,6 +19,7 @@
 // response — the symptom is a working endpoint the app calls broken.
 // =============================================================
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/roles.php';

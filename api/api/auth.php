@@ -5,6 +5,7 @@
 // its file paths into the response of an endpoint anyone can reach without
 // logging in. profile.php, rider.php and roles.php each carry a note saying
 // they deliberately leave this alone; this file was the last one that didn't.
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 // getUserRolesData() and buildUserPayload() live here so profile.php can use

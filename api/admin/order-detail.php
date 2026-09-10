@@ -13,6 +13,7 @@
 // two orders.php already has, just scoped to one order and redirecting
 // back here instead of to the list.
 // =============================================================
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/storage.php';

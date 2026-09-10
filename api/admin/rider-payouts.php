@@ -22,6 +22,7 @@
 // told nothing at any point.
 // =============================================================
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/csrf.php';

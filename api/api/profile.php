@@ -17,6 +17,7 @@
 // Errors belong in the log, not the payload.
 // =============================================================
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/user_payload.php';

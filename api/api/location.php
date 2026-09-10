@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 header('Content-Type: application/json');

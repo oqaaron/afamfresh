@@ -13,6 +13,7 @@
 // looking at "this account is not set up as a rider yet".
 // =============================================================
 
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
 require_once '../admin/includes/config.php';
 require_once __DIR__ . '/../includes/roles.php';

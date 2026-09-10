@@ -4,8 +4,9 @@
 // GET ?date=YYYY-MM-DD
 // Returns JSON: { slots: [ { id, label, start, end, available, remaining } ] }
 // =============================================================
+require_once __DIR__ . '/../session_bootstrap.php';
 session_start();
-require_once __DIR__ . '/../admin/includes/config.php';
+require_once '../admin/includes/config.php';
 
 header('Content-Type: application/json');
 
