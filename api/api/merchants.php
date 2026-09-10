@@ -38,8 +38,7 @@ if ($action === 'list') {
         SELECT m.id, m.name, m.merchant_type, m.description,
                m.phone, m.email, m.logo_url, m.banner_url,
                m.address, m.area, m.latitude, m.longitude,
-               m.rating, m.total_ratings, m.delivery_time_min, m.delivery_time_max,
-               (SELECT COUNT(*) FROM items WHERE merchant_id = m.id AND is_active = 1) AS total_products
+               m.rating, m.total_ratings, m.delivery_time_min, m.delivery_time_max
         FROM merchants m
         WHERE m.is_active = 1
     ";
@@ -75,15 +74,30 @@ if ($action === 'list') {
         $stmt->execute($params);
         $merchants = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Count each merchant's approved products in PHP rather than as a
+        // subquery. `items` has no is_active column, so the subquery the
+        // previous version used would have thrown on every call. This also
+        // gives one query per merchant rather than a correlated scan.
+        foreach ($merchants as &$m) {
+            $countStmt = $dbh->prepare(
+                "SELECT COUNT(*) FROM items
+                  WHERE merchant_id = ? AND status = 'approved'"
+            );
+            $countStmt->execute([(int)$m['id']]);
+            $m['total_products'] = (int)$countStmt->fetchColumn();
+        }
+        unset($m);
+
         echo json_encode([
             'success'   => true,
             'count'     => count($merchants),
             'merchants' => $merchants
         ]);
     } catch (Throwable $e) {
+        error_log('merchants.php list failed: ' . $e->getMessage());
         echo json_encode([
             'success' => false,
-            'error'   => 'Database error: ' . $e->getMessage()
+            'error'   => 'Could not load merchants right now.'
         ]);
     }
     exit;
@@ -110,16 +124,43 @@ if ($action === 'detail') {
             exit;
         }
 
-        // Fetch products for this merchant
+        // Fetch products for this merchant.
+        //
+        // A merchant's products can be linked two ways: directly through
+        // `items.merchant_id` (this merchant's own row), or through
+        // `items.vendor_id` (the operational vendor account behind the same
+        // user). The two columns live in different id spaces — merchants.id
+        // and vendors.id — so both must be resolved explicitly rather than
+        // passing the merchant id to the vendor_id comparison and hoping the
+        // numbers line up.
+        $vendorStmt = $dbh->prepare("SELECT id FROM vendors WHERE user_id = ?");
+        $vendorStmt->execute([$merchant['user_id'] ?? 0]);
+        $vendorId = (int)($vendorStmt->fetchColumn() ?: 0);
+
+        // The `items` table has no is_active column and no discounted_price,
+        // image_url, or unit column either. The status column is the
+        // enum('pending','approved','rejected') the rest of the API already
+        // filters on. `quantitytype` is the size/unit label the customer
+        // sees, aliased to `unit` so the response contract is unchanged.
         $iStmt = $dbh->prepare("
-            SELECT id, name, description, price, discounted_price, image_url, 
-                   merchant_category, stock_qty, unit, is_active
-            FROM items
-            WHERE (merchant_id = ? OR vendor_id = ?) AND is_active = 1
-            ORDER BY merchant_category ASC, id DESC
+            SELECT id, name, description, price, image, merchant_category,
+                   stock_qty, quantitytype AS unit, status
+              FROM items
+             WHERE (merchant_id = ? OR vendor_id = ?)
+               AND status = 'approved'
+             ORDER BY merchant_category ASC, id DESC
         ");
-        $iStmt->execute([$id, $merchant['user_id'] ?? 0]);
+        $iStmt->execute([$id, $vendorId]);
         $items = $iStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // The stored `image` is a bare filename. The customer-facing clients
+        // need an absolute URL, so it is derived here rather than returned
+        // raw — the same helper the public products endpoint uses.
+        require_once __DIR__ . '/../includes/product_image.php';
+        foreach ($items as &$item) {
+            $item['image_url'] = productImageUrl($item['image'] ?? '');
+        }
+        unset($item);
 
         echo json_encode([
             'success'  => true,
@@ -127,7 +168,8 @@ if ($action === 'detail') {
             'products' => $items
         ]);
     } catch (Throwable $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        error_log('merchants.php detail failed: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Could not load that merchant right now.']);
     }
     exit;
 }
